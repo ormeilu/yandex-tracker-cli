@@ -375,7 +375,7 @@ async fn comments(target: &str, session: &Session) -> ExitCode {
     match client.issue_comments(key).await {
         Ok(comments) => {
             let rendered = match session.render.format {
-                Format::Text => Ok(text::comments(key, &comments)),
+                Format::Text => Ok(text::comments(key, &comments, &session.render)),
                 Format::JsonRaw => machine(&comments, Format::Json),
                 other => machine(&comments, other),
             };

@@ -106,30 +106,39 @@ pub fn links(key: &str, links: &[Link]) -> String {
 /// The fence names the comment and its author, so a reader can tell which part
 /// of the output someone else wrote — the whole point of the marking (ADR 1).
 #[must_use]
-pub fn comments(key: &str, comments: &[Comment]) -> String {
+pub fn comments(key: &str, comments: &[Comment], ctx: &Context) -> String {
     let mut out = String::with_capacity(comments.len() * 160 + 32);
+    let paint = ctx.painter();
 
     for comment in comments {
         let author = who(comment.author.as_ref());
         let when = comment
             .created_at
             .map_or_else(|| "-".to_owned(), |ts| ts.to_string());
-        let _ = writeln!(out, "--- {} by {author} at {when}", comment.id);
         let _ = writeln!(
             out,
             "{}",
-            untrusted::fence(
-                &format!("{key}/comment/{} by {author}", comment.id),
-                &comment.text
+            paint.paint(
+                &format!("--- {} by {author} at {when}", comment.id),
+                Palette::label()
             )
+        );
+        quoted_block(
+            &mut out,
+            &format!("{key}/comment/{} by {author}", comment.id),
+            &comment.text,
+            0,
+            ctx,
         );
     }
 
     let _ = writeln!(
         out,
-        "shown {} of {} for {key}",
-        comments.len(),
-        comments.len()
+        "{}",
+        paint.paint(
+            &format!("shown {} of {} for {key}", comments.len(), comments.len()),
+            Palette::label()
+        )
     );
     out
 }
@@ -237,27 +246,57 @@ fn links_section(out: &mut String, issue: &Issue, ctx: &Context) {
     }
 }
 
-/// The description, fenced and trimmed.
+/// The description, marked as somebody else's text and trimmed.
 fn description_section(out: &mut String, issue: &Issue, ctx: &Context) {
-    let paint = ctx.painter();
-    let label = |text: &str| paint.paint(text, Palette::label());
-
     let Some(description) = issue.description.as_deref().filter(|d| !d.is_empty()) else {
         return;
     };
 
     let (body, withheld) = untrusted::head(description, ctx.description_lines);
-    let _ = writeln!(out, "{}", label("---"));
-    // The fence is dimmed and nothing more. Giving someone else's text the same
-    // styling as our own output would let it impersonate the tool.
-    let _ = writeln!(
+    quoted_block(
         out,
-        "{}",
-        paint.paint(
-            &untrusted::fence(&format!("{}/description", issue.key), &body),
-            Palette::untrusted()
-        )
+        &format!("{}/description", issue.key),
+        &body,
+        withheld,
+        ctx,
     );
+}
+
+/// A block of text somebody else wrote, in whichever form its reader can use.
+///
+/// The two audiences need different things from the same guarantee. An agent
+/// needs the boundary to survive being pasted into a prompt, so it gets the
+/// `<untrusted>` fence and the markdown source untouched. A person needs to
+/// read the thing: markdown is rendered, and the boundary becomes a margin bar
+/// on every line — a tag they would have to parse by eye is not a boundary.
+pub(crate) fn quoted_block(
+    out: &mut String,
+    source: &str,
+    body: &str,
+    withheld: usize,
+    ctx: &Context,
+) {
+    let paint = ctx.painter();
+    let label = |text: &str| paint.paint(text, Palette::label());
+
+    if ctx.is_human() {
+        let _ = writeln!(
+            out,
+            "{}",
+            label(&format!("--- {source} (written by Tracker users)"))
+        );
+        out.push_str(&crate::render::markdown::quoted(body, ctx.width, paint));
+    } else {
+        let _ = writeln!(out, "{}", label("---"));
+        // The fence is dimmed and nothing more. Giving someone else's text the
+        // same styling as our own output would let it impersonate the tool.
+        let _ = writeln!(
+            out,
+            "{}",
+            paint.paint(&untrusted::fence(source, body), Palette::untrusted())
+        );
+    }
+
     if withheld > 0 {
         let _ = writeln!(
             out,
@@ -468,9 +507,27 @@ fn truncate(value: &str, width: usize) -> String {
     kept
 }
 
+/// One custom field value, as a person or a model would say it.
+///
+/// Tracker returns references as objects — `{"display": "Platform: backend",
+/// "id": "6", "self": "https://…"}` — and printing them verbatim buries one
+/// readable word under sixty of plumbing. The `display` string is what the
+/// field means; the id and the self link are reachable through `--format json`
+/// by anyone who needs them.
 fn compact_value(value: &serde_json::Value) -> String {
     match value {
         serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Array(items) => items
+            .iter()
+            .map(compact_value)
+            .collect::<Vec<_>>()
+            .join(", "),
+        serde_json::Value::Object(fields) => fields
+            .get("display")
+            .or_else(|| fields.get("name"))
+            .or_else(|| fields.get("key"))
+            .or_else(|| fields.get("id"))
+            .map_or_else(|| value.to_string(), compact_value),
         other => other.to_string(),
     }
 }
@@ -488,6 +545,7 @@ mod tests {
             audience: Audience::Machine,
             description_lines: Some(2),
             extra_fields: vec!["storyPoints".to_owned()],
+            width: 80,
         }
     }
 
@@ -630,6 +688,75 @@ mod tests {
             }
         }
         out
+    }
+
+    /// A reference field is one readable word wrapped in sixty of plumbing.
+    /// Both audiences want the word; the plumbing is still in `--format json`.
+    #[test]
+    fn a_reference_field_renders_as_its_display_name() {
+        let value = serde_json::json!([
+            {"display": "Platform: backend", "id": "6", "self": "https://api/6"},
+            {"display": "Platform: frontend", "id": "7", "self": "https://api/7"},
+        ]);
+        assert_eq!(
+            compact_value(&value),
+            "Platform: backend, Platform: frontend"
+        );
+    }
+
+    /// An object with nothing to display is printed rather than dropped: a field
+    /// that silently renders as nothing is worse than an ugly one.
+    #[test]
+    fn an_unrecognised_object_still_shows_its_contents() {
+        let value = serde_json::json!({"weird": 1});
+        assert_eq!(compact_value(&value), "{\"weird\":1}");
+    }
+
+    /// The fence is what an agent uses to tell content from instruction, and it
+    /// has to survive being pasted into a prompt. Rendering is for the terminal.
+    #[test]
+    fn machine_output_keeps_the_fence_and_the_markdown_source() {
+        let mut issue_md = sample();
+        issue_md.description = Some("# Title\n\n**loud**".to_owned());
+        let rendered = issue(
+            &issue_md,
+            &Context {
+                description_lines: None,
+                ..ctx()
+            },
+        );
+        assert!(rendered.contains("<untrusted src=\"PROJ-1/description\""));
+        assert!(rendered.contains("# Title"));
+        assert!(rendered.contains("**loud**"));
+    }
+
+    /// A person gets the text, not its syntax — but never without the margin
+    /// that says who wrote it.
+    #[test]
+    fn a_terminal_gets_rendered_markdown_behind_a_margin() {
+        let mut issue_md = sample();
+        issue_md.description = Some("# Title\n\n**loud**".to_owned());
+        let rendered = issue(
+            &issue_md,
+            &Context {
+                audience: Audience::Human,
+                description_lines: None,
+                ..ctx()
+            },
+        );
+        let plain = strip_ansi(&rendered);
+
+        assert!(!plain.contains("<untrusted"));
+        assert!(!plain.contains("**"));
+        assert!(plain.contains("(written by Tracker users)"));
+        assert!(plain.contains("Title"));
+        for line in plain
+            .lines()
+            .skip_while(|l| !l.contains("written by"))
+            .skip(1)
+        {
+            assert!(line.starts_with('\u{258f}'), "unmarked line: {line}");
+        }
     }
 
     #[test]

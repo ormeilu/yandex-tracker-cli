@@ -285,6 +285,29 @@ pub fn render_context(global: &GlobalArgs, resolved: Option<&Resolved>) -> Conte
         audience,
         description_lines,
         extra_fields: display.map(|d| d.extra_fields.clone()).unwrap_or_default(),
+        width: match audience {
+            // Prose is wrapped to the window, within reason: a full-width
+            // paragraph on an ultrawide monitor is unreadable, and a very narrow
+            // terminal cannot be helped.
+            Audience::Human => terminal_width().clamp(40, 110),
+            // A pipe gets one width forever. Making output depend on the window
+            // it was produced in would mean two runs of the same command
+            // disagree, which is the kind of drift a fixed shape forbids.
+            Audience::Machine => 100,
+        },
+    }
+}
+
+/// The terminal width, or a sane guess.
+///
+/// A pseudo-terminal with no size set reports zero columns rather than failing,
+/// and wrapping prose to that would be worse than not asking at all — anything
+/// implausibly narrow is treated as "unknown", not as the answer.
+fn terminal_width() -> usize {
+    const UNKNOWN: usize = 100;
+    match termimad::crossterm::terminal::size() {
+        Ok((cols, _)) if cols >= 20 => cols as usize,
+        _ => UNKNOWN,
     }
 }
 

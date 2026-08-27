@@ -108,22 +108,13 @@ pub fn entity(entity: &Entity, ctx: &Context) -> String {
 
     if let Some(description) = entity.description.as_deref().filter(|d| !d.is_empty()) {
         let (body, withheld) = crate::render::untrusted::head(description, ctx.description_lines);
-        let _ = writeln!(out, "{}", label("---"));
-        let _ = writeln!(
-            out,
-            "{}",
-            paint.paint(
-                &crate::render::untrusted::fence(&format!("{}/description", entity.id), &body),
-                Palette::untrusted()
-            )
+        crate::render::text::quoted_block(
+            &mut out,
+            &format!("{}/description", entity.id),
+            &body,
+            withheld,
+            ctx,
         );
-        if withheld > 0 {
-            let _ = writeln!(
-                out,
-                "{}",
-                label(&format!("(+{withheld} more lines: --full)"))
-            );
-        }
     }
 
     out

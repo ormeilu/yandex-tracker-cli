@@ -13,6 +13,7 @@
 //! a diff in review rather than as a surprise in someone's pipeline.
 
 pub mod entity;
+pub mod markdown;
 pub mod queue;
 pub mod style;
 pub mod text;
@@ -86,6 +87,9 @@ pub struct Context {
     pub description_lines: Option<usize>,
     /// Custom field keys to surface, in this exact order.
     pub extra_fields: Vec<String>,
+    /// Columns available for wrapped prose. Fixed for machine output, so a pipe
+    /// gets the same bytes whatever the window happens to be.
+    pub width: usize,
 }
 
 impl Context {

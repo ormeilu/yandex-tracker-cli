@@ -112,6 +112,7 @@ mod tests {
             audience: crate::render::Audience::Machine,
             description_lines: Some(10),
             extra_fields: Vec::new(),
+            width: 80,
         }
     }
 

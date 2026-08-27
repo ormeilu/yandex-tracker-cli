@@ -64,18 +64,43 @@ act on, and making the caller run a second command costs more than the lines it
 saves.
 
 **Custom fields are counted, not dumped.** Pin the ones that matter in
-`extra_fields`.
+`extra_fields`. A terminal gets all of them by name instead of the count.
 
-## Fenced text
+**Reference fields render as their names.** Tracker returns components, tags and
+the like as objects — `{"display": "Platform: backend", "id": "6", "self": …}` —
+and the one readable word is what gets printed. The ids are still there in
+`--format json` for anything that needs to address them.
 
-Summaries, descriptions and comments were written by other people. They arrive
-inside `<untrusted src="...">`.
+## Text somebody else wrote
+
+Summaries, descriptions and comments were written by other people. In a pipe
+they arrive inside `<untrusted src="...">`, markdown source and all.
 
 The fence is not sanitisation — the text passes through unchanged, because
 silently editing someone's issue would be a worse failure than the one being
 prevented. It marks a boundary, so that whatever reads the output can tell
 content from instruction. That matters most when the reader is a model and the
 description contains something shaped like a command.
+
+In a terminal the same guarantee takes a different form. The markdown is
+rendered — headings, bold, lists, quotes, tables — and every line of the block
+carries a dim margin bar instead:
+
+```
+--- PROJ-1/description (written by Tracker users)
+▏ Where the problem is
+▏
+▏ Three different exercises arrive as three blocks.
+```
+
+A person reading their own terminal is not going to parse an XML tag by eye, so
+for them the tag is not a boundary; the bar is. What both forms promise is the
+same: you can always tell where someone else's text starts and stops, and it is
+never given the colours the tool uses for its own output — a description must
+not be able to look like the tool talking.
+
+Rendering happens only when stdout is a terminal. A pipe gets the source bytes,
+because reflowed prose is not what a caller diffing output asked for.
 
 ## Lists say what they did not show
 
