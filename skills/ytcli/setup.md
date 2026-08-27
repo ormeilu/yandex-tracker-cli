@@ -8,15 +8,16 @@ arrived, the binary still has to be installed:
 ```bash
 uvx --from yandex-tracker-cli ytcli --help    # run it without installing
 uv tool install yandex-tracker-cli            # keep it
-cargo install --git https://github.com/ormeilu/yandex-tracker-cli ytcli
+cargo install yandex-tracker-cli              # with a Rust toolchain
 ```
 
 Or a prebuilt binary for Linux, macOS or Windows, x86-64 or arm64, from
 [Releases](https://github.com/ormeilu/yandex-tracker-cli/releases).
 
 `uvx ytcli` will not work: `uvx` looks for an executable named after the
-package, and `ytcli` as a package name belongs to somebody else. Not on crates.io yet
-either ([#16](https://github.com/ormeilu/yandex-tracker-cli/issues/16)).
+package, and `ytcli` as a package name belongs to somebody else. The package is
+`yandex-tracker-cli` on both PyPI and crates.io; the command it installs is
+`ytcli`.
 
 ## Two words that are not the same thing
 

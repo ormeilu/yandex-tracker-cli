@@ -27,7 +27,7 @@ uv tool install yandex-tracker-cli            # or keep it
 ```
 
 Or a binary from https://github.com/ormeilu/yandex-tracker-cli/releases, or
-`cargo install --git https://github.com/ormeilu/yandex-tracker-cli ytcli`.
+`cargo install yandex-tracker-cli`.
 
 Say which and let the user choose. Putting a program on someone's machine is
 not a step to take on their behalf.

@@ -5,8 +5,8 @@ not in this file. Anything new — a bug, an idea, a change of mind — goes the
 so there is one list rather than two that disagree.
 
 - [Milestone v1](https://github.com/ormeilu/yandex-tracker-cli/milestone/1) — read
-  and write issues, queues, projects, goals, attachments; both distribution
-  channels; the agent skill.
+  and write issues, queues, projects, goals, attachments; every distribution
+  channel; the agent skill.
 - [Milestone v2](https://github.com/ormeilu/yandex-tracker-cli/milestone/2) —
   worklogs, checklists, portfolios, administration. Everything v1.x leaves out,
   rather than a next point release: v1 stays open for the whole 1.x line.

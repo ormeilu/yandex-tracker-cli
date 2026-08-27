@@ -16,14 +16,13 @@ uv tool install yandex-tracker-cli # keep it around
 ## cargo
 
 ```bash
-cargo install --git https://github.com/ormeilu/yandex-tracker-cli ytcli
+cargo install yandex-tracker-cli          # the released version
+cargo install --git https://github.com/ormeilu/yandex-tracker-cli   # or main
 ```
 
-Not on crates.io yet
-([#16](https://github.com/ormeilu/yandex-tracker-cli/issues/16)). When it is,
-the crate is `yandex-tracker-cli` and the command it installs is still `ytcli`
-— `ytcli` as a package name belongs to somebody else on PyPI, and one name
-across both registries is worth more than a short one.
+The crate is `yandex-tracker-cli` and the command it installs is `ytcli`.
+`ytcli` as a package name belongs to somebody else on PyPI, and one name across
+both registries is worth more than a short one.
 
 ## A binary
 

@@ -7,9 +7,10 @@ thousands of context tokens before anything is asked, and then answers with raw
 API payloads. `ytcli` costs nothing until it is called, and answers in about
 fifteen lines.
 
-> **Status: early.** The scaffolding, configuration, credential handling,
-> rendering and command tree are in place; `auth status` works end to end. Most
-> commands are declared and exit with code 64 for now — see [docs/TODO.md](docs/TODO.md).
+> **Status: 0.1.0, released.** The whole v1 command tree is built — issues,
+> queues, projects, goals, attachments, reads and writes — and published on
+> crates.io, PyPI and GitHub Releases. What is planned and what was ruled out is
+> in [docs/TODO.md](docs/TODO.md) and the [issues](https://github.com/ormeilu/yandex-tracker-cli/issues).
 
 ## Install
 
@@ -18,8 +19,8 @@ fifteen lines.
 uvx --from yandex-tracker-cli ytcli --help
 uv tool install yandex-tracker-cli
 
-# with cargo, from source until it reaches crates.io
-cargo install --git https://github.com/ormeilu/yandex-tracker-cli ytcli
+# with cargo
+cargo install yandex-tracker-cli
 ```
 
 Or download a binary from [Releases](https://github.com/ormeilu/yandex-tracker-cli/releases).
