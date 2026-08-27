@@ -63,7 +63,9 @@ signing-identity:
 local-install:
     #!/usr/bin/env bash
     set -euo pipefail
-    {{cargo}} install --path . --locked
+    # --force because the point of this recipe is to replace the copy on the
+    # PATH; without it cargo refuses as soon as one is already there.
+    {{cargo}} install --path . --locked --force
     if [ "$(uname)" != "Darwin" ]; then exit 0; fi
     if security find-identity -v -p codesigning | grep -q ytcli-dev; then
         codesign --force --sign ytcli-dev "$(command -v ytcli)"
