@@ -1,9 +1,9 @@
 # Releases on tag: binaries for three platforms, plus the same binary as a Python
 # wheel.
 #
-# NOTE: PyPI Trusted Publishing matches on the *filename* of this workflow. The
-# pending publisher registered on PyPI must name `publish.yml`; renaming this file
-# breaks publishing.
+# NOTE: PyPI and crates.io Trusted Publishing both match on the *filename* of
+# this workflow. The publishers registered on each must name `publish.yml`;
+# renaming this file breaks publishing on both.
 name: publish
 on:
   push:
@@ -117,3 +117,23 @@ jobs:
           merge-multiple: true
           path: dist
       - uses: pypa/gh-action-pypi-publish@release/v1
+  crates:
+    needs: binaries
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    # Trusted Publishing, like PyPI: crates.io verifies this repository and
+    # workflow over OIDC and hands back a token that lives for the length of
+    # this job. No long-lived registry token exists to leak.
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+      # Publishing is final: a version on crates.io can be yanked but never
+      # replaced. It runs after the binaries build, so a tag that does not
+      # compile everywhere never reaches the registry.
+      - run: cargo publish --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}

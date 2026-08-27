@@ -1,5 +1,9 @@
 [package]
-name = "ytcli"
+# The crate is named for what it is, because `ytcli` on PyPI belongs to somebody
+# else and one name across both registries is worth more than a short one. The
+# binary and the library keep the short name: `cargo install yandex-tracker-cli`
+# puts `ytcli` on the path, the same trade `uvx --from` already makes.
+name = "yandex-tracker-cli"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.90"
@@ -15,6 +19,14 @@ categories = ["command-line-utilities"]
 # `docs/cheatsheet.txt` is compiled into the binary, so it is not excluded with
 # the rest of the documentation: without it the published crate does not build.
 exclude = ["/.github", "/docs/adr", "/docs/book", "/docs/*.md", "/skills"]
+
+[lib]
+name = "ytcli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ytcli"
+path = "src/main.rs"
 
 [dependencies]
 anstream = "1.0.0"

@@ -15,7 +15,7 @@ Or a prebuilt binary for Linux, macOS or Windows, x86-64 or arm64, from
 [Releases](https://github.com/ormeilu/yandex-tracker-cli/releases).
 
 `uvx ytcli` will not work: `uvx` looks for an executable named after the
-package, and `ytcli` on PyPI belongs to somebody else. Not on crates.io yet
+package, and `ytcli` as a package name belongs to somebody else. Not on crates.io yet
 either ([#16](https://github.com/ormeilu/yandex-tracker-cli/issues/16)).
 
 ## Two words that are not the same thing

@@ -20,8 +20,10 @@ cargo install --git https://github.com/ormeilu/yandex-tracker-cli ytcli
 ```
 
 Not on crates.io yet
-([#16](https://github.com/ormeilu/yandex-tracker-cli/issues/16)); until it is,
-`cargo install ytcli` installs somebody else's crate or nothing at all.
+([#16](https://github.com/ormeilu/yandex-tracker-cli/issues/16)). When it is,
+the crate is `yandex-tracker-cli` and the command it installs is still `ytcli`
+— `ytcli` as a package name belongs to somebody else on PyPI, and one name
+across both registries is worth more than a short one.
 
 ## A binary
 
@@ -30,8 +32,8 @@ Download from [Releases](https://github.com/ormeilu/yandex-tracker-cli/releases)
 
 ## The command is `ytcli`
 
-The PyPI package is named `yandex-tracker-cli`; the command it installs is
-`ytcli`. A shorter name is not a cosmetic choice: an agent types it dozens of
+The package is named `yandex-tracker-cli` on both registries; the command it
+installs is `ytcli`. A shorter name is not a cosmetic choice: an agent types it dozens of
 times per session, and every one of those is tokens.
 
 ## Shell completions
