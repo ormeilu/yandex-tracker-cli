@@ -73,6 +73,30 @@ local-install:
         echo "run \`just signing-identity\` once to stop that"
     fi
 
+# Copy a stored token into .env, so local runs skip the keychain entirely
+dev-token account:
+    #!/usr/bin/env bash
+    # This writes a token to a file in plaintext. It is the trade ADR 2 refuses
+    # to make for users, made deliberately for one developer machine: .env is
+    # gitignored, mode 600, and read only by `just`. Any process running as you
+    # can still read it, so use an account whose rights you would not mind
+    # losing, and delete the line when you are done with it.
+    set -euo pipefail
+    if [ "$(uname)" != "Darwin" ]; then
+        echo "macOS only; on Linux read the token out with secret-tool" >&2
+        exit 1
+    fi
+    umask 077
+    token=$(security find-generic-password -s ytcli -a "{{account}}" -w)
+    touch .env
+    grep -v "^YTCLI_TOKEN=" .env > .env.tmp || true
+    printf "YTCLI_TOKEN=%s\n" "$token" >> .env.tmp
+    mv .env.tmp .env
+    chmod 600 .env
+    echo "YTCLI_TOKEN written to .env"
+    echo "  just run issue get PROJ-1     reads it already"
+    echo "  set -a; source .env; set +a   for a bare ytcli in this shell"
+
 # Refresh Cargo.lock
 lock:
     {{cargo}} update

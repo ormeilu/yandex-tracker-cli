@@ -10,6 +10,32 @@ just docs-serve  # this site, with live reload
 
 `just` with no arguments lists everything.
 
+## Installing your own build
+
+```bash
+just signing-identity   # once per machine
+just local-install      # build, install, sign
+```
+
+macOS binds a Keychain approval to a code signature, and Cargo ad-hoc signs
+through the linker, so an unsigned local build asks for your password after
+every `cargo install` — correctly, since to macOS it is a new application each
+time. A self-signed code-signing certificate makes the approval hold. See
+[Configuration](configuration.md) for the details and how to undo it.
+
+If you would rather keep the keychain out of it entirely while working:
+
+```bash
+just dev-token ACCOUNT   # copies the token into .env
+just run issue get PROJ-1
+```
+
+`YTCLI_TOKEN` is checked before the keychain is opened at all, and `just` loads
+`.env` on its own. This is a plaintext token on disk — gitignored and mode 600,
+but readable by anything running as you. It is the trade the tool refuses to
+make for users, made deliberately for one machine; use an account whose rights
+you would not mind losing.
+
 Planned work is tracked in
 [GitHub issues](https://github.com/ormeilu/yandex-tracker-cli/issues); pick one
 there rather than inventing a plan, and file a new issue for anything you find on
