@@ -14,6 +14,22 @@ use crate::api::models::{Attachment, Comment, Entity, Issue, Link, LinkKind, Use
 /// custom field and lands in `extra`.
 const KNOWN: &[&str] = &[
     "key",
+    // Counters and bookkeeping Tracker returns on every issue. They are not
+    // custom fields, and counting them as such made every issue look like it had
+    // several — which is exactly the noise the summary exists to avoid.
+    "commentWithExternalMessageCount",
+    "votes",
+    "votedBy",
+    "unique",
+    "boards",
+    "access",
+    "followers",
+    "checklistDone",
+    "checklistTotal",
+    "checklistItems",
+    "emailCreatedBy",
+    "emailTo",
+    "emailFrom",
     "summary",
     "status",
     "type",
@@ -129,74 +145,57 @@ fn widen_offset(text: &str) -> String {
     format!("{}{}:{}", &text[..=sign_at], &offset[..2], &offset[2..])
 }
 
-/// Map Tracker's own wording for a relationship onto our vocabulary.
-fn link_kind(relationship: &str) -> LinkKind {
-    match relationship {
-        "depends on" | "depends" => LinkKind::Depends,
-        "is dependent by" | "is required for" => LinkKind::IsDependentBy,
-        "is subtask for" | "is subtask of" => LinkKind::Parent,
-        "is parent task for" | "subtask" => LinkKind::Subtask,
-        "is epic of" | "epic" => LinkKind::Epic,
-        "has epic" => LinkKind::HasEpic,
-        "duplicates" | "duplicate" => LinkKind::Duplicates,
-        "is duplicated by" => LinkKind::IsDuplicatedBy,
-        "blocks" | "is blocking" => LinkKind::Blocks,
-        "is blocked by" => LinkKind::IsBlockedBy,
-        "relates" | "relates to" => LinkKind::Relates,
+/// Map a link type id and our side of it onto our vocabulary.
+///
+/// Keyed on `type.id`, which is stable and English, rather than on the
+/// `inward`/`outward` labels, which come back in the organisation's language —
+/// a Russian-locale organisation answers "Связана", and an English word list
+/// silently turns every link into "links".
+///
+/// `direction` decides which end we are on, and it does not mean the same thing
+/// for every type: for `subtask`, being on the inward side makes the *other*
+/// issue the parent, while for `depends` the inward side is the one that
+/// depends. That asymmetry is why this is a table and not a rule.
+fn link_kind(type_id: &str, inward: bool) -> LinkKind {
+    match (type_id, inward) {
+        ("subtask", true) => LinkKind::Parent,
+        ("subtask", false) => LinkKind::Subtask,
+        ("depends", true) => LinkKind::Depends,
+        ("depends", false) => LinkKind::IsDependentBy,
+        ("duplicate", true) => LinkKind::Duplicates,
+        ("duplicate", false) => LinkKind::IsDuplicatedBy,
+        ("epic", true) => LinkKind::HasEpic,
+        ("epic", false) => LinkKind::Epic,
+        ("relates", _) => LinkKind::Relates,
         _ => LinkKind::Other,
     }
 }
 
 /// Parse one entry of `GET /v3/issues/{key}/links`.
-///
-/// Tracker names both ends of a link type (`inward`/`outward`) and says which end
-/// this issue sits on. Reading the relationship out of the payload is the only
-/// way to get the direction right: `subtask` and `depends` invert relative to
-/// each other, so inferring it from the type id alone silently produces
-/// backwards links — a parent shown as a child.
 #[must_use]
 pub fn link(value: &Value) -> Option<Link> {
     let object = value.get("object")?;
-    let kind = value.get("type");
+    let kind_object = value.get("type");
     let inward = value.get("direction").and_then(Value::as_str) == Some("inward");
 
-    let relationship = kind
-        .and_then(|kind| kind.get(if inward { "inward" } else { "outward" }))
+    let type_id = kind_object
+        .and_then(|kind| kind.get("id"))
         .and_then(Value::as_str)
-        .map(str::to_lowercase)
-        .or_else(|| {
-            kind.and_then(|kind| kind.get("id"))
-                .and_then(Value::as_str)
-                .map(str::to_lowercase)
-        })
         .unwrap_or_default();
 
+    // Tracker's own wording for our side of the link, kept for the types we do
+    // not recognise so the output still says something true.
+    let relation = kind_object
+        .and_then(|kind| kind.get(if inward { "inward" } else { "outward" }))
+        .and_then(Value::as_str)
+        .map(str::to_lowercase);
+
     Some(Link {
-        kind: link_kind(&relationship),
+        kind: link_kind(type_id, inward),
+        relation,
         key: object.get("key").and_then(Value::as_str)?.to_owned(),
         summary: label(object.get("display")),
         status: label(object.get("status")),
-    })
-}
-
-/// Parse one entry of `GET /v3/issues/{key}/comments`.
-#[must_use]
-pub fn comment(value: &Value) -> Option<Comment> {
-    Some(Comment {
-        id: value
-            .get("id")
-            .map(|id| match id {
-                Value::String(text) => text.clone(),
-                other => other.to_string(),
-            })
-            .unwrap_or_default(),
-        text: value
-            .get("text")
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_owned(),
-        author: user(value.get("createdBy")),
-        created_at: timestamp(value.get("createdAt")),
     })
 }
 
@@ -256,6 +255,27 @@ pub fn attachment(value: &Value) -> Option<Attachment> {
             .get("content")
             .and_then(Value::as_str)
             .map(ToOwned::to_owned),
+    })
+}
+
+/// Parse one entry of `GET /v3/issues/{key}/comments`.
+#[must_use]
+pub fn comment(value: &Value) -> Option<Comment> {
+    Some(Comment {
+        id: value
+            .get("id")
+            .map(|id| match id {
+                Value::String(text) => text.clone(),
+                other => other.to_string(),
+            })
+            .unwrap_or_default(),
+        text: value
+            .get("text")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+        author: user(value.get("createdBy")),
+        created_at: timestamp(value.get("createdAt")),
     })
 }
 
@@ -378,6 +398,52 @@ mod tests {
             "direction": direction,
             "object": {"key": key, "display": "some issue"},
         })
+    }
+
+    /// Tracker answers in the organisation's language. Reading the relationship
+    /// from the localised label turned every link in a Russian organisation into
+    /// the fallback, so the type id decides.
+    #[test]
+    fn a_russian_organisation_still_gets_real_link_types() {
+        let value = serde_json::json!({
+            "type": {"id": "relates", "inward": "Связана", "outward": "Связана"},
+            "direction": "outward",
+            "object": {"key": "LMS-1", "display": "какая-то задача"},
+        });
+
+        assert_eq!(link(&value).expect("link").kind, LinkKind::Relates);
+    }
+
+    /// An unfamiliar link type keeps Tracker's own wording rather than being
+    /// rendered as the word "link".
+    #[test]
+    fn an_unknown_link_type_keeps_what_tracker_called_it() {
+        let value = serde_json::json!({
+            "type": {"id": "somethingNew", "inward": "Blocks release of", "outward": "x"},
+            "direction": "inward",
+            "object": {"key": "PROJ-5"},
+        });
+
+        let parsed = link(&value).expect("link");
+        assert_eq!(parsed.kind, LinkKind::Other);
+        assert_eq!(parsed.relation.as_deref(), Some("blocks release of"));
+    }
+
+    /// Bookkeeping counters are not custom fields; counting them made every
+    /// issue look like it had several.
+    #[test]
+    fn tracker_bookkeeping_is_not_mistaken_for_custom_fields() {
+        let value = serde_json::json!({
+            "key": "PROJ-1",
+            "summary": "s",
+            "commentWithExternalMessageCount": 0,
+            "votes": 3,
+            "followers": [],
+            "storyPoints": 5,
+        });
+
+        let parsed = issue(&value).expect("parsed");
+        assert_eq!(parsed.extra.keys().collect::<Vec<_>>(), ["storyPoints"]);
     }
 
     #[test]

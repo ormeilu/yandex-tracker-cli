@@ -86,7 +86,7 @@ pub fn links(key: &str, links: &[Link]) -> String {
         let _ = writeln!(
             out,
             "{} {}{}{}",
-            link.kind.label(),
+            relation_of(link),
             link.key,
             link.status
                 .as_ref()
@@ -134,7 +134,11 @@ pub fn comments(key: &str, comments: &[Comment]) -> String {
     out
 }
 
-/// The pinned custom fields, then a count of the rest.
+/// The pinned custom fields, then either all of the rest or a count of them.
+///
+/// An agent gets the count: the set differs per queue, most are empty, and
+/// dumping them makes the view unstable. A terminal gets all of them — the
+/// reason to hide them was never that they are uninteresting.
 fn custom_fields(out: &mut String, issue: &Issue, ctx: &Context) {
     let paint = ctx.painter();
     let label = |text: &str| paint.paint(text, Palette::label());
@@ -150,36 +154,63 @@ fn custom_fields(out: &mut String, issue: &Issue, ctx: &Context) {
         }
     }
 
-    // Custom fields are summarised rather than dumped: they differ per queue, so
-    // printing them all makes the view unstable and mostly empty.
-    //
     // The sort is load-bearing, not tidiness. `serde_json::Map` is a BTreeMap
     // only until some dependency turns on `preserve_order`, at which point it
-    // becomes insertion-ordered and this line would start varying with whatever
-    // order Tracker happened to serialise the payload in. Field order is a
-    // contract (ADR 3), so it is enforced here rather than inherited.
+    // becomes insertion-ordered and this would start varying with whatever order
+    // Tracker happened to serialise the payload in. Field order is a contract
+    // (ADR 3), so it is enforced here rather than inherited.
     let mut unpinned: Vec<&String> = issue
         .extra
         .keys()
         .filter(|key| !ctx.extra_fields.contains(key))
         .collect();
     unpinned.sort();
-    if !unpinned.is_empty() {
-        let shown: Vec<&str> = unpinned.iter().take(3).map(|k| k.as_str()).collect();
-        let rest = unpinned.len().saturating_sub(shown.len());
-        let suffix = if rest > 0 {
-            format!(", +{rest}")
-        } else {
-            String::new()
-        };
-        let _ = writeln!(
-            out,
-            "{} {} set ({}{suffix}) — see --fields",
-            label("custom:"),
-            unpinned.len(),
-            shown.join(", "),
-        );
+
+    if unpinned.is_empty() {
+        return;
     }
+
+    if ctx.is_human() {
+        for key in unpinned {
+            if let Some(value) = issue.extra.get(key) {
+                let _ = writeln!(
+                    out,
+                    "{} {}",
+                    label(&format!("{key}:")),
+                    compact_value(value)
+                );
+            }
+        }
+        return;
+    }
+
+    let shown: Vec<&str> = unpinned.iter().take(3).map(|k| k.as_str()).collect();
+    let rest = unpinned.len().saturating_sub(shown.len());
+    let suffix = if rest > 0 {
+        format!(", +{rest}")
+    } else {
+        String::new()
+    };
+    let _ = writeln!(
+        out,
+        "{} {} set ({}{suffix}) — see --fields",
+        label("custom:"),
+        unpinned.len(),
+        shown.join(", "),
+    );
+}
+
+/// What to call a link.
+///
+/// A recognised type gets our own wording; anything else keeps Tracker's, which
+/// is at least true. The fallback word "link" said nothing.
+fn relation_of(link: &crate::api::models::Link) -> String {
+    if link.kind == crate::api::models::LinkKind::Other
+        && let Some(relation) = &link.relation
+    {
+        return relation.clone();
+    }
+    link.kind.label().to_owned()
 }
 
 /// Links, one per line, always with their type.
@@ -197,7 +228,7 @@ fn links_section(out: &mut String, issue: &Issue, ctx: &Context) {
         let _ = writeln!(
             out,
             "  {} {}{}",
-            label(link.kind.label()),
+            label(&relation_of(link)),
             paint.paint(&link.key, Palette::key()),
             link.status
                 .as_ref()
@@ -305,7 +336,7 @@ fn field_value(issue: &Issue, field: &str) -> String {
                 issue
                     .links
                     .iter()
-                    .map(|link| format!("{} {}", link.kind.label(), link.key))
+                    .map(|link| format!("{} {}", relation_of(link), link.key))
                     .collect::<Vec<_>>()
                     .join("; ")
             }
@@ -495,12 +526,14 @@ mod tests {
             links: vec![
                 Link {
                     kind: LinkKind::IsBlockedBy,
+                    relation: None,
                     key: "PROJ-3".to_owned(),
                     summary: None,
                     status: Some("Open".to_owned()),
                 },
                 Link {
                     kind: LinkKind::Parent,
+                    relation: None,
                     key: "PROJ-9".to_owned(),
                     summary: None,
                     status: None,
@@ -535,14 +568,50 @@ mod tests {
     }
 
     /// The rule that makes styling safe: same words, same order, same data —
-    /// only escape codes differ.
+    /// only escape codes differ. Compared at the same detail level, since a
+    /// terminal is also given more of the issue.
     #[test]
     fn styling_changes_nothing_but_the_escape_codes() {
-        let plain = issue(&sample(), &ctx());
-        let coloured = issue(&sample(), &human_ctx());
+        let coloured_machine = Context {
+            audience: Audience::Human,
+            ..ctx()
+        };
+        let plain = issue(
+            &sample(),
+            &Context {
+                audience: Audience::Machine,
+                ..coloured_machine.clone()
+            },
+        );
+        let coloured = issue(&sample(), &coloured_machine);
 
-        let stripped: String = strip_ansi(&coloured);
-        assert_eq!(stripped, plain);
+        // Human output lists custom fields instead of counting them, so compare
+        // the shared prefix: everything up to that line.
+        let cut = |text: &str| {
+            text.lines()
+                .take_while(|line| !line.contains("custom:") && !line.starts_with("component:"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        assert_eq!(cut(&strip_ansi(&coloured)), cut(&plain));
+    }
+
+    /// A person reading their own terminal is not paying for context, so the
+    /// description is not cut short there.
+    #[test]
+    fn a_terminal_gets_the_whole_description_and_every_custom_field() {
+        let human = Context {
+            audience: Audience::Human,
+            description_lines: None,
+            ..ctx()
+        };
+        let rendered = strip_ansi(&issue(&sample(), &human));
+
+        assert!(rendered.contains("line four"));
+        assert!(!rendered.contains("more lines: --full"));
+        assert!(rendered.contains("component: api"));
+        assert!(rendered.contains("team: core"));
+        assert!(!rendered.contains("custom: "));
     }
 
     fn strip_ansi(text: &str) -> String {

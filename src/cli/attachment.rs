@@ -45,11 +45,12 @@ pub async fn run(command: &AttachmentCommand, session: &Session) -> ExitCode {
     }
 }
 
-async fn list(key: &str, session: &Session) -> ExitCode {
-    let client = match session.client() {
-        Ok(client) => client,
+async fn list(target: &str, session: &Session) -> ExitCode {
+    let (client, key) = match session.client_for(target) {
+        Ok(pair) => pair,
         Err(code) => return code,
     };
+    let key = key.as_str();
 
     match client.attachments(key).await {
         Ok(attachments) => {
@@ -99,16 +100,17 @@ fn safe_filename(raw: &str, fallback: &str) -> String {
 }
 
 async fn download(
-    key: &str,
+    target: &str,
     attachment: &str,
     out: &Path,
     force: bool,
     session: &Session,
 ) -> ExitCode {
-    let client = match session.client() {
-        Ok(client) => client,
+    let (client, key) = match session.client_for(target) {
+        Ok(pair) => pair,
         Err(code) => return code,
     };
+    let key = key.as_str();
 
     let attachments = match client.attachments(key).await {
         Ok(attachments) => attachments,
@@ -165,7 +167,13 @@ async fn download(
     ExitCode::Success
 }
 
-async fn upload(key: &str, file: &Path, session: &Session) -> ExitCode {
+async fn upload(target: &str, file: &Path, session: &Session) -> ExitCode {
+    let (client, key) = match session.client_for(target) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let key = key.as_str();
+
     let bytes = match std::fs::read(file) {
         Ok(bytes) => bytes,
         Err(error) => return report(&error, ExitCode::Failure),
@@ -188,11 +196,6 @@ async fn upload(key: &str, file: &Path, session: &Session) -> ExitCode {
     if let Gate::Stop(code) = check(&intent, session) {
         return code;
     }
-
-    let client = match session.client() {
-        Ok(client) => client,
-        Err(code) => return code,
-    };
 
     match client.upload(key, &name, bytes).await {
         Ok(attachment) => {

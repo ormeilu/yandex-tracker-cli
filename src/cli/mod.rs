@@ -124,6 +124,40 @@ impl Session {
             .ok_or(crate::config::ConfigError::NoProfile)
     }
 
+    /// Split a possibly profile-qualified target and build the client for it.
+    ///
+    /// Queue keys are only unique **inside** an organisation: two profiles can
+    /// both see a `LMS`, and `LMS-12` then names two different issues. Rather
+    /// than guess, a caller can say which one — `work/LMS-12` — and the rest of
+    /// the command runs against that profile.
+    pub fn client_for(&self, target: &str) -> Result<(crate::api::Client, String), ExitCode> {
+        let Some((profile, key)) = target.split_once('/') else {
+            return Ok((self.client()?, target.to_owned()));
+        };
+
+        // A slash with nothing useful around it is a typo, not a qualifier.
+        if profile.is_empty() || key.is_empty() {
+            return Err(report(
+                &format!("`{target}` is not a valid key; write it as PROJ-1 or profile/PROJ-1"),
+                ExitCode::ConfirmationRequired,
+            ));
+        }
+
+        let resolved = self
+            .config
+            .resolve(Some(profile), None, std::path::Path::new("."))
+            .map_err(|error| report(&error, ExitCode::Auth))?;
+
+        let mut err = anstream::stderr();
+        let _ = writeln!(
+            err,
+            "→ profile={} org={} (from the key `{target}`)",
+            resolved.name, resolved.profile.org_id
+        );
+
+        Ok((self.client_with(&resolved)?, key.to_owned()))
+    }
+
     /// Build an API client for the active profile.
     ///
     /// Every failure on the way here — no profile, no stored token, a token the
@@ -133,7 +167,11 @@ impl Session {
         let resolved = self
             .resolved()
             .map_err(|error| report(&error, ExitCode::Auth))?;
+        self.client_with(resolved)
+    }
 
+    /// A client for a specific profile.
+    pub fn client_with(&self, resolved: &Resolved) -> Result<crate::api::Client, ExitCode> {
         let token = crate::secrets::token(&resolved.profile.account)
             .map_err(|error| report(&error, ExitCode::Auth))?;
 
@@ -187,17 +225,29 @@ pub fn emit(text: &str) {
 #[must_use]
 pub fn render_context(global: &GlobalArgs, resolved: Option<&Resolved>) -> Context {
     let display = resolved.map(|r| &r.profile.display);
+    let audience = Audience::detect();
+
+    // Truncation exists to save an agent's context, and a person reading their
+    // own terminal has none of that problem — being handed two thirds of a
+    // description and a note about the rest is just an extra command to type.
+    // A terminal therefore gets everything unless the profile says otherwise.
+    let description_lines = if global.full {
+        None
+    } else {
+        match (audience, display) {
+            (Audience::Human, None) => None,
+            (Audience::Human, Some(display)) => display.description_lines_human,
+            (Audience::Machine, display) => Some(display.map_or(10, |d| d.description_lines)),
+        }
+    };
+
     Context {
         format: global
             .format
             .or_else(|| display.map(|d| d.format))
             .unwrap_or_default(),
-        audience: Audience::detect(),
-        description_lines: if global.full {
-            None
-        } else {
-            Some(display.map_or(10, |d| d.description_lines))
-        },
+        audience,
+        description_lines,
         extra_fields: display.map(|d| d.extra_fields.clone()).unwrap_or_default(),
     }
 }

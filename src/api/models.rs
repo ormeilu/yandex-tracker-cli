@@ -52,7 +52,7 @@ impl LinkKind {
             Self::Relates => "relates",
             Self::Epic => "epic",
             Self::HasEpic => "has epic",
-            Self::Other => "links",
+            Self::Other => "related to",
         }
     }
 }
@@ -61,6 +61,11 @@ impl LinkKind {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Link {
     pub kind: LinkKind,
+    /// Tracker's own wording for the relationship, in whatever language it
+    /// answered in. Shown when `kind` is [`LinkKind::Other`], so an unrecognised
+    /// relation still says what it is instead of reading as "link".
+    #[serde(default)]
+    pub relation: Option<String>,
     pub key: String,
     #[serde(default)]
     pub summary: Option<String>,

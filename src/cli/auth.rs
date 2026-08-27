@@ -127,6 +127,9 @@ async fn status(session: &Session, brief: bool, active_only: bool) -> ExitCode {
     let mut active_failure = None;
     let mut any_success = false;
     let mut last_failure = None;
+    // Which profiles can see each queue key, so the ambiguity can be reported.
+    let mut queues_seen: std::collections::BTreeMap<String, Vec<String>> =
+        std::collections::BTreeMap::new();
 
     for (name, profile) in &session.config.profiles {
         let is_active = active.as_deref() == Some(name.as_str());
@@ -166,7 +169,16 @@ async fn status(session: &Session, brief: bool, active_only: bool) -> ExitCode {
             profile.default_queue.as_deref().unwrap_or("-"),
         );
 
-        let code = report_profile(profile, brief, paint, &mut out, &mut err).await;
+        let code = report_profile(
+            profile,
+            brief,
+            paint,
+            name,
+            &mut queues_seen,
+            &mut out,
+            &mut err,
+        )
+        .await;
         if code == ExitCode::Success {
             any_success = true;
         } else {
@@ -174,6 +186,26 @@ async fn status(session: &Session, brief: bool, active_only: bool) -> ExitCode {
             if is_active {
                 active_failure = Some(code);
             }
+        }
+    }
+
+    // A queue key is unique inside an organisation, not across them, so the same
+    // key in two profiles means a bare `LMS-12` is ambiguous. Better to hear that
+    // here than to discover it by commenting on the wrong issue.
+    let shared: Vec<(&String, &Vec<String>)> = queues_seen
+        .iter()
+        .filter(|(_, profiles)| profiles.len() > 1)
+        .collect();
+    if !shared.is_empty() {
+        let _ = writeln!(err);
+        for (key, profiles) in shared {
+            let _ = writeln!(
+                err,
+                "{} queue {key} is visible in {} — write {}/{key}-1 to say which",
+                paint.paint("warning:", Palette::warn()),
+                profiles.join(" and "),
+                profiles.first().map_or("profile", String::as_str),
+            );
         }
     }
 
@@ -190,6 +222,8 @@ async fn report_profile(
     profile: &crate::config::Profile,
     brief: bool,
     paint: Painter,
+    profile_name: &str,
+    queues_seen: &mut std::collections::BTreeMap<String, Vec<String>>,
     out: &mut impl std::io::Write,
     err: &mut impl std::io::Write,
 ) -> ExitCode {
@@ -252,7 +286,7 @@ async fn report_profile(
         return ExitCode::Success;
     }
 
-    reach(&client, paint, out).await;
+    reach(&client, paint, profile_name, queues_seen, out).await;
     ExitCode::Success
 }
 
@@ -260,7 +294,13 @@ async fn report_profile(
 ///
 /// Every lookup is best-effort: a profile without access to projects should
 /// still report its queues rather than losing the whole line.
-async fn reach(client: &Client, paint: Painter, out: &mut impl std::io::Write) {
+async fn reach(
+    client: &Client,
+    paint: Painter,
+    profile_name: &str,
+    queues_seen: &mut std::collections::BTreeMap<String, Vec<String>>,
+    out: &mut impl std::io::Write,
+) {
     let queues = client.queues().await.ok();
     let projects = client.entities("project", None, 1, 5).await.ok();
     let goals = client.entities("goal", None, 1, 1).await.ok();
@@ -313,6 +353,13 @@ async fn reach(client: &Client, paint: Painter, out: &mut impl std::io::Write) {
     }
 
     if let Some(queues) = queues.filter(|queues| !queues.is_empty()) {
+        for queue in &queues {
+            queues_seen
+                .entry(queue.key.clone())
+                .or_default()
+                .push(profile_name.to_owned());
+        }
+
         let keys: Vec<&str> = queues
             .iter()
             .take(8)

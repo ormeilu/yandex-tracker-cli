@@ -154,6 +154,24 @@ When a token is rejected or an organisation is not found, the output includes th
 steps for getting the right value — creating an OAuth application is not
 something anyone guesses.
 
+## When two profiles share a queue key
+
+Queue keys are unique inside an organisation, not across them: two profiles can
+each see an `LMS`, and `LMS-12` then names two different issues. Whichever
+profile is active decides — which is fine in a repository with a `.tracker.toml`,
+and a trap when you are switching between organisations by hand.
+
+Say which one on the key itself:
+
+```bash
+ytcli issue get work/LMS-12
+ytcli issue comment personal/LMS-12 "not this one"
+```
+
+The prefix overrides everything else for that command, and the command reports
+which profile it used. `ytcli auth status` warns when it sees the same queue key
+in more than one profile, so you find out before it matters rather than after.
+
 ## Display defaults
 
 Every default is overridable per profile:

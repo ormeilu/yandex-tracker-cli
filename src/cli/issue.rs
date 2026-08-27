@@ -17,7 +17,8 @@ use crate::render::{Format, machine, text};
 pub enum IssueCommand {
     /// Show one issue: summary, fields, links, first lines of the description.
     Get {
-        /// Issue key, e.g. PROJ-42.
+        /// Issue key, e.g. PROJ-42. Prefix it with a profile — `work/PROJ-42` —
+        /// when two profiles can both see a queue with that key.
         key: String,
         /// Comma-separated field list; accepts custom field keys.
         #[arg(long, value_delimiter = ',')]
@@ -140,11 +141,12 @@ pub async fn run(command: &IssueCommand, session: &Session) -> ExitCode {
 }
 
 /// Fetch one issue and render it at whichever rung of the ladder was asked for.
-async fn get(key: &str, fields: &[String], session: &Session) -> ExitCode {
-    let client = match session.client() {
-        Ok(client) => client,
+async fn get(target: &str, fields: &[String], session: &Session) -> ExitCode {
+    let (client, key) = match session.client_for(target) {
+        Ok(pair) => pair,
         Err(code) => return code,
     };
+    let key = key.as_str();
 
     let (mut issue, raw) = match client.issue(key).await {
         Ok(pair) => pair,
@@ -340,11 +342,12 @@ async fn count(args: &FindArgs, session: &Session) -> ExitCode {
     }
 }
 
-async fn links(key: &str, session: &Session) -> ExitCode {
-    let client = match session.client() {
-        Ok(client) => client,
+async fn links(target: &str, session: &Session) -> ExitCode {
+    let (client, key) = match session.client_for(target) {
+        Ok(pair) => pair,
         Err(code) => return code,
     };
+    let key = key.as_str();
 
     match client.issue_links(key).await {
         Ok(links) => {
@@ -362,11 +365,12 @@ async fn links(key: &str, session: &Session) -> ExitCode {
     }
 }
 
-async fn comments(key: &str, session: &Session) -> ExitCode {
-    let client = match session.client() {
-        Ok(client) => client,
+async fn comments(target: &str, session: &Session) -> ExitCode {
+    let (client, key) = match session.client_for(target) {
+        Ok(pair) => pair,
         Err(code) => return code,
     };
+    let key = key.as_str();
 
     match client.issue_comments(key).await {
         Ok(comments) => {
@@ -471,12 +475,18 @@ async fn create(
 }
 
 async fn update(
-    key: &str,
+    target: &str,
     summary: Option<&str>,
     assignee: Option<&str>,
     set: &[String],
     session: &Session,
 ) -> ExitCode {
+    let (client, key) = match session.client_for(target) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let key = key.as_str();
+
     let mut body = serde_json::Map::new();
     if let Some(summary) = summary {
         body.insert("summary".to_owned(), serde_json::json!(summary));
@@ -511,11 +521,6 @@ async fn update(
         return code;
     }
 
-    let client = match session.client() {
-        Ok(client) => client,
-        Err(code) => return code,
-    };
-
     match client.update_issue(key, &body).await {
         Ok(issue) => {
             emit(&text::issue_selected(
@@ -531,7 +536,13 @@ async fn update(
     }
 }
 
-async fn comment(key: &str, raw: &str, session: &Session) -> ExitCode {
+async fn comment(target: &str, raw: &str, session: &Session) -> ExitCode {
+    let (client, key) = match session.client_for(target) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let key = key.as_str();
+
     let text_body = match body_text(raw) {
         Ok(text) => text,
         Err(code) => return code,
@@ -547,11 +558,6 @@ async fn comment(key: &str, raw: &str, session: &Session) -> ExitCode {
     if let Gate::Stop(code) = check(&intent, session) {
         return code;
     }
-
-    let client = match session.client() {
-        Ok(client) => client,
-        Err(code) => return code,
-    };
 
     match client.add_comment(key, &text_body).await {
         Ok(comment) => {
@@ -569,11 +575,12 @@ async fn comment(key: &str, raw: &str, session: &Session) -> ExitCode {
 ///
 /// That is the common case for a caller who does not know the workflow, and it
 /// is a read: listing must not require the write gate.
-async fn transition_cmd(key: &str, transition: Option<&str>, session: &Session) -> ExitCode {
-    let client = match session.client() {
-        Ok(client) => client,
+async fn transition_cmd(target: &str, transition: Option<&str>, session: &Session) -> ExitCode {
+    let (client, key) = match session.client_for(target) {
+        Ok(pair) => pair,
         Err(code) => return code,
     };
+    let key = key.as_str();
 
     let Some(transition) = transition else {
         return match client.transitions(key).await {

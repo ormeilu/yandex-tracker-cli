@@ -182,3 +182,44 @@ async fn the_issue_still_renders_when_links_cannot_be_fetched() {
         .stdout(predicate::str::contains("PROJ-1  Attachments are lost"))
         .stdout(predicate::str::contains("links: none"));
 }
+
+/// Queue keys are unique inside an organisation, not across them, so a caller
+/// can say which profile a key belongs to and the command follows it.
+#[tokio::test]
+async fn a_profile_qualified_key_selects_that_profile() {
+    let harness = Harness::new().await;
+    issue_available(&harness).await;
+
+    harness
+        .run_raw(&["issue", "get", "test/PROJ-1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("PROJ-1  Attachments are lost"))
+        .stderr(predicate::str::contains(
+            "profile=test org=12345 (from the key `test/PROJ-1`)",
+        ));
+}
+
+#[tokio::test]
+async fn an_unknown_profile_in_a_key_is_an_auth_error() {
+    let harness = Harness::new().await;
+
+    harness
+        .run_raw(&["issue", "get", "nosuch/PROJ-1"])
+        .assert()
+        .code(3)
+        .stderr(predicate::str::contains("`nosuch` is not defined"));
+}
+
+#[tokio::test]
+async fn a_stray_slash_is_rejected_rather_than_guessed_at() {
+    let harness = Harness::new().await;
+
+    harness
+        .run_raw(&["issue", "get", "/PROJ-1"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains(
+            "write it as PROJ-1 or profile/PROJ-1",
+        ));
+}

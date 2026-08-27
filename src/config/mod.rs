@@ -63,8 +63,12 @@ pub struct Display {
     pub limit: usize,
     /// Hard ceiling for `--all` page walking.
     pub max: usize,
-    /// Description lines shown before the `--full` hint.
+    /// Description lines shown before the `--full` hint, when the output is
+    /// being piped or read by an agent.
     pub description_lines: usize,
+    /// The same, for a terminal. `None` — the default — means no limit: a person
+    /// reading their own screen is not paying for context.
+    pub description_lines_human: Option<usize>,
     /// Custom field keys pinned into the compact view, in this exact order.
     /// Order is fixed on purpose: a shuffling field list breaks an agent's
     /// prompt cache on every call.
@@ -79,6 +83,7 @@ impl Default for Display {
             limit: 25,
             max: 500,
             description_lines: 10,
+            description_lines_human: None,
             extra_fields: Vec::new(),
             format: OutputFormat::Text,
         }
