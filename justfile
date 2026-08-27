@@ -44,11 +44,15 @@ signing-identity:
         -addext "basicConstraints=critical,CA:false" \
         -addext "keyUsage=critical,digitalSignature" \
         -addext "extendedKeyUsage=critical,codeSigning" 2>/dev/null
+    # A throwaway password, because macOS refuses to verify the MAC on a
+    # PKCS#12 written with an empty one. It never leaves this shell, and the
+    # bundle it protects is deleted a few lines below.
+    pw=$(openssl rand -hex 16)
     openssl pkcs12 -export -inkey "$work/key.pem" -in "$work/cert.pem" \
-        -name ytcli-dev -out "$work/id.p12" -passout pass:
+        -name ytcli-dev -out "$work/id.p12" -passout "pass:$pw"
     keychain="$HOME/Library/Keychains/login.keychain-db"
     # -T grants codesign, and only codesign, use of the key without a prompt.
-    security import "$work/id.p12" -k "$keychain" -P "" -T /usr/bin/codesign
+    security import "$work/id.p12" -k "$keychain" -P "$pw" -T /usr/bin/codesign
     # Trusted for code signing alone: this certificate must not become something
     # that can vouch for a website or an email.
     security add-trusted-cert -r trustRoot -p codeSign -k "$keychain" "$work/cert.pem"
