@@ -102,6 +102,31 @@ not be able to look like the tool talking.
 Rendering happens only when stdout is a terminal. A pipe gets the source bytes,
 because reflowed prose is not what a caller diffing output asked for.
 
+## Images
+
+`ytcli attachment show PROJ-1 29` draws an image attachment in Kitty, Ghostty,
+WezTerm and iTerm2.
+
+Support is decided by what the terminal exports about itself — `TERM` set to
+`xterm-kitty` or `xterm-ghostty`, `TERM_PROGRAM`, or the terminal's own
+variables — matched exactly, never by a pattern that happens to appear in
+`TERM`. Inside `tmux` or `screen` the answer is always no: those variables are
+inherited from the terminal the multiplexer was started in, while the graphics
+are not necessarily passed through, and getting that wrong prints a screenful of
+escape codes as text.
+
+Anything that cannot draw — another terminal, a pipe, a non-image file, a format
+the protocol cannot carry — prints what the file is and the `attachment
+download` command that puts it somewhere openable. There is always a next step.
+`--format json` describes the attachment and never emits pixels.
+
+If a terminal that should draw does not, `-v` says which protocol was chosen or
+why none was:
+
+```bash
+ytcli attachment show PROJ-1 29 -v
+```
+
 ## TOON, measured
 
 `--format toon` exists behind the `toon` feature. It was worth trying and it is

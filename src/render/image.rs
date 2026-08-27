@@ -87,6 +87,20 @@ impl Kind {
     }
 }
 
+/// Why a terminal is getting no picture. Reported under `-v`, because "it
+/// printed a filename instead of my screenshot" is otherwise unanswerable
+/// without reading this file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Refusal {
+    /// stdout is a pipe or a file. Escape codes would be somebody's data.
+    NotATerminal,
+    /// tmux or screen: the terminal's variables are inherited, its graphics are
+    /// not necessarily passed through.
+    Multiplexer,
+    /// Nothing here says what this terminal is.
+    Unrecognised,
+}
+
 /// The protocol this terminal supports, if any.
 ///
 /// Reads the environment rather than querying the terminal: a capability query
@@ -95,38 +109,69 @@ impl Kind {
 #[must_use]
 pub fn protocol() -> Option<Protocol> {
     if !std::io::stdout().is_terminal() {
+        tracing::debug!("stdout is not a terminal; no inline image");
         return None;
     }
-    from_environment(&|name| std::env::var(name).ok())
+
+    match decide(&|name| std::env::var(name).ok()) {
+        Ok(protocol) => {
+            tracing::debug!(?protocol, "drawing inline");
+            Some(protocol)
+        }
+        Err(refusal) => {
+            tracing::debug!(
+                ?refusal,
+                term = std::env::var("TERM").unwrap_or_default(),
+                term_program = std::env::var("TERM_PROGRAM").unwrap_or_default(),
+                "no inline image protocol"
+            );
+            None
+        }
+    }
 }
 
 /// The decision itself, over a lookup rather than the process environment, so
 /// the rules can be tested without setting variables for every other test in
 /// the binary.
-fn from_environment(var: &dyn Fn(&str) -> Option<String>) -> Option<Protocol> {
+///
+/// Every marker below is a value a terminal sets about itself and matches
+/// exactly — `TERM` included, where `xterm-kitty` and `xterm-ghostty` are the
+/// terminfo names those terminals install and set. That is not the same thing
+/// as guessing from a substring of `TERM`, which is how a tool ends up printing
+/// escape codes into an `xterm-256color` that merely sounded promising.
+fn decide(var: &dyn Fn(&str) -> Option<String>) -> Result<Protocol, Refusal> {
     // Inside a multiplexer the terminal's own variables are inherited but its
     // graphics are not necessarily passed through.
     if var("TMUX").is_some() || var("STY").is_some() {
-        return None;
+        return Err(Refusal::Multiplexer);
     }
 
     let program = var("TERM_PROGRAM").unwrap_or_default();
+    let term = var("TERM").unwrap_or_default();
 
-    // Kitty and Ghostty each set a variable no other terminal does.
-    if var("KITTY_WINDOW_ID").is_some() || var("GHOSTTY_RESOURCES_DIR").is_some() {
-        return Some(Protocol::Kitty);
+    // Kitty and Ghostty. The dedicated variables come from shell integration,
+    // which a user can turn off or a shell can fail to load; TERM and
+    // TERM_PROGRAM come from the terminal itself and survive that.
+    if var("KITTY_WINDOW_ID").is_some()
+        || var("GHOSTTY_RESOURCES_DIR").is_some()
+        || var("GHOSTTY_BIN_DIR").is_some()
+        || program == "ghostty"
+        || term == "xterm-kitty"
+        || term == "xterm-ghostty"
+    {
+        return Ok(Protocol::Kitty);
     }
 
     // WezTerm speaks both; its iTerm2 support covers more formats.
     if var("WEZTERM_PANE").is_some() || program == "WezTerm" {
-        return Some(Protocol::Iterm2);
+        return Ok(Protocol::Iterm2);
     }
 
     if program == "iTerm.app" {
-        return Some(Protocol::Iterm2);
+        return Ok(Protocol::Iterm2);
     }
 
-    None
+    Err(Refusal::Unrecognised)
 }
 
 /// The escape sequence that draws these bytes, ready to write to stdout.
@@ -188,21 +233,43 @@ mod tests {
 
     #[test]
     fn each_terminal_gets_the_protocol_it_implements() {
+        for markers in [
+            vec![("KITTY_WINDOW_ID", "1")],
+            vec![("TERM", "xterm-kitty")],
+            vec![("GHOSTTY_RESOURCES_DIR", "/x")],
+            vec![("GHOSTTY_BIN_DIR", "/x/bin")],
+            vec![("TERM_PROGRAM", "ghostty")],
+            vec![("TERM", "xterm-ghostty")],
+        ] {
+            assert_eq!(
+                decide(&env(&markers)),
+                Ok(Protocol::Kitty),
+                "{markers:?} should be kitty graphics"
+            );
+        }
+
+        for markers in [
+            vec![("TERM_PROGRAM", "iTerm.app")],
+            vec![("WEZTERM_PANE", "0")],
+            vec![("TERM_PROGRAM", "WezTerm")],
+        ] {
+            assert_eq!(
+                decide(&env(&markers)),
+                Ok(Protocol::Iterm2),
+                "{markers:?} should be the iTerm2 protocol"
+            );
+        }
+    }
+
+    /// Ghostty sets `GHOSTTY_RESOURCES_DIR` from its shell integration, which a
+    /// user can turn off and a shell can fail to load. `TERM` comes from the
+    /// terminal itself, so it has to be enough on its own — this is the case
+    /// that shipped broken.
+    #[test]
+    fn ghostty_is_recognised_without_its_shell_integration() {
         assert_eq!(
-            from_environment(&env(&[("KITTY_WINDOW_ID", "1")])),
-            Some(Protocol::Kitty)
-        );
-        assert_eq!(
-            from_environment(&env(&[("GHOSTTY_RESOURCES_DIR", "/x")])),
-            Some(Protocol::Kitty)
-        );
-        assert_eq!(
-            from_environment(&env(&[("TERM_PROGRAM", "iTerm.app")])),
-            Some(Protocol::Iterm2)
-        );
-        assert_eq!(
-            from_environment(&env(&[("WEZTERM_PANE", "0")])),
-            Some(Protocol::Iterm2)
+            decide(&env(&[("TERM", "xterm-ghostty")])),
+            Ok(Protocol::Kitty)
         );
     }
 
@@ -210,16 +277,28 @@ mod tests {
     #[test]
     fn a_multiplexer_is_never_assumed_to_pass_graphics_through() {
         assert_eq!(
-            from_environment(&env(&[("KITTY_WINDOW_ID", "1"), ("TMUX", "/tmp/s")])),
-            None
+            decide(&env(&[("KITTY_WINDOW_ID", "1"), ("TMUX", "/tmp/s")])),
+            Err(Refusal::Multiplexer)
+        );
+        assert_eq!(
+            decide(&env(&[("TERM", "xterm-ghostty"), ("STY", "1.pts-0")])),
+            Err(Refusal::Multiplexer)
         );
     }
 
-    /// An unknown terminal is not a terminal that might work.
+    /// An unknown terminal is not a terminal that might work, and a `TERM` that
+    /// merely sounds promising is not a capability.
     #[test]
     fn anything_unrecognised_gets_nothing() {
-        assert_eq!(from_environment(&env(&[("TERM", "xterm-256color")])), None);
-        assert_eq!(from_environment(&env(&[])), None);
+        assert_eq!(
+            decide(&env(&[("TERM", "xterm-256color")])),
+            Err(Refusal::Unrecognised)
+        );
+        assert_eq!(
+            decide(&env(&[("TERM", "kitty-like")])),
+            Err(Refusal::Unrecognised)
+        );
+        assert_eq!(decide(&env(&[])), Err(Refusal::Unrecognised));
     }
 
     #[test]
