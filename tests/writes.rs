@@ -221,3 +221,151 @@ async fn a_failed_write_is_not_retried() {
         .assert()
         .code(5);
 }
+
+/// The rule the `--yes` flag exists for: one issue is the ordinary case, several
+/// is irreversible at scale. Nothing is sent while the answer is still no.
+#[tokio::test]
+async fn changing_several_issues_without_yes_exits_two_and_sends_nothing() {
+    let harness = Harness::new().await;
+
+    harness
+        .run(&[
+            "issue",
+            "update",
+            "PROJ-1",
+            "PROJ-4",
+            "--set",
+            "storyPoints=3",
+        ])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("without --yes"))
+        // What it would have touched, so the caller can see whether the set is
+        // the one they pictured.
+        .stderr(predicate::str::contains("PROJ-1, PROJ-4"));
+
+    assert!(
+        harness
+            .server
+            .received_requests()
+            .await
+            .expect("recorded")
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn several_issues_with_yes_each_get_the_same_change() {
+    let harness = Harness::new().await;
+    for key in ["PROJ-1", "PROJ-4"] {
+        Mock::given(method("PATCH"))
+            .and(path(format!("/v3/issues/{key}")))
+            .and(body_json(serde_json::json!({"storyPoints": 3})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(fixture("issue.json")))
+            .expect(1)
+            .mount(&harness.server)
+            .await;
+    }
+
+    harness
+        .run(&[
+            "issue",
+            "update",
+            "PROJ-1",
+            "PROJ-4",
+            "--set",
+            "storyPoints=3",
+            "--yes",
+        ])
+        .assert()
+        .success();
+}
+
+/// A dry run names every target, which is the only way to check the set before
+/// committing to it.
+#[tokio::test]
+async fn a_dry_run_over_several_issues_lists_them_all() {
+    let harness = Harness::new().await;
+
+    harness
+        .run(&[
+            "issue",
+            "update",
+            "PROJ-1",
+            "PROJ-4",
+            "--set",
+            "storyPoints=3",
+            "--dry-run",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("would update PROJ-1, PROJ-4"));
+
+    assert!(
+        harness
+            .server
+            .received_requests()
+            .await
+            .expect("recorded")
+            .is_empty()
+    );
+}
+
+/// Half-applied is the worst outcome, so a bad key stops the run before the
+/// first request rather than after the first success.
+#[tokio::test]
+async fn a_malformed_key_stops_the_run_before_anything_is_sent() {
+    let harness = Harness::new().await;
+
+    harness
+        .run(&["issue", "update", "PROJ-1", "/", "--set", "x=1", "--yes"])
+        .assert()
+        .code(2);
+
+    assert!(
+        harness
+            .server
+            .received_requests()
+            .await
+            .expect("recorded")
+            .is_empty()
+    );
+}
+
+/// Every write, not just the ones with a test of their own.
+///
+/// The gate is only worth having if nothing goes round it, and a new verb that
+/// forgets to call it would otherwise be found by a user with a `--dry-run` that
+/// wrote something.
+#[tokio::test]
+async fn no_write_verb_reaches_the_network_under_dry_run() {
+    let file = tempfile::NamedTempFile::new().expect("temp file");
+    let path = file.path().to_string_lossy().into_owned();
+
+    let writes: Vec<Vec<&str>> = vec![
+        vec!["issue", "create", "-q", "PROJ", "-s", "title"],
+        vec!["issue", "update", "PROJ-1", "--set", "storyPoints=3"],
+        vec!["issue", "comment", "PROJ-1", "text"],
+        vec!["issue", "transition", "PROJ-1", "close"],
+        vec!["attachment", "upload", "PROJ-1", &path],
+    ];
+
+    for args in writes {
+        let harness = Harness::new().await;
+        let mut with_flag = args.clone();
+        with_flag.push("--dry-run");
+
+        harness.run(&with_flag).assert().success();
+
+        assert!(
+            harness
+                .server
+                .received_requests()
+                .await
+                .expect("recorded")
+                .is_empty(),
+            "`ytcli {}` sent a request under --dry-run",
+            args.join(" ")
+        );
+    }
+}

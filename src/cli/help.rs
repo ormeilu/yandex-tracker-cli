@@ -120,15 +120,20 @@ Prints the profile and organisation it is about to write to before it writes.
 Failed writes are not retried: a retried write can be a duplicated one.";
 
 pub const ISSUE_UPDATE: &str = "\
-Change fields of an issue.
+Change fields of one or more issues.
 
   ytcli issue update PROJ-1 --assignee login
   ytcli issue update PROJ-1 --set storyPoints=3
+  ytcli issue update PROJ-1 PROJ-2 --set storyPoints=3 --yes
   ytcli issue update PROJ-1 --set 'summary=\"3\"' --dry-run
 
 `--set` takes any field, custom ones included. A value that parses as JSON is
 sent as JSON, so `--set storyPoints=3` sends the number 3; quote it to mean the
 string. `ytcli queue fields PROJ` lists the keys.
+
+Several keys get the same change, one request each, stopping at the first
+failure rather than leaving you to work out how far it got. More than one issue
+needs `--yes`: one issue is the ordinary case, several is irreversible at scale.
 
 An update that would change nothing is refused rather than sent.";
 

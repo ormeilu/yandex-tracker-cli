@@ -38,6 +38,8 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   ytcli issue count -q PROJ -s open     one number, the cheapest question here
   ytcli issue create -q PROJ -s "title" [-d text] [--assignee login]
   ytcli issue update PROJ-1 --set storyPoints=3 --assignee login
+  ytcli issue update PROJ-1 PROJ-2 --set storyPoints=3 --yes
+                                        same change to several; --yes required
   ytcli issue comment PROJ-1 "text"     use - to read the body from stdin
   ytcli issue transition PROJ-1         omit the id to list what is available
   Lists print "shown N of M" and, when more exist, "next: --page K". Never assume a page is all.

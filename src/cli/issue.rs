@@ -51,10 +51,12 @@ pub enum IssueCommand {
         #[arg(long, value_delimiter = ',')]
         tags: Vec<String>,
     },
-    /// Change fields of an issue.
+    /// Change fields of one or more issues.
     #[command(long_about = crate::cli::help::ISSUE_UPDATE)]
     Update {
-        key: String,
+        /// Issues to change. More than one needs --yes.
+        #[arg(required = true)]
+        keys: Vec<String>,
         #[arg(long, short = 's')]
         summary: Option<String>,
         #[arg(long)]
@@ -137,11 +139,11 @@ pub async fn run(command: &IssueCommand, session: &Session) -> ExitCode {
             .await
         }
         IssueCommand::Update {
-            key,
+            keys,
             summary,
             assignee,
             set,
-        } => update(key, summary.as_deref(), assignee.as_deref(), set, session).await,
+        } => update(keys, summary.as_deref(), assignee.as_deref(), set, session).await,
         IssueCommand::Comment { key, text } => comment(key, text, session).await,
         IssueCommand::Transition { key, transition } => {
             transition_cmd(key, transition.as_deref(), session).await
@@ -488,18 +490,26 @@ async fn create(
     }
 }
 
+/// Apply the same change to every named issue.
+///
+/// The body is built once, because the point of naming several issues is that
+/// they get the same change; a per-issue variation would be several commands.
+/// Targets are resolved before anything is sent, so a typo in the third key does
+/// not leave the first two changed and the caller guessing.
 async fn update(
-    target: &str,
+    targets: &[String],
     summary: Option<&str>,
     assignee: Option<&str>,
     set: &[String],
     session: &Session,
 ) -> ExitCode {
-    let (client, key) = match session.client_for(target) {
-        Ok(pair) => pair,
-        Err(code) => return code,
-    };
-    let key = key.as_str();
+    let mut resolved = Vec::with_capacity(targets.len());
+    for target in targets {
+        match session.client_for(target) {
+            Ok(pair) => resolved.push(pair),
+            Err(code) => return code,
+        }
+    }
 
     let mut body = serde_json::Map::new();
     if let Some(summary) = summary {
@@ -525,29 +535,33 @@ async fn update(
     }
 
     let body = serde_json::Value::Object(body);
-    let targets = [key.to_owned()];
+    let keys: Vec<String> = resolved.iter().map(|(_, key)| key.clone()).collect();
     let intent = Intent {
-        action: &format!("update {key}"),
-        targets: &targets,
+        action: &format!("update {}", keys.join(", ")),
+        targets: &keys,
         body: &body,
     };
     if let Gate::Stop(code) = check(&intent, session) {
         return code;
     }
 
-    match client.update_issue(key, &body).await {
-        Ok(issue) => {
-            emit(&text::issue_selected(
+    // One at a time, and stopping at the first failure. Tracker has no bulk
+    // endpoint and rate-limits, and a run that carried on would leave the caller
+    // to work out which issues it got to before it stopped.
+    for (client, key) in &resolved {
+        match client.update_issue(key, &body).await {
+            Ok(issue) => emit(&text::issue_selected(
                 &issue,
                 &["status".to_owned(), "assignee".to_owned()],
-            ));
-            ExitCode::Success
-        }
-        Err(error) => {
-            let code = error.exit_code();
-            report(&error, code)
+            )),
+            Err(error) => {
+                let code = error.exit_code();
+                return report(&error, code);
+            }
         }
     }
+
+    ExitCode::Success
 }
 
 async fn comment(target: &str, raw: &str, session: &Session) -> ExitCode {
