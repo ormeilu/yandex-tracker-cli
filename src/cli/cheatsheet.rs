@@ -22,15 +22,20 @@ const SHEET: &str = include_str!("../../docs/cheatsheet.txt");
 pub fn run(args: &CheatsheetArgs) -> ExitCode {
     let mut out = anstream::stdout();
 
+    // The sheet is compiled in from a text file, and a Windows checkout may have
+    // rewritten its line endings. Normalising here keeps the section splitting
+    // below platform-independent regardless of how the source was checked out.
+    let sheet = SHEET.replace("\r\n", "\n");
+
     let Some(topic) = args.topic.as_deref() else {
-        let _ = write!(out, "{SHEET}");
+        let _ = write!(out, "{sheet}");
         return ExitCode::Success;
     };
 
     // Sections are separated by a blank line and start with `## <topic>`.
     let wanted = format!("## {topic}");
     let mut found = false;
-    for block in SHEET.split("\n\n") {
+    for block in sheet.split("\n\n") {
         if block.starts_with(&wanted) {
             let _ = writeln!(out, "{}", block.trim_end());
             found = true;

@@ -1,0 +1,5 @@
+# Normalise line endings in the repository. The cheatsheet is compiled into the
+# binary and split on blank lines, so a CRLF checkout would change its meaning.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
