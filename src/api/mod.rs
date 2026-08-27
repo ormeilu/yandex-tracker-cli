@@ -16,11 +16,25 @@ use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderName, HeaderValue,
 use serde_json::Value;
 
 use crate::api::error::ApiError;
-use crate::api::models::{Comment, Issue, Link, Page, User};
+use crate::api::models::{Attachment, Comment, Entity, Issue, Link, Page, User};
 use crate::config::OrgKind;
 
 /// Default API root. Overridable so tests can point at a `wiremock` server.
 pub const DEFAULT_BASE_URL: &str = "https://api.tracker.yandex.net";
+
+/// Entity fields we ask for. Requesting an explicit set keeps the response small
+/// and its shape predictable; the endpoints return only identity otherwise.
+const ENTITY_FIELDS: &str = "summary,description,entityStatus,start,end,lead,author";
+
+/// The host part of a URL, for comparing two of them.
+fn host_of(url: &str) -> Option<String> {
+    let without_scheme = url.split_once("://")?.1;
+    let authority = without_scheme
+        .split(['/', '?', '#'])
+        .next()
+        .unwrap_or(without_scheme);
+    Some(authority.to_ascii_lowercase())
+}
 
 /// Everything the client needs to address one organisation as one account.
 #[derive(Debug, Clone)]
@@ -244,6 +258,126 @@ impl Client {
         )
         .await?;
         Ok(())
+    }
+
+    /// Search projects, portfolios or goals.
+    ///
+    /// The entity endpoints answer with their own envelope (`values`, `hits`,
+    /// `pages`) rather than the header-based totals the issue endpoints use, so
+    /// the page is assembled from the body here.
+    pub async fn entities(
+        &self,
+        kind: &str,
+        input: Option<&str>,
+        page: u32,
+        per_page: u32,
+    ) -> Result<Page<Entity>, ApiError> {
+        let path = format!(
+            "/v3/entities/{kind}/_search?page={page}&perPage={per_page}&fields={ENTITY_FIELDS}"
+        );
+        let mut body = serde_json::Map::new();
+        if let Some(input) = input {
+            body.insert("input".to_owned(), Value::String(input.to_owned()));
+        }
+
+        let (value, _) = self
+            .post_value(&path, &Value::Object(body), &format!("{kind}s"))
+            .await?;
+
+        let items = value
+            .get("values")
+            .and_then(Value::as_array)
+            .map(|entries| entries.iter().filter_map(parse::entity).collect())
+            .unwrap_or_default();
+
+        Ok(Page {
+            items,
+            page,
+            per_page,
+            total: value.get("hits").and_then(Value::as_u64),
+        })
+    }
+
+    /// One project, portfolio or goal, by the id the entity endpoints use.
+    pub async fn entity(&self, kind: &str, id: &str) -> Result<Entity, ApiError> {
+        let raw = self
+            .get_value(
+                &format!("/v3/entities/{kind}/{id}?fields={ENTITY_FIELDS}"),
+                &format!("{kind} {id}"),
+            )
+            .await?;
+
+        parse::entity(&raw).ok_or_else(|| ApiError::NotFound(format!("{kind} {id}")))
+    }
+
+    /// The attachments of an issue.
+    pub async fn attachments(&self, key: &str) -> Result<Vec<Attachment>, ApiError> {
+        let raw = self
+            .get_value(
+                &format!("/v3/issues/{key}/attachments"),
+                &format!("issue {key} attachments"),
+            )
+            .await?;
+
+        Ok(raw
+            .as_array()
+            .map(|entries| entries.iter().filter_map(parse::attachment).collect())
+            .unwrap_or_default())
+    }
+
+    /// Download an attachment's bytes.
+    ///
+    /// The download URL comes out of the payload, which means it is supplied by
+    /// the server rather than chosen by us. It is checked against the configured
+    /// API host before being followed: a crafted `content` URL must not be able
+    /// to send this client, carrying its OAuth header, to somewhere else.
+    pub async fn download(&self, url: &str) -> Result<Vec<u8>, ApiError> {
+        let expected = host_of(&self.base_url);
+        if host_of(url) != expected {
+            return Err(ApiError::Rejected {
+                status: reqwest::StatusCode::BAD_REQUEST,
+                message: format!(
+                    "attachment points at `{}`, which is not the configured Tracker host `{}`",
+                    host_of(url).unwrap_or_default(),
+                    expected.unwrap_or_default(),
+                ),
+            });
+        }
+
+        let response = self.http.get(url).send().await?;
+        let status = response.status();
+        if !status.is_success() {
+            return Err(match status.as_u16() {
+                401 => ApiError::Unauthorized,
+                403 => ApiError::Forbidden,
+                404 => ApiError::NotFound("attachment".to_owned()),
+                _ => ApiError::Rejected {
+                    status,
+                    message: String::new(),
+                },
+            });
+        }
+
+        Ok(response.bytes().await?.to_vec())
+    }
+
+    /// Upload a file to an issue.
+    pub async fn upload(
+        &self,
+        key: &str,
+        filename: &str,
+        bytes: Vec<u8>,
+    ) -> Result<Attachment, ApiError> {
+        let part = reqwest::multipart::Part::bytes(bytes).file_name(filename.to_owned());
+        let form = reqwest::multipart::Form::new().part("file", part);
+
+        let url = format!("{}/v3/issues/{key}/attachments/", self.base_url);
+        let response = self.http.post(&url).multipart(form).send().await?;
+        let text = classify(response, &format!("issue {key}")).await?;
+
+        let value: Value = serde_json::from_str(&text).map_err(ApiError::Decode)?;
+        parse::attachment(&value)
+            .ok_or_else(|| ApiError::NotFound("uploaded attachment".to_owned()))
     }
 
     /// Queues visible to the active profile.
@@ -480,5 +614,46 @@ fn is_retryable(error: &ApiError) -> bool {
         ApiError::Transport(err) => err.is_timeout() || err.is_connect(),
         ApiError::Rejected { status, .. } => status.is_server_error(),
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn host_comparison_ignores_scheme_path_and_case() {
+        assert_eq!(
+            host_of("https://API.tracker.yandex.net/v3/issues/PROJ-1"),
+            host_of("https://api.tracker.yandex.net")
+        );
+    }
+
+    /// The download URL is server-supplied. A different host must not match, or
+    /// a crafted attachment could send this client — and its OAuth header —
+    /// somewhere else entirely.
+    #[test]
+    fn a_different_host_does_not_match() {
+        assert_ne!(
+            host_of("https://evil.example.com/steal"),
+            host_of("https://api.tracker.yandex.net")
+        );
+    }
+
+    /// Nor a host that merely starts the same way.
+    #[test]
+    fn a_prefix_of_the_real_host_does_not_match() {
+        assert_ne!(
+            host_of("https://api.tracker.yandex.net.evil.com/steal"),
+            host_of("https://api.tracker.yandex.net")
+        );
+    }
+
+    #[test]
+    fn a_port_is_part_of_the_host() {
+        assert_ne!(
+            host_of("http://127.0.0.1:9999/x"),
+            host_of("http://127.0.0.1:8888")
+        );
     }
 }

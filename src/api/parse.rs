@@ -8,7 +8,7 @@
 
 use serde_json::{Map, Value};
 
-use crate::api::models::{Comment, Issue, Link, LinkKind, User};
+use crate::api::models::{Attachment, Comment, Entity, Issue, Link, LinkKind, User};
 
 /// System fields we map explicitly. Anything outside this set is treated as a
 /// custom field and lands in `extra`.
@@ -197,6 +197,65 @@ pub fn comment(value: &Value) -> Option<Comment> {
             .to_owned(),
         author: user(value.get("createdBy")),
         created_at: timestamp(value.get("createdAt")),
+    })
+}
+
+/// Parse one project, portfolio or goal.
+///
+/// Everything worth showing sits under `fields`; the envelope carries only
+/// identity.
+#[must_use]
+pub fn entity(value: &Value) -> Option<Entity> {
+    let fields = value.get("fields");
+    let field = |name: &str| fields.and_then(|fields| fields.get(name));
+
+    Some(Entity {
+        id: value.get("id").and_then(Value::as_str)?.to_owned(),
+        short_id: value.get("shortId").and_then(Value::as_i64),
+        entity_type: value
+            .get("entityType")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned),
+        summary: field("summary")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+        status: label(field("entityStatus")),
+        lead: user(field("lead")),
+        start: field("start")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned),
+        end: field("end").and_then(Value::as_str).map(ToOwned::to_owned),
+        description: field("description")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned),
+    })
+}
+
+/// Parse one entry of `GET /v3/issues/{key}/attachments`.
+#[must_use]
+pub fn attachment(value: &Value) -> Option<Attachment> {
+    Some(Attachment {
+        id: match value.get("id")? {
+            Value::String(text) => text.clone(),
+            other => other.to_string(),
+        },
+        name: value
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+        size: value.get("size").and_then(Value::as_u64),
+        mimetype: value
+            .get("mimetype")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned),
+        author: user(value.get("createdBy")),
+        created_at: timestamp(value.get("createdAt")),
+        content: value
+            .get("content")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned),
     })
 }
 

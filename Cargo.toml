@@ -31,12 +31,7 @@ keyring = { version = "4.1.6", features = [
   "zbus-secret-service-keyring-store",
 ] }
 owo-colors = "4.3.0"
-reqwest = { version = "0.13.4", default-features = false, features = [
-  "json",
-  "charset",
-  "http2",
-  "rustls",
-] }
+reqwest = { version = "0.13.4", default-features = false, features = ["json", "charset", "http2", "rustls", "multipart", "stream"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 tabled = "0.21.0"

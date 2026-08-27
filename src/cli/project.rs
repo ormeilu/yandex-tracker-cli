@@ -3,13 +3,20 @@
 
 use clap::Subcommand;
 
-use crate::cli::{Session, not_implemented};
+use crate::cli::{Session, entity};
 use crate::exit::ExitCode;
 
 #[derive(Debug, Subcommand)]
 pub enum ProjectCommand {
     /// List projects.
-    List,
+    List {
+        /// Free-text search over names and descriptions.
+        #[arg(long, short = 'Q')]
+        query: Option<String>,
+        /// 1-based page number.
+        #[arg(long, default_value_t = 1)]
+        page: u32,
+    },
     /// Show one project.
     Get {
         /// Project id as returned by `project list`, not an issue key.
@@ -17,12 +24,11 @@ pub enum ProjectCommand {
     },
 }
 
-// The dispatcher is async because the implementations landing behind it are;
-// the placeholders simply do not await anything yet.
-#[allow(clippy::unused_async)]
-pub async fn run(command: &ProjectCommand, _session: &Session) -> ExitCode {
+pub async fn run(command: &ProjectCommand, session: &Session) -> ExitCode {
     match command {
-        ProjectCommand::List => not_implemented("project list"),
-        ProjectCommand::Get { .. } => not_implemented("project get"),
+        ProjectCommand::List { query, page } => {
+            entity::list("project", query.as_deref(), *page, session).await
+        }
+        ProjectCommand::Get { id } => entity::get("project", id, session).await,
     }
 }

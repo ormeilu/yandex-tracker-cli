@@ -2,23 +2,29 @@
 
 use clap::Subcommand;
 
-use crate::cli::{Session, not_implemented};
+use crate::cli::{Session, entity};
 use crate::exit::ExitCode;
 
 #[derive(Debug, Subcommand)]
 pub enum GoalCommand {
     /// List goals.
-    List,
+    List {
+        /// Free-text search over names and descriptions.
+        #[arg(long, short = 'Q')]
+        query: Option<String>,
+        /// 1-based page number.
+        #[arg(long, default_value_t = 1)]
+        page: u32,
+    },
     /// Show one goal.
     Get { id: String },
 }
 
-// The dispatcher is async because the implementations landing behind it are;
-// the placeholders simply do not await anything yet.
-#[allow(clippy::unused_async)]
-pub async fn run(command: &GoalCommand, _session: &Session) -> ExitCode {
+pub async fn run(command: &GoalCommand, session: &Session) -> ExitCode {
     match command {
-        GoalCommand::List => not_implemented("goal list"),
-        GoalCommand::Get { .. } => not_implemented("goal get"),
+        GoalCommand::List { query, page } => {
+            entity::list("goal", query.as_deref(), *page, session).await
+        }
+        GoalCommand::Get { id } => entity::get("goal", id, session).await,
     }
 }

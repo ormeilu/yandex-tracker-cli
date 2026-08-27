@@ -135,3 +135,46 @@ pub struct Comment {
     #[serde(default)]
     pub created_at: Option<jiff::Timestamp>,
 }
+
+/// A project, portfolio or goal.
+///
+/// These live behind one endpoint family and differ only in which fields are
+/// populated, so they share a model rather than three near-identical ones. Note
+/// `short_id`: it is what an issue's `project` field refers to, and it is not
+/// the `id` the entity endpoints take — confusing the two is the obvious
+/// mistake, so both are carried.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Entity {
+    pub id: String,
+    pub short_id: Option<i64>,
+    pub entity_type: Option<String>,
+    pub summary: String,
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub lead: Option<User>,
+    #[serde(default)]
+    pub start: Option<String>,
+    #[serde(default)]
+    pub end: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+/// One attachment of an issue.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Attachment {
+    pub id: String,
+    /// The filename as uploaded. Chosen by whoever uploaded it, so it is never
+    /// used to decide a path on disk without sanitising.
+    pub name: String,
+    pub size: Option<u64>,
+    pub mimetype: Option<String>,
+    #[serde(default)]
+    pub author: Option<User>,
+    #[serde(default)]
+    pub created_at: Option<jiff::Timestamp>,
+    /// Where the bytes are. Checked against the configured API host before it
+    /// is followed.
+    pub content: Option<String>,
+}

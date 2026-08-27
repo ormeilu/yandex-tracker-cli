@@ -8,6 +8,7 @@
 pub mod attachment;
 pub mod auth;
 pub mod cheatsheet;
+pub mod entity;
 pub mod goal;
 pub mod issue;
 pub mod project;
