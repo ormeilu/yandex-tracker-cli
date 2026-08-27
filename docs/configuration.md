@@ -103,6 +103,22 @@ whose main consumer is an agent should not offer that as a feature.
 
 For CI, where no keychain exists, `YTCLI_TOKEN` and `YTCLI_ORG_ID` take over.
 
+### If macOS keeps asking for your password
+
+The Keychain grants "Always Allow" to the *exact binary* it was asked about, and
+identifies it by its code signature. A release downloaded from GitHub is signed
+once and keeps its approval; a binary you build yourself is ad-hoc signed by the
+linker, so its signature changes on every `cargo install` and the Keychain
+correctly treats the new one as an application it has never seen.
+
+If you build ytcli, sign it with a stable identity once and the approval stops
+coming back. Create a self-signed Code Signing certificate named `ytcli-dev`
+(Keychain Access → Certificate Assistant → Create a Certificate…), then install
+with `just local-install`, which signs the binary when that identity exists.
+
+Within a single command the token is read once, however many profiles share the
+account, so a dialog per profile is not something you should see.
+
 ## Which profile is active
 
 Highest wins:

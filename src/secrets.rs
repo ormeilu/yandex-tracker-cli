@@ -26,6 +26,18 @@ pub enum SecretError {
     Backend(#[source] keyring::Error),
 }
 
+/// Tokens already read in this process.
+///
+/// macOS asks the user to approve every keychain read, so a command that looks
+/// at three profiles sharing one account must not raise three dialogs. The map
+/// lives for the length of one command; nothing is written to disk.
+static READ: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, String>>> =
+    std::sync::OnceLock::new();
+
+fn cache() -> &'static std::sync::Mutex<std::collections::HashMap<String, String>> {
+    READ.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
+
 fn entry(account: &str) -> Result<keyring::Entry, SecretError> {
     keyring::Entry::new(SERVICE, account).map_err(SecretError::Unavailable)
 }
@@ -42,8 +54,22 @@ pub fn token(account: &str) -> Result<String, SecretError> {
         return Ok(token);
     }
 
+    // A poisoned lock means another thread panicked mid-read. The cache is an
+    // optimisation, so the right answer is to ask the keychain again, not to
+    // fail the command.
+    if let Ok(cached) = cache().lock()
+        && let Some(token) = cached.get(account)
+    {
+        return Ok(token.clone());
+    }
+
     match entry(account)?.get_password() {
-        Ok(token) => Ok(token),
+        Ok(token) => {
+            if let Ok(mut cached) = cache().lock() {
+                cached.insert(account.to_owned(), token.clone());
+            }
+            Ok(token)
+        }
         Err(keyring::Error::NoEntry) => Err(SecretError::Missing(account.to_owned())),
         Err(err) => Err(SecretError::Backend(err)),
     }
@@ -53,11 +79,18 @@ pub fn token(account: &str) -> Result<String, SecretError> {
 pub fn store(account: &str, token: &str) -> Result<(), SecretError> {
     entry(account)?
         .set_password(token)
-        .map_err(SecretError::Backend)
+        .map_err(SecretError::Backend)?;
+    if let Ok(mut cached) = cache().lock() {
+        cached.insert(account.to_owned(), token.to_owned());
+    }
+    Ok(())
 }
 
 /// Remove the stored token. Removing a token that is not there is not an error.
 pub fn forget(account: &str) -> Result<(), SecretError> {
+    if let Ok(mut cached) = cache().lock() {
+        cached.remove(account);
+    }
     match entry(account)?.delete_credential() {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
         Err(err) => Err(SecretError::Backend(err)),

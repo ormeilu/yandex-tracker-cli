@@ -16,6 +16,25 @@ install:
     {{cargo}} install cargo-nextest cargo-llvm-cov cargo-deny cargo-insta --locked
     prek install
 
+# Build and install the binary locally, signed so macOS stops asking
+local-install:
+    #!/usr/bin/env bash
+    # On macOS the Keychain binds "Always Allow" to the exact binary it approved,
+    # and Cargo's ad-hoc signature changes on every build — so a plain
+    # `cargo install` earns a password dialog on the next run, every time.
+    # Signing with a stable identity makes the approval stick. Create one once:
+    #
+    #   Keychain Access -> Certificate Assistant -> Create a Certificate...
+    #   name: ytcli-dev, type: Code Signing, self-signed
+    #
+    # Without it this still installs; you just keep getting asked.
+    set -euo pipefail
+    {{cargo}} install --path . --locked
+    if [ "$(uname)" = "Darwin" ] && security find-identity -v -p codesigning | grep -q ytcli-dev; then
+        codesign --force --sign ytcli-dev "$(command -v ytcli)"
+        echo "signed with ytcli-dev; Keychain approval will survive the next build"
+    fi
+
 # Refresh Cargo.lock
 lock:
     {{cargo}} update
