@@ -6,86 +6,34 @@
 
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
-use assert_cmd::Command;
 use predicates::prelude::*;
 use wiremock::matchers::{header, method, path};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::{Mock, ResponseTemplate};
 
-const CONFIG: &str = r#"
-[accounts.test]
+mod harness;
+use harness::{Harness, fixture};
 
-[profiles.test]
-account = "test"
-org_id = "12345"
-org_kind = "cloud"
+/// Both requests the compact view makes, answered.
+async fn issue_available(harness: &Harness) {
+    Mock::given(method("GET"))
+        .and(path("/v3/issues/PROJ-1"))
+        .and(header("authorization", "OAuth test-token"))
+        .and(header("x-cloud-org-id", "12345"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("issue.json")))
+        .mount(&harness.server)
+        .await;
 
-[profiles.test.display]
-description_lines = 3
-extra_fields = ["storyPoints"]
-"#;
-
-fn fixture(name: &str) -> serde_json::Value {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures")
-        .join(name);
-    let text = std::fs::read_to_string(path).expect("fixture readable");
-    serde_json::from_str(&text).expect("fixture is valid json")
-}
-
-struct Harness {
-    server: MockServer,
-    _dir: tempfile::TempDir,
-    config: std::path::PathBuf,
-}
-
-impl Harness {
-    async fn new() -> Self {
-        let server = MockServer::start().await;
-        let dir = tempfile::tempdir().expect("temp dir");
-        let config = dir.path().join("config.toml");
-        std::fs::write(&config, CONFIG).expect("write config");
-        Self {
-            server,
-            _dir: dir,
-            config,
-        }
-    }
-
-    async fn issue_available(&self) {
-        Mock::given(method("GET"))
-            .and(path("/v3/issues/PROJ-1"))
-            .and(header("authorization", "OAuth test-token"))
-            .and(header("x-cloud-org-id", "12345"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(fixture("issue.json")))
-            .mount(&self.server)
-            .await;
-
-        Mock::given(method("GET"))
-            .and(path("/v3/issues/PROJ-1/links"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(fixture("issue_links.json")))
-            .mount(&self.server)
-            .await;
-    }
-
-    fn run(&self, args: &[&str]) -> Command {
-        let mut command = Command::cargo_bin("ytcli").expect("binary built");
-        command
-            .args(args)
-            .arg("--profile")
-            .arg("test")
-            .arg("--config")
-            .arg(&self.config)
-            .env("YTCLI_BASE_URL", self.server.uri())
-            .env("YTCLI_TOKEN", "test-token")
-            .env_remove("YTCLI_PROFILE");
-        command
-    }
+    Mock::given(method("GET"))
+        .and(path("/v3/issues/PROJ-1/links"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("issue_links.json")))
+        .mount(&harness.server)
+        .await;
 }
 
 #[tokio::test]
 async fn compact_view_renders_fields_links_and_a_fenced_description() {
     let harness = Harness::new().await;
-    harness.issue_available().await;
+    issue_available(&harness).await;
 
     let output = harness.run(&["issue", "get", "PROJ-1"]).assert().success();
     let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
@@ -113,7 +61,7 @@ async fn compact_view_renders_fields_links_and_a_fenced_description() {
 #[tokio::test]
 async fn timestamps_with_compact_offsets_are_rendered() {
     let harness = Harness::new().await;
-    harness.issue_available().await;
+    issue_available(&harness).await;
 
     harness
         .run(&["issue", "get", "PROJ-1"])
@@ -125,7 +73,7 @@ async fn timestamps_with_compact_offsets_are_rendered() {
 #[tokio::test]
 async fn full_shows_the_whole_description_without_a_truncation_notice() {
     let harness = Harness::new().await;
-    harness.issue_available().await;
+    issue_available(&harness).await;
 
     harness
         .run(&["issue", "get", "PROJ-1", "--full"])
@@ -138,7 +86,7 @@ async fn full_shows_the_whole_description_without_a_truncation_notice() {
 #[tokio::test]
 async fn fields_collapses_the_answer_to_one_line() {
     let harness = Harness::new().await;
-    harness.issue_available().await;
+    issue_available(&harness).await;
 
     let output = harness
         .run(&["issue", "get", "PROJ-1", "--fields", "status,storyPoints"])
@@ -154,7 +102,7 @@ async fn fields_collapses_the_answer_to_one_line() {
 #[tokio::test]
 async fn json_is_the_normalised_schema_and_json_raw_is_the_payload() {
     let harness = Harness::new().await;
-    harness.issue_available().await;
+    issue_available(&harness).await;
 
     let output = harness
         .run(&["issue", "get", "PROJ-1", "--format", "json"])

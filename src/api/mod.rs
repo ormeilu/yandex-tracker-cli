@@ -138,6 +138,20 @@ impl Client {
             .unwrap_or_default())
     }
 
+    /// Queues visible to the active profile.
+    ///
+    /// Tracker paginates this endpoint; the ceiling is deliberately generous
+    /// because "how many queues can I see" is a question with a small answer,
+    /// and a second page here would be surprising.
+    pub async fn queues(&self) -> Result<Vec<Queue>, ApiError> {
+        let raw = self.get_value("/v3/queues?perPage=1000", "queues").await?;
+
+        Ok(raw
+            .as_array()
+            .map(|entries| entries.iter().filter_map(Queue::parse).collect())
+            .unwrap_or_default())
+    }
+
     /// The fields of a queue, including custom ones, as `(key, name, type)`.
     pub async fn queue_fields(&self, key: &str) -> Result<Vec<QueueField>, ApiError> {
         let raw = self
@@ -171,6 +185,36 @@ impl Client {
             .await?;
 
         serde_json::from_str(&body).map_err(ApiError::Decode)
+    }
+}
+
+/// A queue, reduced to what a listing shows.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Queue {
+    pub key: String,
+    pub name: String,
+    pub lead: Option<String>,
+}
+
+impl Queue {
+    fn parse(value: &Value) -> Option<Self> {
+        Some(Self {
+            key: value.get("key").and_then(Value::as_str)?.to_owned(),
+            name: value
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            lead: value
+                .get("lead")
+                .and_then(|lead| {
+                    lead.get("login")
+                        .or_else(|| lead.get("display"))
+                        .or_else(|| lead.get("id"))
+                })
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned),
+        })
     }
 }
 

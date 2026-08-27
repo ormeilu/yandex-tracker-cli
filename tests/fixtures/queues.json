@@ -1,0 +1,25 @@
+[
+  {
+    "self": "https://api.tracker.yandex.net/v3/queues/PROJ",
+    "id": 7,
+    "key": "PROJ",
+    "version": 3,
+    "name": "Product",
+    "lead": {
+      "self": "https://api.tracker.yandex.net/v3/users/1120000000000219",
+      "id": "1120000000000219",
+      "login": "ilubenets",
+      "display": "Ilya Lubenets"
+    },
+    "assignAuto": false,
+    "defaultType": { "id": "1", "key": "bug", "display": "Bug" }
+  },
+  {
+    "self": "https://api.tracker.yandex.net/v3/queues/INFRA",
+    "id": 8,
+    "key": "INFRA",
+    "version": 1,
+    "name": "Infrastructure",
+    "assignAuto": true
+  }
+]

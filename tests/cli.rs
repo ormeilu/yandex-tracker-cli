@@ -113,7 +113,7 @@ fn unimplemented_commands_use_a_distinct_exit_code() {
     let empty = tempfile::NamedTempFile::new().expect("temp config");
 
     ytcli()
-        .args(["queue", "list", "--config"])
+        .args(["goal", "list", "--config"])
         .arg(empty.path())
         .current_dir(dir.path())
         .assert()

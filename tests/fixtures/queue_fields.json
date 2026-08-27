@@ -1,0 +1,34 @@
+[
+  {
+    "self": "https://api.tracker.yandex.net/v3/fields/summary",
+    "id": "summary",
+    "name": "Summary",
+    "schema": { "type": "string", "required": true },
+    "readonly": false,
+    "options": false
+  },
+  {
+    "self": "https://api.tracker.yandex.net/v3/fields/assignee",
+    "id": "assignee",
+    "name": "Assignee",
+    "schema": { "type": "user", "required": false },
+    "readonly": false,
+    "options": true
+  },
+  {
+    "self": "https://api.tracker.yandex.net/v3/fields/603bd9b6cdc7ba0d2f4b1a55--storyPoints",
+    "id": "603bd9b6cdc7ba0d2f4b1a55--storyPoints",
+    "name": "Story points",
+    "schema": { "type": "integer", "required": false },
+    "readonly": false,
+    "options": false
+  },
+  {
+    "self": "https://api.tracker.yandex.net/v3/fields/603bd9b6cdc7ba0d2f4b1a55--component",
+    "id": "603bd9b6cdc7ba0d2f4b1a55--component",
+    "name": "Component",
+    "schema": { "type": "string", "required": false },
+    "readonly": false,
+    "options": true
+  }
+]
