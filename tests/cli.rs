@@ -105,18 +105,75 @@ org_kind = "cloud"
         .stdout(predicate::str::contains("org: 12345"));
 }
 
-/// Declared but unbuilt commands must be honest about it rather than failing in
-/// a way that looks like a Tracker problem.
+/// The listing must never print a token, only whether one exists.
 #[test]
-fn unimplemented_commands_use_a_distinct_exit_code() {
+fn auth_list_reports_whether_a_token_exists_never_the_token() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let config = dir.path().join("config.toml");
+    std::fs::write(
+        &config,
+        r#"
+default_profile = "work"
+
+[accounts.admin]
+description = "admin identity"
+
+[profiles.work]
+account = "admin"
+org_id = "12345"
+org_kind = "cloud"
+"#,
+    )
+    .expect("write config");
+
+    let output = ytcli()
+        .args(["auth", "list", "--config"])
+        .arg(&config)
+        .current_dir(dir.path())
+        .env_remove("YTCLI_PROFILE")
+        .env_remove("YTCLI_TOKEN")
+        .assert()
+        .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert!(stdout.contains("account admin"));
+    assert!(stdout.contains("token:"));
+    assert!(stdout.contains("profile work"));
+    assert!(stdout.contains("[default, active]"));
+}
+
+/// A token piped in must not have to be typed, and must not appear anywhere it
+/// could be read back — which includes the command line.
+#[test]
+fn auth_login_refuses_an_empty_token() {
     let dir = tempfile::tempdir().expect("temp dir");
     let empty = tempfile::NamedTempFile::new().expect("temp config");
 
     ytcli()
-        .args(["goal", "list", "--config"])
+        .args(["auth", "login", "--account", "test", "--config"])
         .arg(empty.path())
         .current_dir(dir.path())
+        .write_stdin("   \n")
         .assert()
-        .code(64)
-        .stderr(predicate::str::contains("not implemented"));
+        .code(3)
+        .stderr(predicate::str::contains("no token given"));
+}
+
+/// ADR 2: a tool whose main consumer is an agent must not offer reading a
+/// secret back as a feature. Asserted on the subcommand list, so adding one
+/// called `token` (or `show-token`, or `reveal`) fails here.
+#[test]
+fn there_is_no_subcommand_that_prints_a_stored_token() {
+    let output = ytcli().args(["auth", "--help"]).assert().success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    let subcommands: Vec<&str> = stdout
+        .lines()
+        .skip_while(|line| !line.starts_with("Commands:"))
+        .skip(1)
+        .take_while(|line| line.starts_with("  "))
+        .filter_map(|line| line.split_whitespace().next())
+        .collect();
+
+    assert_eq!(subcommands, ["login", "logout", "list", "status", "help"]);
 }

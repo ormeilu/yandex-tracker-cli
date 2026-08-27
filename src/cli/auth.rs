@@ -5,11 +5,12 @@
 //! `ps` and in shell history. There is deliberately no command that prints a
 //! stored token.
 
-use std::io::Write;
+use std::fmt::Write as _;
+use std::io::Write as _;
 
 use clap::Subcommand;
 
-use crate::cli::{Session, not_implemented};
+use crate::cli::{Session, emit, report};
 use crate::exit::ExitCode;
 use crate::secrets;
 
@@ -36,9 +37,9 @@ pub enum AuthCommand {
 pub async fn run(command: &AuthCommand, session: &Session) -> ExitCode {
     match command {
         AuthCommand::Status => status(session).await,
-        AuthCommand::Login { .. } => not_implemented("auth login"),
-        AuthCommand::Logout { .. } => not_implemented("auth logout"),
-        AuthCommand::List => not_implemented("auth list"),
+        AuthCommand::Login { account } => login(account),
+        AuthCommand::Logout { account } => logout(account),
+        AuthCommand::List => list(session),
     }
 }
 
@@ -103,4 +104,107 @@ async fn status(session: &Session) -> ExitCode {
             error.exit_code()
         }
     }
+}
+
+/// Store a token for an account.
+///
+/// The token is read from a hidden prompt when someone is typing, and from
+/// stdin when it is piped. It is never taken from an argument: arguments show up
+/// in `ps` and in shell history, which is the same as writing it down.
+fn login(account: &str) -> ExitCode {
+    use std::io::IsTerminal;
+
+    let token = if std::io::stdin().is_terminal() {
+        match rpassword::prompt_password(format!("OAuth token for `{account}`: ")) {
+            Ok(token) => token,
+            Err(error) => return report(&error, ExitCode::Failure),
+        }
+    } else {
+        let mut piped = String::new();
+        if let Err(error) = std::io::Read::read_to_string(&mut std::io::stdin(), &mut piped) {
+            return report(&error, ExitCode::Failure);
+        }
+        piped
+    };
+
+    let token = token.trim();
+    if token.is_empty() {
+        return report(&"no token given", ExitCode::Auth);
+    }
+
+    match secrets::store(account, token) {
+        Ok(()) => {
+            let mut err = anstream::stderr();
+            let _ = writeln!(
+                err,
+                "stored a token for `{account}` in the OS keychain; check it with `ytcli auth status`"
+            );
+            ExitCode::Success
+        }
+        Err(error) => report(&error, ExitCode::Auth),
+    }
+}
+
+fn logout(account: &str) -> ExitCode {
+    match secrets::forget(account) {
+        Ok(()) => {
+            let mut err = anstream::stderr();
+            let _ = writeln!(err, "forgot the token for `{account}`");
+            ExitCode::Success
+        }
+        Err(error) => report(&error, ExitCode::Auth),
+    }
+}
+
+/// Accounts and the profiles pointing at them.
+///
+/// Whether a token exists is shown; the token never is.
+fn list(session: &Session) -> ExitCode {
+    let mut out = String::with_capacity(256);
+    let active = session
+        .resolved
+        .as_ref()
+        .map(|resolved| resolved.name.clone());
+
+    for (name, account) in &session.config.accounts {
+        let _ = writeln!(
+            out,
+            "account {name}  token: {}  {}",
+            if secrets::is_stored(name) {
+                "stored"
+            } else {
+                "missing"
+            },
+            account.description.as_deref().unwrap_or(""),
+        );
+    }
+
+    for (name, profile) in &session.config.profiles {
+        let marks = [
+            (session.config.default_profile.as_deref() == Some(name.as_str())).then_some("default"),
+            (active.as_deref() == Some(name.as_str())).then_some("active"),
+        ];
+        let marks: Vec<&str> = marks.into_iter().flatten().collect();
+        let suffix = if marks.is_empty() {
+            String::new()
+        } else {
+            format!("  [{}]", marks.join(", "))
+        };
+
+        let _ = writeln!(
+            out,
+            "profile {name}  account: {}  org: {} ({:?}){suffix}",
+            profile.account, profile.org_id, profile.org_kind,
+        );
+    }
+
+    if out.is_empty() {
+        return report(
+            &"no accounts or profiles configured yet; see `ytcli auth login --help`",
+            ExitCode::Auth,
+        );
+    }
+
+    emit(&out);
+    ExitCode::Success
 }
