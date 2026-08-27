@@ -1,0 +1,290 @@
+//! The compact text view.
+//!
+//! Target shape for `issue get`, roughly fifteen lines instead of a five-kilobyte
+//! payload. Links are always present: "what blocks this" is the question that
+//! follows "what is this", and making the caller run a second command for it
+//! costs more than the four lines it saves.
+
+use std::fmt::Write as _;
+
+use crate::api::models::{Issue, Page, User};
+use crate::render::{Context, untrusted};
+
+fn who(user: Option<&User>) -> &str {
+    user.and_then(|u| u.login.as_deref().or(u.display.as_deref()))
+        .unwrap_or("-")
+}
+
+fn or_dash(value: Option<&String>) -> &str {
+    value.map_or("-", String::as_str)
+}
+
+/// Render one issue.
+#[must_use]
+pub fn issue(issue: &Issue, ctx: &Context) -> String {
+    let mut out = String::with_capacity(512);
+
+    let _ = writeln!(out, "{}  {}", issue.key, issue.summary);
+    let _ = writeln!(
+        out,
+        "status: {}   type: {}   prio: {}",
+        or_dash(issue.status.as_ref()),
+        or_dash(issue.issue_type.as_ref()),
+        or_dash(issue.priority.as_ref()),
+    );
+    let _ = writeln!(
+        out,
+        "assignee: {}   author: {}   queue: {}",
+        who(issue.assignee.as_ref()),
+        who(issue.author.as_ref()),
+        or_dash(issue.queue.as_ref()),
+    );
+    let _ = writeln!(
+        out,
+        "updated: {}   comments: {}",
+        issue
+            .updated_at
+            .map_or_else(|| "-".to_owned(), |ts| ts.to_string()),
+        issue
+            .comment_count
+            .map_or_else(|| "-".to_owned(), |n| n.to_string()),
+    );
+
+    for key in &ctx.extra_fields {
+        if let Some(value) = issue.extra.get(key) {
+            let _ = writeln!(out, "{key}: {}", compact_value(value));
+        }
+    }
+
+    // Custom fields are summarised rather than dumped: they differ per queue, so
+    // printing them all makes the view unstable and mostly empty.
+    let unpinned: Vec<&String> = issue
+        .extra
+        .keys()
+        .filter(|key| !ctx.extra_fields.contains(key))
+        .collect();
+    if !unpinned.is_empty() {
+        let shown: Vec<&str> = unpinned.iter().take(3).map(|k| k.as_str()).collect();
+        let rest = unpinned.len().saturating_sub(shown.len());
+        let suffix = if rest > 0 {
+            format!(", +{rest}")
+        } else {
+            String::new()
+        };
+        let _ = writeln!(
+            out,
+            "custom: {} set ({}{suffix}) — see --fields",
+            unpinned.len(),
+            shown.join(", "),
+        );
+    }
+
+    if issue.links.is_empty() {
+        let _ = writeln!(out, "links: none");
+    } else {
+        let _ = writeln!(out, "links:");
+        for link in &issue.links {
+            let _ = writeln!(
+                out,
+                "  {} {}{}",
+                link.kind.label(),
+                link.key,
+                link.status
+                    .as_ref()
+                    .map_or_else(String::new, |status| format!(" [{status}]")),
+            );
+        }
+    }
+
+    if let Some(description) = issue.description.as_deref().filter(|d| !d.is_empty()) {
+        let (body, withheld) = untrusted::head(description, ctx.description_lines);
+        let _ = writeln!(out, "---");
+        let _ = writeln!(
+            out,
+            "{}",
+            untrusted::fence(&format!("{}/description", issue.key), &body)
+        );
+        if withheld > 0 {
+            let _ = writeln!(out, "(+{withheld} more lines: --full)");
+        }
+    }
+
+    out
+}
+
+/// Render a page of issues as fixed-width columns plus an explicit tally.
+///
+/// The tally is not decoration. Without it a caller that receives 25 rows cannot
+/// tell a complete answer from a truncated one, and "there are no open issues"
+/// is a worse failure than a few wasted tokens.
+#[must_use]
+pub fn issue_page(page: &Page<Issue>, _ctx: &Context) -> String {
+    let mut out = String::with_capacity(page.items.len() * 80 + 64);
+
+    for issue in &page.items {
+        let _ = writeln!(
+            out,
+            "{:<12} {:<14} {:<14} {}",
+            issue.key,
+            truncate(or_dash(issue.status.as_ref()), 14),
+            truncate(who(issue.assignee.as_ref()), 14),
+            truncate(&issue.summary, 60),
+        );
+    }
+
+    let shown = page.items.len();
+    match page.total {
+        Some(total) => {
+            let _ = write!(out, "shown {shown} of {total}");
+        }
+        None => {
+            let _ = write!(out, "shown {shown} of unknown total");
+        }
+    }
+    if page.has_more() {
+        let _ = write!(out, " — next: --page {}", page.page + 1);
+    }
+    out.push('\n');
+
+    out
+}
+
+fn truncate(value: &str, width: usize) -> String {
+    if value.chars().count() <= width {
+        return value.to_owned();
+    }
+    let mut kept: String = value.chars().take(width.saturating_sub(1)).collect();
+    kept.push('…');
+    kept
+}
+
+fn compact_value(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(s) => s.clone(),
+        other => other.to_string(),
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use super::*;
+    use crate::api::models::{Link, LinkKind};
+    use crate::render::{Audience, Format};
+
+    fn ctx() -> Context {
+        Context {
+            format: Format::Text,
+            audience: Audience::Machine,
+            description_lines: Some(2),
+            extra_fields: vec!["storyPoints".to_owned()],
+        }
+    }
+
+    fn sample() -> Issue {
+        let mut extra = serde_json::Map::new();
+        extra.insert("storyPoints".to_owned(), serde_json::json!(3));
+        extra.insert("sprint".to_owned(), serde_json::json!("S-12"));
+        extra.insert("component".to_owned(), serde_json::json!("api"));
+        extra.insert("team".to_owned(), serde_json::json!("core"));
+        extra.insert("risk".to_owned(), serde_json::json!("low"));
+
+        Issue {
+            key: "PROJ-1".to_owned(),
+            summary: "Attachments are lost on move".to_owned(),
+            status: Some("In Progress".to_owned()),
+            issue_type: Some("Bug".to_owned()),
+            priority: Some("Critical".to_owned()),
+            queue: Some("PROJ".to_owned()),
+            assignee: Some(User {
+                id: "1".to_owned(),
+                login: Some("ilubenets".to_owned()),
+                display: None,
+            }),
+            author: Some(User {
+                id: "2".to_owned(),
+                login: Some("reporter".to_owned()),
+                display: None,
+            }),
+            created_at: None,
+            updated_at: Some(
+                "2026-08-27T10:00:00Z"
+                    .parse::<jiff::Timestamp>()
+                    .expect("timestamp"),
+            ),
+            description: Some("line one\nline two\nline three\nline four".to_owned()),
+            links: vec![
+                Link {
+                    kind: LinkKind::IsBlockedBy,
+                    key: "PROJ-3".to_owned(),
+                    summary: None,
+                    status: Some("Open".to_owned()),
+                },
+                Link {
+                    kind: LinkKind::Parent,
+                    key: "PROJ-9".to_owned(),
+                    summary: None,
+                    status: None,
+                },
+            ],
+            comment_count: Some(3),
+            extra,
+        }
+    }
+
+    /// The compact view is the contract with every caller: a reordered or
+    /// silently widened field list breaks agents' prompt caches and users'
+    /// scripts alike, so it is pinned here.
+    #[test]
+    fn issue_compact_view_is_stable() {
+        insta::assert_snapshot!(issue(&sample(), &ctx()));
+    }
+
+    #[test]
+    fn description_is_fenced_and_trimmed() {
+        let rendered = issue(&sample(), &ctx());
+        assert!(rendered.contains("<untrusted src=\"PROJ-1/description\""));
+        assert!(rendered.contains("(+2 more lines: --full)"));
+        assert!(!rendered.contains("line three"));
+    }
+
+    #[test]
+    fn links_always_carry_their_type() {
+        let rendered = issue(&sample(), &ctx());
+        assert!(rendered.contains("is blocked by PROJ-3 [Open]"));
+        assert!(rendered.contains("parent PROJ-9"));
+    }
+
+    #[test]
+    fn issue_without_links_says_so_rather_than_omitting_the_line() {
+        let mut issue_without = sample();
+        issue_without.links.clear();
+        assert!(issue(&issue_without, &ctx()).contains("links: none"));
+    }
+
+    /// A truncated page that does not say it is truncated is worse than a
+    /// verbose one: the caller concludes the result set is complete.
+    #[test]
+    fn page_reports_totals_and_the_next_page() {
+        let page = Page {
+            items: vec![sample()],
+            page: 1,
+            per_page: 1,
+            total: Some(340),
+        };
+        insta::assert_snapshot!(issue_page(&page, &ctx()));
+    }
+
+    #[test]
+    fn complete_page_does_not_offer_a_next_one() {
+        let page = Page {
+            items: vec![sample()],
+            page: 1,
+            per_page: 25,
+            total: Some(1),
+        };
+        let rendered = issue_page(&page, &ctx());
+        assert!(rendered.contains("shown 1 of 1"));
+        assert!(!rendered.contains("next:"));
+    }
+}

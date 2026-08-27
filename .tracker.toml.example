@@ -1,0 +1,9 @@
+# Copy to .tracker.toml and commit it: it pins this repository to a profile so
+# that everyone — and every agent — working in this checkout talks to the right
+# organisation without any global state to get wrong.
+#
+# Secrets never go here. The profile names an account; the token lives in the
+# OS keychain.
+
+profile = "work"
+queue = "PROJ"

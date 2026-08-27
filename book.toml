@@ -1,0 +1,17 @@
+# The docs site is built straight out of docs/, so the ADRs and the TODO list are
+# the same files contributors read in the repository — there is no second copy to
+# drift.
+[book]
+title = "ytcli"
+description = "Yandex Tracker from the command line, for people and for agents"
+authors = ["Ilya Lubenets"]
+language = "en"
+src = "docs"
+
+[build]
+build-dir = "target/book"
+
+[output.html]
+default-theme = "rust"
+git-repository-url = "https://github.com/ormeilu/yandex-tracker-cli"
+edit-url-template = "https://github.com/ormeilu/yandex-tracker-cli/edit/main/{path}"

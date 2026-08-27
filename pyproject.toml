@@ -1,0 +1,35 @@
+# The Rust binary is also published as a Python wheel so that `uvx yandex-tracker-cli`
+# works for people who already have uv and do not want another package manager.
+# The wheel contains the same compiled binary shipped in GitHub Releases; there is
+# no Python code here.
+
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "yandex-tracker-cli"
+requires-python = ">=3.9"
+description = "Token-efficient Yandex Tracker CLI for humans and AI agents"
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Ilya Lubenets", email = "lubenets.ilya.igorevich@gmail.com" }]
+keywords = ["yandex", "tracker", "cli", "llm", "agent"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Programming Language :: Rust",
+  "Topic :: Software Development :: Bug Tracking",
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/ormeilu/yandex-tracker-cli"
+Documentation = "https://ormeilu.github.io/yandex-tracker-cli/"
+Issues = "https://github.com/ormeilu/yandex-tracker-cli/issues"
+
+[tool.maturin]
+# A plain binary, not an extension module: the wheel just carries `ytcli`.
+bindings = "bin"
+strip = true

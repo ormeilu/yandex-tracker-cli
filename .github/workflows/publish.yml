@@ -1,0 +1,110 @@
+# Releases on tag: binaries for three platforms, plus the same binary as a Python
+# wheel.
+#
+# NOTE: PyPI Trusted Publishing matches on the *filename* of this workflow. The
+# pending publisher registered on PyPI must name `publish.yml`; renaming this file
+# breaks publishing.
+name: publish
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+permissions:
+  contents: write
+env:
+  CARGO_TERM_COLOR: always
+jobs:
+  binaries:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-latest, target: x86_64-unknown-linux-gnu}
+          - {os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu}
+          - {os: macos-latest, target: aarch64-apple-darwin}
+          - {os: macos-13, target: x86_64-apple-darwin}
+          - {os: windows-latest, target: x86_64-pc-windows-msvc}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --target ${{ matrix.target }}
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="ytcli-${{ matrix.target }}"
+          mkdir -p "dist/$name"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp "target/${{ matrix.target }}/release/ytcli.exe" "dist/$name/"
+          else
+            cp "target/${{ matrix.target }}/release/ytcli" "dist/$name/"
+          fi
+          cp README.md LICENSE "dist/$name/"
+          cd dist
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            7z a "$name.zip" "$name"
+          else
+            tar czf "$name.tar.gz" "$name"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.target }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+  wheels:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-latest, target: x86_64}
+          - {os: ubuntu-24.04-arm, target: aarch64}
+          - {os: macos-latest, target: aarch64}
+          - {os: macos-13, target: x86_64}
+          - {os: windows-latest, target: x64}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release --out dist
+          manylinux: auto
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.os }}-${{ matrix.target }}
+          path: dist/*.whl
+  release:
+    needs: [binaries, wheels]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: binary-*
+          merge-multiple: true
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+          generate_release_notes: true
+  pypi:
+    needs: wheels
+    runs-on: ubuntu-latest
+    environment: pypi
+    # OIDC: no API token is stored anywhere. PyPI verifies the repository,
+    # the workflow filename and this environment.
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: wheel-*
+          merge-multiple: true
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1

@@ -1,0 +1,6 @@
+---
+source: src/render/text.rs
+expression: "issue_page(&page, &ctx())"
+---
+PROJ-1       In Progress    ilubenets      Attachments are lost on move
+shown 1 of 340 — next: --page 2

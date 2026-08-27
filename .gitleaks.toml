@@ -1,0 +1,7 @@
+# Secret scanning on top of the default gitleaks rules.
+#
+# No allowlist entries so far. Tracker OAuth tokens look like ordinary
+# high-entropy strings, so the default generic rules are exactly what we want,
+# and the local `no-secret-literals` hook covers the shapes they miss.
+[extend]
+useDefault = true

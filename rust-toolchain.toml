@@ -1,0 +1,5 @@
+# No MSRV pin: this is an end-user tool, not a library other crates build against,
+# so nothing downstream breaks when we move forward.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]

@@ -1,0 +1,19 @@
+/target
+**/*.rs.bk
+
+# Real credentials and per-machine settings.
+.env
+.tracker.toml
+
+# insta leaves these behind when a snapshot changes; they are reviewed, never committed.
+**/*.snap.new
+**/*.pending-snap
+
+# mdBook output.
+/docs/book/book
+
+# Python wheel builds (maturin).
+/dist
+/.venv
+
+.DS_Store
