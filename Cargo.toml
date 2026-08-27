@@ -12,7 +12,9 @@ homepage = "https://ormeilu.github.io/yandex-tracker-cli/"
 documentation = "https://ormeilu.github.io/yandex-tracker-cli/"
 keywords = ["yandex", "tracker", "cli", "llm", "agent"]
 categories = ["command-line-utilities"]
-exclude = ["/.github", "/docs", "/skills", "/tests/fixtures"]
+# `docs/cheatsheet.txt` is compiled into the binary, so it is not excluded with
+# the rest of the documentation: without it the published crate does not build.
+exclude = ["/.github", "/docs/adr", "/docs/book", "/docs/*.md", "/skills"]
 
 [dependencies]
 anstream = "1.0.0"

@@ -36,6 +36,17 @@ jobs:
       # The keychain-backed tests are unit-level and never touch a real store;
       # the live suite is behind its own feature and is not run here.
       - run: cargo nextest run --all-features
+  # The published crate is built from a subset of this tree, and the subset is
+  # easy to get wrong: `docs/cheatsheet.txt` is compiled into the binary, so an
+  # exclude rule that drops it produces a crate that does not build for anyone
+  # who installs it. Packaging verifies by building what it packaged.
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo package --locked
   deny:
     runs-on: ubuntu-latest
     steps:
