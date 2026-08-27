@@ -80,6 +80,10 @@ stdout stays pipeable.
 - Renderers — `insta` snapshots.
 - HTTP — `wiremock` against recorded fixtures.
 - The binary, its exit codes and help — `assert_cmd` in `tests/cli.rs`.
+- The documented examples — `trycmd` in `tests/docs/`, run against the same stub.
+  Refresh them with `TRYCMD=overwrite cargo test --test docs`, then read the
+  diff. A newly documented command must get a case there or be listed as
+  unrunnable in `tests/docs.rs`, with the reason.
 - Live tests need real credentials, are behind the `live` feature, and are
   ignored by default: `just test-live` with a populated `.env`.
 

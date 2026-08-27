@@ -1,0 +1,162 @@
+//! The documented examples, run.
+//!
+//! README and the cheatsheet are the two places somebody copies a command out
+//! of, and documentation rots quietly: nothing fails when a flag is renamed or a
+//! line of output changes shape, until it fails in a user's terminal. So the
+//! examples are test cases. `trycmd` runs each one against the same `wiremock`
+//! stub the rest of the suite uses and compares the whole of stdout, which makes
+//! a change in output shape a diff in these files rather than a surprise.
+//!
+//! Two tests, because docs rot in two ways:
+//!
+//! 1. [`the_documented_examples_still_produce_the_documented_output`] runs what
+//!    can be run.
+//! 2. [`every_documented_command_is_either_run_or_declared_unrunnable`] makes
+//!    sure the first one keeps up: a newly documented command has to be given a
+//!    case, or listed here with the reason it cannot have one.
+//!
+//! Update the expected output with `TRYCMD=overwrite cargo test --test docs`,
+//! and then read the diff — the output shape is the product, not a detail.
+
+#![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
+
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, ResponseTemplate};
+
+mod harness;
+use harness::{Harness, fixture};
+
+/// Everything the documented read commands ask for.
+async fn tracker_answers(harness: &Harness) {
+    let json = |name: &str| ResponseTemplate::new(200).set_body_json(fixture(name));
+
+    for (route, body) in [
+        ("/v3/issues/PROJ-1", "issue.json"),
+        ("/v3/issues/PROJ-1/links", "issue_links.json"),
+        ("/v3/issues/PROJ-1/comments", "issue_comments.json"),
+        ("/v3/queues", "queues.json"),
+        ("/v3/queues/PROJ/fields", "queue_fields.json"),
+    ] {
+        Mock::given(method("GET"))
+            .and(path(route))
+            .respond_with(json(body))
+            .mount(&harness.server)
+            .await;
+    }
+
+    // Search reports its total in a header, which is where the `shown N of M`
+    // tally comes from.
+    Mock::given(method("POST"))
+        .and(path("/v3/issues/_search"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(fixture("issue_search.json"))
+                .append_header("X-Total-Count", "2"),
+        )
+        .mount(&harness.server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/v3/issues/_count"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!(2)))
+        .mount(&harness.server)
+        .await;
+}
+
+#[tokio::test]
+async fn the_documented_examples_still_produce_the_documented_output() {
+    let harness = Harness::new().await;
+    tracker_answers(&harness).await;
+
+    trycmd::TestCases::new()
+        .default_bin_name("ytcli")
+        .env("YTCLI_CONFIG", harness.config_path().display().to_string())
+        .env("YTCLI_BASE_URL", harness.server.uri())
+        .env("YTCLI_TOKEN", "test-token")
+        .env("YTCLI_PROFILE", "test")
+        .case("tests/docs/*.md")
+        .run();
+}
+
+/// Commands documented but not run here, each with the reason.
+///
+/// A write is not on this list because it is dangerous — `--dry-run` sends
+/// nothing — but because what it prints names a profile and an organisation
+/// belonging to whoever runs it. `login` is interactive and asks for a token.
+const UNRUNNABLE: &[(&str, &str)] = &[
+    ("auth login", "interactive; asks for a token"),
+    ("auth logout", "would touch the keychain"),
+    (
+        "auth status",
+        "several requests per profile, and prints identity",
+    ),
+    ("auth list", "prints the profiles of whoever runs it"),
+    ("issue create", "a write"),
+    ("issue update", "a write"),
+    ("issue comment", "a write"),
+    ("issue transition", "a write"),
+    ("attachment list", "no recorded attachment fixture yet"),
+    ("attachment download", "writes a file"),
+    ("attachment upload", "a write"),
+    ("project list", "no recorded entity fixture yet"),
+    ("project get", "no recorded entity fixture yet"),
+    ("goal list", "no recorded entity fixture yet"),
+    ("goal get", "no recorded entity fixture yet"),
+];
+
+/// Every `ytcli <group> <verb>` in README or the cheatsheet is either exercised
+/// above or admitted to be unrunnable.
+///
+/// Without this the first test decays into a snapshot of whatever was true when
+/// it was written, while the documentation grows commands nothing checks.
+#[test]
+fn every_documented_command_is_either_run_or_declared_unrunnable() {
+    let cases = read("tests/docs/readme.md") + &read("tests/docs/cheatsheet.md");
+
+    for (source, text) in documentation() {
+        for command in commands_in(&text) {
+            if UNRUNNABLE.iter().any(|(name, _)| *name == command) {
+                continue;
+            }
+            assert!(
+                cases.contains(&format!("$ ytcli {command}")),
+                "{source} documents `ytcli {command}`, which no case runs. \
+                 Add one to tests/docs/, or add it to UNRUNNABLE with a reason."
+            );
+        }
+    }
+}
+
+fn read(relative: &str) -> String {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(relative);
+    std::fs::read_to_string(&path).unwrap_or_else(|_| panic!("{relative} is readable"))
+}
+
+fn documentation() -> Vec<(&'static str, String)> {
+    vec![
+        ("README.md", read("README.md")),
+        ("docs/cheatsheet.txt", read("docs/cheatsheet.txt")),
+    ]
+}
+
+/// `ytcli issue get PROJ-1 --full` → `issue get`.
+///
+/// Lower-case words are verbs; the first word that is not ends the path, which
+/// is how `PROJ-1`, `<group>` and `--full` stay out of it.
+fn commands_in(text: &str) -> Vec<String> {
+    let mut found: Vec<String> = text
+        .lines()
+        .filter_map(|line| {
+            let rest = line.trim().strip_prefix("ytcli ")?;
+            let path: Vec<&str> = rest
+                .split_whitespace()
+                .take_while(|word| word.chars().all(|c| c.is_ascii_lowercase()))
+                .take(2)
+                .collect();
+            (path.len() == 2).then(|| path.join(" "))
+        })
+        .collect();
+    found.sort();
+    found.dedup();
+    found
+}

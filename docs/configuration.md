@@ -129,6 +129,13 @@ key is usable by `codesign` alone. Remove it with
 Within a single command the token is read once, however many profiles share the
 account, so a dialog per profile is not something you should see.
 
+## Where the config lives
+
+`~/.config/ytcli/config.toml` on Linux, `~/Library/Application Support/ytcli/`
+on macOS, `%APPDATA%\ytcli\` on Windows. `--config PATH` or `YTCLI_CONFIG`
+override it, which is how a container or a test points at a config without
+rewriting every command line.
+
 ## Which profile is active
 
 Highest wins:

@@ -64,6 +64,8 @@ token, no token passed as a command-line argument (arguments are visible in `ps`
   Live tests answer what fixtures cannot: whether the payload still has the shape
   we believe it has. They do not re-test the parsing that mocks already cover.
 - The binary's behaviour, exit codes and help: `tests/cli.rs` with `assert_cmd`.
+- Documented examples: `trycmd` cases in `tests/docs/`, refreshed with
+  `TRYCMD=overwrite cargo test --test docs` and then read, not rubber-stamped.
 - A test that only restates the implementation is not worth its maintenance. Test
   the promises: exit codes, field order, tallies, fencing, profile provenance.
 

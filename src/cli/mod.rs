@@ -71,7 +71,10 @@ pub struct GlobalArgs {
     pub verbose: u8,
 
     /// Config file to use instead of the per-user one.
-    #[arg(long, global = true, value_name = "PATH")]
+    ///
+    /// Also read from `YTCLI_CONFIG`, which is how a test or a container points
+    /// the tool at a config without rewriting every documented command line.
+    #[arg(long, global = true, env = "YTCLI_CONFIG", value_name = "PATH")]
     pub config: Option<PathBuf>,
 }
 

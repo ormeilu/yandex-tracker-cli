@@ -71,6 +71,11 @@ impl Harness {
         command
     }
 
+    /// Where the temporary config lives, for tests that pass it by environment.
+    pub fn config_path(&self) -> &std::path::Path {
+        &self.config
+    }
+
     /// Add a second profile, for the cases about telling two of them apart.
     pub fn add_profile(&self, name: &str, org_id: &str) {
         use std::fmt::Write as _;
@@ -107,7 +112,9 @@ impl Harness {
             .arg(&self.config)
             .env("YTCLI_BASE_URL", self.server.uri())
             .env("YTCLI_TOKEN", "test-token")
-            .env_remove("YTCLI_PROFILE");
+            // A developer's own environment must not decide what a test sees.
+            .env_remove("YTCLI_PROFILE")
+            .env_remove("YTCLI_CONFIG");
         command
     }
 }
