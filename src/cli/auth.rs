@@ -11,7 +11,7 @@ use std::io::Write as _;
 use clap::{Args, Subcommand};
 
 use crate::api::{Client, ClientConfig};
-use crate::cli::{Session, emit, report};
+use crate::cli::{Session, emit, guidance, report};
 use crate::config::{OrgKind, Profile, store};
 use crate::exit::ExitCode;
 use crate::secrets;
@@ -27,8 +27,15 @@ pub enum AuthCommand {
     },
     /// List configured accounts and profiles.
     List,
-    /// Show the active profile, where it came from, and who the token belongs to.
-    Status,
+    /// Check every profile: who the token belongs to, and what it can see.
+    Status {
+        /// Identity only — skip the counts, and the requests behind them.
+        #[arg(long)]
+        brief: bool,
+        /// Check only the active profile instead of all of them.
+        #[arg(long)]
+        active_only: bool,
+    },
 }
 
 /// Arguments for `auth login`.
@@ -70,55 +77,116 @@ pub struct LoginArgs {
 /// Run an auth subcommand.
 pub async fn run(command: &AuthCommand, session: &Session) -> ExitCode {
     match command {
-        AuthCommand::Status => status(session).await,
+        AuthCommand::Status { brief, active_only } => status(session, *brief, *active_only).await,
         AuthCommand::Login(args) => login(args, session).await,
         AuthCommand::Logout { account } => logout(account),
         AuthCommand::List => list(session),
     }
 }
 
-/// The vertical slice: resolve a profile, find its token, and prove the whole
-/// chain works against the API.
-async fn status(session: &Session) -> ExitCode {
+/// Report on the configured profiles.
+///
+/// This is the command someone runs when something is wrong, so it answers the
+/// questions that actually get asked: which profile is in play and where that
+/// choice came from, whether the token works, who it belongs to, and what it can
+/// reach. Checking every profile rather than only the active one is deliberate —
+/// "it works with my other login" is the usual next question.
+///
+/// The counts cost a handful of requests per profile. That is fine for a
+/// diagnostic and wrong for a hot path, which is what `--brief` is for.
+async fn status(session: &Session, brief: bool, active_only: bool) -> ExitCode {
     let mut out = anstream::stdout();
     let mut err = anstream::stderr();
 
-    let resolved = match session.resolved() {
-        Ok(resolved) => resolved,
-        Err(error) => {
-            let _ = writeln!(err, "error: {error}");
-            return ExitCode::Auth;
+    if session.config.profiles.is_empty() {
+        let _ = writeln!(err, "no profiles configured yet.\n");
+        let _ = writeln!(err, "{}", guidance::full());
+        let _ = writeln!(
+            err,
+            "Then: ytcli auth login --account <name> --org-id <id> [--queue <QUEUE>]"
+        );
+        return ExitCode::Auth;
+    }
+
+    let active = session
+        .resolved
+        .as_ref()
+        .map(|resolved| resolved.name.clone());
+    let mut active_failure = None;
+    let mut any_success = false;
+    let mut last_failure = None;
+
+    for (name, profile) in &session.config.profiles {
+        let is_active = active.as_deref() == Some(name.as_str());
+        if active_only && !is_active {
+            continue;
         }
-    };
 
-    // The provenance line comes first and always: a change applied to the wrong
-    // organisation is not something the user should have to reconstruct later.
-    let _ = writeln!(out, "profile: {} (from {})", resolved.name, resolved.source);
-    let _ = writeln!(
-        out,
-        "account: {}   org: {} ({:?})",
-        resolved.profile.account, resolved.profile.org_id, resolved.profile.org_kind
-    );
-    let _ = writeln!(out, "queue: {}", resolved.queue.as_deref().unwrap_or("-"));
+        let source = if is_active {
+            session
+                .resolved
+                .as_ref()
+                .map_or_else(String::new, |resolved| {
+                    format!(" (from {})", resolved.source)
+                })
+        } else {
+            String::new()
+        };
+        let marks = if is_active { "  [active]" } else { "" };
 
-    let token = match secrets::token(&resolved.profile.account) {
+        let _ = writeln!(out, "profile {name}{source}{marks}");
+        let _ = writeln!(
+            out,
+            "  account: {}   org: {} ({:?})   queue: {}",
+            profile.account,
+            profile.org_id,
+            profile.org_kind,
+            profile.default_queue.as_deref().unwrap_or("-"),
+        );
+
+        let code = report_profile(profile, brief, &mut out, &mut err).await;
+        if code == ExitCode::Success {
+            any_success = true;
+        } else {
+            last_failure = Some(code);
+            if is_active {
+                active_failure = Some(code);
+            }
+        }
+    }
+
+    // The active profile decides the outcome — a broken profile nobody is using
+    // should not make a script think the tool is unusable. But if *nothing*
+    // worked, saying so beats reporting success for a run that found none.
+    active_failure
+        .or_else(|| (!any_success).then_some(last_failure).flatten())
+        .unwrap_or(ExitCode::Success)
+}
+
+/// Everything that needs the network, for one profile.
+async fn report_profile(
+    profile: &crate::config::Profile,
+    brief: bool,
+    out: &mut impl std::io::Write,
+    err: &mut impl std::io::Write,
+) -> ExitCode {
+    let token = match secrets::token(&profile.account) {
         Ok(token) => token,
         Err(error) => {
-            let _ = writeln!(out, "token: missing");
-            let _ = writeln!(err, "error: {error}");
+            let _ = writeln!(out, "  token: missing");
+            let _ = writeln!(err, "  {error}");
             return ExitCode::Auth;
         }
     };
 
-    let config = crate::api::ClientConfig::new(
-        token,
-        resolved.profile.org_id.clone(),
-        resolved.profile.org_kind,
-    );
-    let client = match crate::api::Client::new(&config) {
+    let mut config = ClientConfig::new(token, profile.org_id.clone(), profile.org_kind);
+    if let Ok(base) = std::env::var("YTCLI_BASE_URL") {
+        config.base_url = base;
+    }
+    let client = match Client::new(&config) {
         Ok(client) => client,
         Err(error) => {
-            let _ = writeln!(err, "error: {error}");
+            let _ = writeln!(err, "  {error}");
             return error.exit_code();
         }
     };
@@ -127,17 +195,92 @@ async fn status(session: &Session) -> ExitCode {
         Ok(user) => {
             let _ = writeln!(
                 out,
-                "token: ok   user: {}",
-                user.login.or(user.display).unwrap_or(user.id)
+                "  token: ok   user: {}{}",
+                user.login.as_deref().unwrap_or(&user.id),
+                user.display
+                    .as_deref()
+                    .map_or_else(String::new, |display| format!(" ({display})")),
             );
-            ExitCode::Success
         }
         Err(error) => {
-            let _ = writeln!(out, "token: rejected");
-            let _ = writeln!(err, "error: {error}");
-            error.exit_code()
+            let _ = writeln!(out, "  token: rejected");
+            let _ = writeln!(err, "  {error}");
+            if matches!(error, crate::api::error::ApiError::Unauthorized) {
+                let _ = writeln!(err, "\n{}", guidance::TOKEN);
+            }
+            return error.exit_code();
         }
     }
+
+    if brief {
+        return ExitCode::Success;
+    }
+
+    // Each of these is best-effort: a profile without access to projects should
+    // still report its queues rather than failing the whole line.
+    let queues = client.queues().await.ok();
+    let projects = client.entities("project", None, 1, 5).await.ok();
+    let goals = client.entities("goal", None, 1, 1).await.ok();
+    let mine = client
+        .count("Assignee: me() AND Resolution: empty()")
+        .await
+        .ok();
+
+    let _ = writeln!(
+        out,
+        "  queues: {}   projects: {}   goals: {}   my open issues: {}",
+        queues
+            .as_ref()
+            .map_or_else(|| "-".to_owned(), |queues| queues.len().to_string()),
+        projects.as_ref().map_or_else(|| "-".to_owned(), count_of),
+        goals.as_ref().map_or_else(|| "-".to_owned(), count_of),
+        mine.map_or_else(|| "-".to_owned(), |count| count.to_string()),
+    );
+
+    if let Some(projects) = projects.filter(|page| !page.items.is_empty()) {
+        let names: Vec<String> = projects
+            .items
+            .iter()
+            .map(|project| {
+                project.short_id.map_or_else(
+                    || project.summary.clone(),
+                    |id| format!("{} ({id})", project.summary),
+                )
+            })
+            .collect();
+        let more = projects
+            .total
+            .unwrap_or(names.len() as u64)
+            .saturating_sub(names.len() as u64);
+        let suffix = if more > 0 {
+            format!(", +{more} more")
+        } else {
+            String::new()
+        };
+        let _ = writeln!(out, "  projects: {}{suffix}", names.join(", "));
+    }
+
+    if let Some(queues) = queues.filter(|queues| !queues.is_empty()) {
+        let keys: Vec<&str> = queues
+            .iter()
+            .take(8)
+            .map(|queue| queue.key.as_str())
+            .collect();
+        let more = queues.len().saturating_sub(keys.len());
+        let suffix = if more > 0 {
+            format!(", +{more} more")
+        } else {
+            String::new()
+        };
+        let _ = writeln!(out, "  queues: {}{suffix}", keys.join(", "));
+    }
+
+    ExitCode::Success
+}
+
+fn count_of<T>(page: &crate::api::models::Page<T>) -> String {
+    page.total
+        .map_or_else(|| page.items.len().to_string(), |total| total.to_string())
 }
 
 /// Read the token, check it, store it, and write the config to use it.
@@ -147,6 +290,13 @@ async fn status(session: &Session) -> ExitCode {
 /// hand-written. One command now covers the whole path.
 async fn login(args: &LoginArgs, session: &Session) -> ExitCode {
     let mut err = anstream::stderr();
+
+    // Guidance goes to stderr before the prompt, and only when it is likely to
+    // be needed: a first login for this account. Printing it every time trains
+    // people to scroll past it.
+    if !secrets::is_stored(&args.account) {
+        let _ = writeln!(err, "{}\n", guidance::TOKEN);
+    }
 
     let token = match read_token(&args.account) {
         Ok(token) => token,
@@ -190,7 +340,13 @@ async fn login(args: &LoginArgs, session: &Session) -> ExitCode {
     let Some(org_id) = args.org_id.clone() else {
         let _ = writeln!(
             err,
-            "no --org-id given, so no profile was written; rerun with --org-id to finish setting up"
+            "no --org-id given, so no profile was written and nothing can be queried yet.\n"
+        );
+        let _ = writeln!(err, "{}", guidance::ORG);
+        let _ = writeln!(
+            err,
+            "\nThen: ytcli auth login --account {} --org-id <id> [--queue <QUEUE>]",
+            args.account
         );
         return ExitCode::Success;
     };
@@ -304,7 +460,10 @@ async fn verify(
             // organisation mismatch is worth retrying the other way.
             Err(error @ crate::api::error::ApiError::Unauthorized) => {
                 let code = error.exit_code();
-                return Err(report(&error, code));
+                let reported = report(&error, code);
+                let mut err = anstream::stderr();
+                let _ = writeln!(err, "\n{}", guidance::TOKEN);
+                return Err(reported);
             }
             Err(error) => last = Some(error),
         }
@@ -312,10 +471,13 @@ async fn verify(
 
     let error = last.unwrap_or(crate::api::error::ApiError::Forbidden);
     let code = error.exit_code();
-    Err(report(
+    let reported = report(
         &format!("{error} — checked both organisation header forms"),
         code,
-    ))
+    );
+    let mut err = anstream::stderr();
+    let _ = writeln!(err, "\n{}", guidance::ORG);
+    Err(reported)
 }
 
 fn logout(account: &str) -> ExitCode {

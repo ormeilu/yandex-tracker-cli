@@ -55,10 +55,10 @@ fn unknown_cheatsheet_topic_fails_loudly() {
         .stderr(predicate::str::contains("unknown topic"));
 }
 
-/// Without a resolvable profile the tool must explain itself and exit with the
-/// auth code, not crash and not pretend everything is fine.
+/// With nothing configured, the tool must say how to fix that rather than
+/// merely failing.
 #[test]
-fn auth_status_without_a_profile_reports_the_auth_exit_code() {
+fn auth_status_without_a_profile_explains_how_to_get_credentials() {
     let empty = tempfile::NamedTempFile::new().expect("temp config");
     let dir = tempfile::tempdir().expect("temp dir");
 
@@ -69,7 +69,9 @@ fn auth_status_without_a_profile_reports_the_auth_exit_code() {
         .env_remove("YTCLI_PROFILE")
         .assert()
         .code(3)
-        .stderr(predicate::str::contains("no profile selected"));
+        .stderr(predicate::str::contains("no profiles configured yet"))
+        .stderr(predicate::str::contains("oauth.yandex.ru"))
+        .stderr(predicate::str::contains("--org-id"));
 }
 
 /// A repository pin selects the profile, and the tool says so. Getting this
@@ -95,13 +97,15 @@ org_kind = "cloud"
     .expect("write config");
 
     ytcli()
-        .args(["auth", "status", "--config"])
+        .args(["auth", "status", "--brief", "--config"])
         .arg(&config)
         .current_dir(dir.path())
         .env_remove("YTCLI_PROFILE")
+        .env_remove("YTCLI_TOKEN")
         .assert()
-        .stdout(predicate::str::contains("profile: work (from"))
+        .stdout(predicate::str::contains("profile work (from"))
         .stdout(predicate::str::contains(".tracker.toml"))
+        .stdout(predicate::str::contains("[active]"))
         .stdout(predicate::str::contains("org: 12345"));
 }
 

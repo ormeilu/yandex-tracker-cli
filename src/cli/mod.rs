@@ -10,6 +10,7 @@ pub mod auth;
 pub mod cheatsheet;
 pub mod entity;
 pub mod goal;
+pub mod guidance;
 pub mod issue;
 pub mod project;
 pub mod queue;

@@ -162,7 +162,9 @@ async fn login_without_an_org_id_says_the_setup_is_unfinished() {
         .assert()
         .success()
         .stderr(predicate::str::contains("no --org-id given"))
-        .stderr(predicate::str::contains("rerun with --org-id"));
+        .stderr(predicate::str::contains(
+            "ytcli auth login --account work --org-id",
+        ));
 }
 
 #[tokio::test]
@@ -224,4 +226,130 @@ async fn the_profile_can_be_named_and_given_a_queue() {
         .stderr(predicate::str::contains(
             "would write profile `work` (account=admin, org=12345",
         ));
+}
+
+/// `auth status` is the command someone runs when something is wrong, so it
+/// answers the questions that get asked: who am I, what can I reach.
+#[tokio::test]
+async fn status_reports_identity_and_what_the_profile_can_see() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v3/myself"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(myself()))
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v3/queues"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+            {"id": 7, "key": "PROJ", "name": "Product"},
+            {"id": 8, "key": "INFRA", "name": "Infrastructure"}
+        ])))
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v3/entities/project/_search"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "hits": 3,
+            "pages": 1,
+            "values": [
+                {"id": "a1", "shortId": 12, "entityType": "project",
+                 "fields": {"summary": "Storage rework"}},
+                {"id": "a2", "shortId": 13, "entityType": "project",
+                 "fields": {"summary": "Billing"}}
+            ]
+        })))
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v3/entities/goal/_search"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "hits": 1, "pages": 1, "values": []
+        })))
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v3/issues/_count"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(7))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness.run_raw(&["auth", "status"]).assert().success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert!(stdout.contains("profile test"));
+    assert!(stdout.contains("org: 12345 (Cloud)"));
+    assert!(stdout.contains("token: ok   user: ilubenets (Ilya Lubenets)"));
+    assert!(stdout.contains("queues: 2   projects: 3   goals: 1   my open issues: 7"));
+    assert!(stdout.contains("Storage rework (12), Billing (13), +1 more"));
+    assert!(stdout.contains("PROJ, INFRA"));
+}
+
+/// A profile that cannot see projects should still report its queues rather
+/// than losing the whole line.
+#[tokio::test]
+async fn status_survives_a_partly_unavailable_organisation() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v3/myself"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(myself()))
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v3/queues"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+            {"id": 7, "key": "PROJ", "name": "Product"}
+        ])))
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v3/entities/project/_search"))
+        .respond_with(ResponseTemplate::new(403))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness.run_raw(&["auth", "status"]).assert().success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert!(stdout.contains("queues: 1   projects: -"));
+    assert!(stdout.contains("PROJ"));
+}
+
+/// A rejected token should come with the instructions for getting a new one.
+#[tokio::test]
+async fn status_with_a_rejected_token_points_at_the_token_docs() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v3/myself"))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run_raw(&["auth", "status"])
+        .assert()
+        .code(3)
+        .stdout(predicate::str::contains("token: rejected"))
+        .stderr(predicate::str::contains("oauth.yandex.ru/client/new"));
+}
+
+#[tokio::test]
+async fn brief_skips_the_counts_and_their_requests() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v3/myself"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(myself()))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness
+        .run_raw(&["auth", "status", "--brief"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert!(stdout.contains("token: ok"));
+    assert!(!stdout.contains("my open issues"));
+
+    let requests = harness.server.received_requests().await.expect("recorded");
+    assert_eq!(requests.len(), 1);
 }

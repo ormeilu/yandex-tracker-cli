@@ -95,14 +95,30 @@ Found the way git finds `.git`. Anyone working in the checkout — including an
 agent that was handed the directory and no other context — reaches the right
 organisation with no setup.
 
-`ytcli auth status` reports the profile **and where it came from**:
+`ytcli auth status` is what to run when something is wrong. It checks **every**
+profile, not just the active one — "it works with my other login" is the usual
+next question — and reports where the active choice came from:
 
 ```
-profile: work (from /home/me/src/app/.tracker.toml)
-account: admin   org: 12345 (Cloud)
-queue: PROJ
-token: ok   user: ilubenets
+profile work (from /home/me/src/app/.tracker.toml)  [active]
+  account: admin   org: 12345 (Cloud)   queue: PROJ
+  token: ok   user: ilubenets (Ilya Lubenets)
+  queues: 12   projects: 4   goals: 2   my open issues: 7
+  projects: Storage rework (12), Billing (13), +2 more
+  queues: PROJ, INFRA, DESIGN
+profile my
+  account: personal   org: 98765 (Yandex360)
+  token: missing
 ```
+
+The counts cost a handful of requests per profile, which is right for a
+diagnostic and wrong for a hot path: `--brief` skips them, `--active-only` skips
+the other profiles. The exit code follows the active profile, or reports failure
+when no profile worked at all.
+
+When a token is rejected or an organisation is not found, the output includes the
+steps for getting the right value — creating an OAuth application is not
+something anyone guesses.
 
 ## Display defaults
 

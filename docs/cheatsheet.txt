@@ -12,7 +12,9 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   Read verbs (get/find/count/list/status) never write. There is no pass-through verb.
 
 ## auth
-  ytcli auth status                     active profile, where it came from, token check
+  ytcli auth status                     every profile: identity, org, queues, projects,
+                                        goals, your open issues. --brief for identity only,
+                                        --active-only for just the profile in play
   ytcli auth list                       accounts and profiles
   ytcli auth login --account NAME --org-id ID [--profile NAME] [--queue KEY]
                                         prompts for the token (or reads stdin), checks it,
