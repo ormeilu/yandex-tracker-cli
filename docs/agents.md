@@ -76,6 +76,11 @@ The same ladder as the output. The shipped skill is small: what the tool is, whe
 to reach for it, and the handful of commands that cover most work, with per-topic
 files read only when relevant.
 
+`--help` is written for this audience rather than for a person scanning: every
+command opens with runnable examples, then says only what changes a decision —
+what it costs, what it refuses to do, what the output will not tell you. `-h`
+stays a one-line summary.
+
 For everything at once:
 
 ```bash

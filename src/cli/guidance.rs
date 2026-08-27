@@ -50,6 +50,9 @@ pub const ORG: &str = org_help!();
 /// question without anyone having to fail first.
 pub const LOGIN_HELP: &str = concat!(
     "Store a token for an account, and set up a profile to use it with.\n\n",
+    "  ytcli auth login\n",
+    "  ytcli auth login --account work --org-id 1234567 --profile work\n",
+    "  ytcli auth login --account work --org-id 1234567 --dry-run\n\n",
     "Run it with no arguments in a terminal and it walks you through each step,\n",
     "taking the token as a hidden password. Pass whatever you already know as\n",
     "flags and only the rest is asked for. Outside a terminal the flags are all\n",

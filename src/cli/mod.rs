@@ -11,6 +11,7 @@ pub mod cheatsheet;
 pub mod entity;
 pub mod goal;
 pub mod guidance;
+pub mod help;
 pub mod issue;
 pub mod project;
 pub mod queue;
@@ -28,7 +29,7 @@ use crate::render::{Audience, Context, Format};
 
 /// Token-efficient Yandex Tracker CLI for humans and AI agents.
 #[derive(Debug, Parser)]
-#[command(name = "ytcli", version, about, long_about = None)]
+#[command(name = "ytcli", version, about, long_about = help::ROOT)]
 #[command(propagate_version = true)]
 pub struct Cli {
     #[command(subcommand)]
@@ -41,35 +42,35 @@ pub struct Cli {
 /// Flags every command accepts.
 #[derive(Debug, Args, Clone)]
 pub struct GlobalArgs {
-    /// Profile to act as. Overrides `YTCLI_PROFILE` and any `.tracker.toml`.
-    ///
-    /// The environment variable is read separately rather than through clap's
-    /// `env`, so that `auth status` can honestly report which of the two the
-    /// value came from.
+    // `YTCLI_PROFILE` is read separately rather than through clap's `env`, so
+    // that `auth status` can report which of the two the value came from. That
+    // is a fact about the implementation, so it stays out of the help text,
+    // which is reprinted under every command.
+    /// Act as this profile; overrides `YTCLI_PROFILE` and `.tracker.toml`.
     #[arg(long, short = 'p', global = true)]
     pub profile: Option<String>,
 
-    /// Output format: text, json, json-raw, toon.
+    /// text (compact, default), json (our schema), json-raw, toon.
     #[arg(long, short = 'f', global = true, value_name = "FORMAT")]
     pub format: Option<Format>,
 
-    /// Show full description instead of the first lines.
+    /// Print the whole description, however long.
     #[arg(long, global = true)]
     pub full: bool,
 
-    /// Confirm a change that affects more than one issue.
+    /// Confirm a change that touches more than one issue.
     #[arg(long, global = true)]
     pub yes: bool,
 
-    /// Show what would change without sending anything.
+    /// Print the request that would be sent, and send nothing.
     #[arg(long, global = true)]
     pub dry_run: bool,
 
-    /// Logging verbosity; repeat for more. Logs go to stderr, stdout stays clean.
+    /// Log to stderr; repeat for more. stdout stays pipeable.
     #[arg(long, short = 'v', global = true, action = clap::ArgAction::Count)]
     pub verbose: u8,
 
-    /// Config file to use instead of the per-user default.
+    /// Config file to use instead of the per-user one.
     #[arg(long, global = true, value_name = "PATH")]
     pub config: Option<PathBuf>,
 }
@@ -96,8 +97,10 @@ pub enum Command {
     #[command(subcommand)]
     Attachment(attachment::AttachmentCommand),
     /// Print a compact reference of the whole CLI, for agents.
+    #[command(long_about = help::CHEATSHEET)]
     Cheatsheet(cheatsheet::CheatsheetArgs),
     /// Generate a shell completion script.
+    #[command(long_about = help::COMPLETIONS)]
     Completions {
         /// Shell to generate for.
         #[arg(value_enum)]

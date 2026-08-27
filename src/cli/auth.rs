@@ -23,13 +23,16 @@ pub enum AuthCommand {
     #[command(long_about = crate::cli::guidance::LOGIN_HELP)]
     Login(LoginArgs),
     /// Remove a stored token.
+    #[command(long_about = crate::cli::help::AUTH_LOGOUT)]
     Logout {
         #[arg(long, short = 'a')]
         account: String,
     },
     /// List configured accounts and profiles.
+    #[command(long_about = crate::cli::help::AUTH_LIST)]
     List,
     /// Check every profile: who the token belongs to, and what it can see.
+    #[command(long_about = crate::cli::help::AUTH_STATUS)]
     Status {
         /// Identity only — skip the counts, and the requests behind them.
         #[arg(long)]

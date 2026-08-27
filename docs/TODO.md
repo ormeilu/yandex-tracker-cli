@@ -32,6 +32,10 @@ Labels split the work by area: `area:issues`, `area:entities`,
   exit with code 64.
 - `ytcli auth status` end to end.
 - `ytcli cheatsheet`, compiled into the binary.
+- The agent surface (ADR 6): `skills/ytcli/`, loaded as a plugin by Claude Code
+  and Codex from one directory, and `--help` written as documentation rather
+  than as clap's defaults. Both are checked against the binary by tests, since a
+  stale example is acted on rather than noticed.
 
 ## Deliberately out of scope
 

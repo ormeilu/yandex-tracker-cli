@@ -9,6 +9,7 @@ use crate::exit::ExitCode;
 #[derive(Debug, Subcommand)]
 pub enum ProjectCommand {
     /// List projects.
+    #[command(long_about = crate::cli::help::PROJECT_LIST)]
     List {
         /// Free-text search over names and descriptions.
         #[arg(long, short = 'Q')]
@@ -18,6 +19,7 @@ pub enum ProjectCommand {
         page: u32,
     },
     /// Show one project.
+    #[command(long_about = crate::cli::help::PROJECT_GET)]
     Get {
         /// Project id as returned by `project list`, not an issue key.
         id: String,

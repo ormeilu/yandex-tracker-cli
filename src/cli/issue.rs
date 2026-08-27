@@ -16,6 +16,7 @@ use crate::render::{Format, machine, text};
 #[derive(Debug, Subcommand)]
 pub enum IssueCommand {
     /// Show one issue: summary, fields, links, first lines of the description.
+    #[command(long_about = crate::cli::help::ISSUE_GET)]
     Get {
         /// Issue key, e.g. PROJ-42. Prefix it with a profile — `work/PROJ-42` —
         /// when two profiles can both see a queue with that key.
@@ -25,14 +26,19 @@ pub enum IssueCommand {
         fields: Vec<String>,
     },
     /// Search for issues.
+    #[command(long_about = crate::cli::help::ISSUE_FIND)]
     Find(FindArgs),
     /// Count matching issues without fetching them. The cheapest question here.
+    #[command(long_about = crate::cli::help::ISSUE_COUNT)]
     Count(FindArgs),
     /// Show the links of an issue.
+    #[command(long_about = crate::cli::help::ISSUE_LINKS)]
     Links { key: String },
     /// Show the comments of an issue.
+    #[command(long_about = crate::cli::help::ISSUE_COMMENTS)]
     Comments { key: String },
     /// Create an issue.
+    #[command(long_about = crate::cli::help::ISSUE_CREATE)]
     Create {
         #[arg(long, short = 'q')]
         queue: Option<String>,
@@ -46,6 +52,7 @@ pub enum IssueCommand {
         tags: Vec<String>,
     },
     /// Change fields of an issue.
+    #[command(long_about = crate::cli::help::ISSUE_UPDATE)]
     Update {
         key: String,
         #[arg(long, short = 's')]
@@ -57,12 +64,14 @@ pub enum IssueCommand {
         set: Vec<String>,
     },
     /// Add a comment.
+    #[command(long_about = crate::cli::help::ISSUE_COMMENT)]
     Comment {
         key: String,
         /// Comment body; `-` reads from stdin.
         text: String,
     },
     /// Move an issue through a workflow transition.
+    #[command(long_about = crate::cli::help::ISSUE_TRANSITION)]
     Transition {
         key: String,
         /// Transition id; omit to list what is available.
