@@ -70,7 +70,7 @@ any number of wasted tokens.
 
 ## Risk classes
 
-**Read verb** — `get`, `find`, `count`, `list`, `status`. Cannot write, by
+**Read verb** — `get`, `find`, `count`, `list`, `status`, `show`. Cannot write, by
 construction: there is no pass-through verb through which a write could be
 smuggled. This is what makes an allowlist like `ytcli issue get:*` meaningful.
 

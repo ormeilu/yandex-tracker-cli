@@ -4712,6 +4712,7 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "backon",
+ "base64",
  "clap",
  "clap_complete",
  "clap_mangen",

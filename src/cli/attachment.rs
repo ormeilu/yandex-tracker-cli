@@ -11,7 +11,7 @@ use clap::Subcommand;
 use crate::cli::write::{Gate, Intent, check};
 use crate::cli::{Session, emit, report};
 use crate::exit::ExitCode;
-use crate::render::{Format, entity as render, machine};
+use crate::render::{Format, entity as render, image, machine};
 
 #[derive(Debug, Subcommand)]
 pub enum AttachmentCommand {
@@ -30,6 +30,9 @@ pub enum AttachmentCommand {
         #[arg(long)]
         force: bool,
     },
+    /// Draw an image attachment in the terminal.
+    #[command(long_about = crate::cli::help::ATTACHMENT_SHOW)]
+    Show { key: String, attachment: String },
     /// Upload a file to an issue.
     #[command(long_about = crate::cli::help::ATTACHMENT_UPLOAD)]
     Upload { key: String, file: PathBuf },
@@ -44,6 +47,7 @@ pub async fn run(command: &AttachmentCommand, session: &Session) -> ExitCode {
             out,
             force,
         } => download(key, attachment, out, *force, session).await,
+        AttachmentCommand::Show { key, attachment } => show(key, attachment, session).await,
         AttachmentCommand::Upload { key, file } => upload(key, file, session).await,
     }
 }
@@ -168,6 +172,112 @@ async fn download(
 
     emit(&format!("{}\n", destination.display()));
     ExitCode::Success
+}
+
+/// Draw an image, or say exactly what to run instead.
+///
+/// Every path out of here that cannot draw prints the same thing: what the file
+/// is, and the `download` command that puts it somewhere openable. Silence would
+/// leave a caller — an agent especially — with nothing to act on, and a
+/// screenful of escape codes would be worse than either.
+async fn show(target: &str, attachment: &str, session: &Session) -> ExitCode {
+    let (client, key) = match session.client_for(target) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let key = key.as_str();
+
+    let found = match find_attachment(&client, key, attachment).await {
+        Ok(found) => found,
+        Err(code) => return code,
+    };
+
+    // Machine formats never emit pixels. A caller that asked for JSON asked for
+    // a description of the attachment, and binary in the middle of a document
+    // is not a description.
+    if session.render.format != Format::Text {
+        return match machine(&found, session.render.format) {
+            Ok(text) => {
+                emit(&text);
+                ExitCode::Success
+            }
+            Err(error) => report(&error, ExitCode::Failure),
+        };
+    }
+
+    let hint = format!("  ytcli attachment download {key} {} -o .", found.id);
+    let what = describe(&found);
+
+    let Some(protocol) = image::protocol() else {
+        emit(&format!(
+            "{what} — this terminal cannot draw images:\n{hint}\n"
+        ));
+        return ExitCode::Success;
+    };
+
+    let Some(url) = found.content.as_deref() else {
+        return report(
+            &format!("attachment `{attachment}` has no download URL"),
+            ExitCode::ApiRejected,
+        );
+    };
+
+    let bytes = match client.download(url).await {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            let code = error.exit_code();
+            return report(&error, code);
+        }
+    };
+
+    let Some(kind) = image::Kind::of(&bytes) else {
+        emit(&format!("{what} is not an image:\n{hint}\n"));
+        return ExitCode::Success;
+    };
+
+    if !protocol.carries(kind) {
+        emit(&format!(
+            "{what} is {}, which this terminal cannot draw inline:\n{hint}\n",
+            kind.name()
+        ));
+        return ExitCode::Success;
+    }
+
+    emit(&image::draw(protocol, &bytes, &found.name));
+    ExitCode::Success
+}
+
+/// The name and size, for the lines that stand in for the picture.
+fn describe(found: &crate::api::models::Attachment) -> String {
+    match found.size {
+        Some(size) => format!("{} ({})", found.name, render::human_size(size)),
+        None => found.name.clone(),
+    }
+}
+
+/// The attachment named by id or by filename, or the error a caller can act on.
+async fn find_attachment(
+    client: &crate::api::Client,
+    key: &str,
+    attachment: &str,
+) -> Result<crate::api::models::Attachment, ExitCode> {
+    let attachments = match client.attachments(key).await {
+        Ok(attachments) => attachments,
+        Err(error) => {
+            let code = error.exit_code();
+            return Err(report(&error, code));
+        }
+    };
+
+    attachments
+        .into_iter()
+        .find(|candidate| candidate.id == attachment || candidate.name == attachment)
+        .ok_or_else(|| {
+            report(
+                &format!("issue {key} has no attachment `{attachment}`"),
+                ExitCode::NotFound,
+            )
+        })
 }
 
 async fn upload(target: &str, file: &Path, session: &Session) -> ExitCode {

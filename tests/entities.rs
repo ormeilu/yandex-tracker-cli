@@ -280,3 +280,69 @@ async fn upload_sends_the_file_and_reports_the_new_id() {
         .stdout(predicate::str::contains("PROJ-1 attachment 304"))
         .stderr(predicate::str::contains("→ profile=test"));
 }
+
+/// A test process has no terminal, which is the case that matters most: the
+/// caller must still be told what the file is and how to open it.
+#[tokio::test]
+async fn show_without_a_graphics_terminal_names_the_download_command() {
+    let harness = Harness::new().await;
+    let body = attachment_list(&harness.server.uri());
+    Mock::given(method("GET"))
+        .and(path("/v3/issues/PROJ-1/attachments"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(body))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness
+        .run(&["attachment", "show", "PROJ-1", "301"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert!(stdout.contains("trace.log (2.0 KB)"));
+    assert!(stdout.contains("ytcli attachment download PROJ-1 301 -o ."));
+    // Not one byte of the file, and no escape codes.
+    assert!(!stdout.contains('\x1b'));
+    // The bytes were never even fetched: there is nothing to draw them with.
+    let requests = harness.server.received_requests().await.expect("recorded");
+    assert_eq!(requests.len(), 1, "the file was downloaded for nothing");
+}
+
+/// `--format json` describes the attachment. It never emits pixels.
+#[tokio::test]
+async fn show_as_json_describes_the_attachment() {
+    let harness = Harness::new().await;
+    let body = attachment_list(&harness.server.uri());
+    Mock::given(method("GET"))
+        .and(path("/v3/issues/PROJ-1/attachments"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(body))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness
+        .run(&["attachment", "show", "PROJ-1", "301", "--format", "json"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+    let value: serde_json::Value = serde_json::from_str(&stdout).expect("json");
+
+    assert_eq!(value["id"], "301");
+    assert_eq!(value["name"], "trace.log");
+    assert!(!stdout.contains('\x1b'));
+}
+
+#[tokio::test]
+async fn show_of_an_unknown_attachment_exits_four() {
+    let harness = Harness::new().await;
+    let body = attachment_list(&harness.server.uri());
+    Mock::given(method("GET"))
+        .and(path("/v3/issues/PROJ-1/attachments"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(body))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&["attachment", "show", "PROJ-1", "999"])
+        .assert()
+        .code(4);
+}

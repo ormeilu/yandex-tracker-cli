@@ -162,7 +162,7 @@ mistaken for the whole answer.
 
 ## For agents
 
-Read verbs — `get`, `find`, `count`, `list`, `status` — cannot write. There is no
+Read verbs — `get`, `find`, `count`, `list`, `status`, `show` — cannot write. There is no
 pass-through verb, so an allowlist can be static:
 
 ```

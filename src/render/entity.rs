@@ -141,7 +141,9 @@ pub fn attachments(key: &str, attachments: &[Attachment], ctx: &Context) -> Stri
     out
 }
 
-fn human_size(bytes: u64) -> String {
+/// A byte count in the units a person reads.
+#[must_use]
+pub fn human_size(bytes: u64) -> String {
     const UNITS: [&str; 4] = ["B", "KB", "MB", "GB"];
     // Precision beyond 2^52 bytes is not a concern for a file size, and the
     // value is only ever rendered to one decimal place.

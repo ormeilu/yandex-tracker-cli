@@ -21,7 +21,7 @@ Yandex Tracker from the command line, sized for agents.
 Ask the cheapest question that answers yours. Output is compact by default and
 its field order is fixed, so it survives being parsed and cached.
 
-The verb is the risk class: get, find, count, list and status cannot write, and
+The verb is the risk class: get, find, count, list, status and show cannot write,
 no pass-through verb exists through which a write could be reached from a read.
 That is what makes `ytcli issue get:*` safe to allowlist permanently.
 
@@ -221,6 +221,22 @@ Download one attachment.
 The destination directory is required and the file lands under its own id, never
 under a name the server chose: a crafted filename does not get to decide where
 bytes go. An existing file is kept unless `--force` says otherwise.";
+
+pub const ATTACHMENT_SHOW: &str = "\
+Draw an image attachment in the terminal.
+
+  ytcli attachment show PROJ-1 29
+
+Works in Kitty, Ghostty, WezTerm and iTerm2, which is where the terminal says
+so itself; a multiplexer counts as no, because it can inherit those markers
+without passing the graphics through.
+
+Anywhere else — another terminal, a pipe, a non-image file, or a format the
+protocol cannot carry — prints what the file is and the `attachment download`
+command that puts it somewhere openable. There is always a next step, and it is
+never a screenful of escape codes.
+
+`--format json` describes the attachment. It never emits pixels.";
 
 pub const ATTACHMENT_UPLOAD: &str = "\
 Upload a file to an issue.

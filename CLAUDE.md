@@ -19,7 +19,7 @@ less stable, or slower to start is working against the point of the tool.
 
 ## Rules that are not negotiable
 
-**Read verbs never write.** `get`, `find`, `count`, `list`, `status` are pure
+**Read verbs never write.** `get`, `find`, `count`, `list`, `status`, `show` are pure
 reads, and no pass-through verb exists through which a write could be reached from
 a read command. Agent hosts allowlist read verbs permanently; a single mixed verb
 would silently break that for every user. See ADR 1.

@@ -2,7 +2,7 @@
 
 ## The verb is the risk class
 
-Read verbs — `get`, `find`, `count`, `list`, `status` — cannot write. There is no
+Read verbs — `get`, `find`, `count`, `list`, `status`, `show` — cannot write. There is no
 generic pass-through verb, so no write can be reached through a read command.
 
 That property is what makes a static allowlist worth having:

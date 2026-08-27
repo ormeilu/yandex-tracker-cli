@@ -9,7 +9,7 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
       --dry-run                         show what would change, send nothing
   -v, -vv                               logs to stderr; stdout stays pipeable
   Exit codes: 0 ok, 1 error, 2 confirmation required, 3 auth, 4 not found, 5 rejected.
-  Read verbs (get/find/count/list/status) never write. There is no pass-through verb.
+  Read verbs (get/find/count/list/status/show) never write. There is no pass-through verb.
 
 ## auth
   ytcli auth status                     every profile: identity, org, queues, projects,
@@ -58,6 +58,8 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
 
 ## attachment
   ytcli attachment list PROJ-1
+  ytcli attachment show PROJ-1 ID       draws an image in Kitty/Ghostty/WezTerm/iTerm2;
+                                        anywhere else, the download command to run
   ytcli attachment download PROJ-1 ID -o DIR
   ytcli attachment upload PROJ-1 FILE
 

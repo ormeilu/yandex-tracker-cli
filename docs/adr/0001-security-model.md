@@ -50,3 +50,9 @@ Allowlisting is meaningful and static, so an agent host can be configured once.
 The cost is that the read/write split becomes a hard constraint on the command
 tree: any future convenience verb that both reads and writes would break the
 property, and must not be added.
+
+**Amendment, 2026-08-28.** `show` joins the read verbs, for
+`ytcli attachment show`, which draws an image attachment in a terminal that can
+draw one. It reads and nothing else, and it is listed here rather than left
+implicit because the enumeration is the contract: a host allowlists these names,
+so a verb that is not on the list is one nobody can safely allow.

@@ -41,6 +41,9 @@ serde_json = "1.0.151"
 # the rows are built by hand.
 tabled = { version = "0.21.0", default-features = false, features = ["std", "ansi"] }
 termimad = "0.35.2"
+# Already in the tree through the TLS stack; a direct dependency here costs
+# nothing in the binary and saves hand-rolling an encoder for two protocols.
+base64 = "0.22.1"
 thiserror = "2.0.20"
 tokio = { version = "1.53.1", features = ["rt", "macros", "fs", "time"] }
 toml_edit = "0.25.13"
