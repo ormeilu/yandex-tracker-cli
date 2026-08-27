@@ -16,23 +16,57 @@ install:
     {{cargo}} install cargo-nextest cargo-llvm-cov cargo-deny cargo-insta --locked
     prek install
 
+# Create the local code-signing identity macOS needs (once per machine)
+signing-identity:
+    #!/usr/bin/env bash
+    # A binary built by Cargo is ad-hoc signed by the linker, so its signature
+    # changes on every build. The Keychain grants "Always Allow" to a signature,
+    # not to a path, which is why a locally built ytcli asks for a password after
+    # every rebuild — correctly: to macOS it really is a new application.
+    #
+    # A self-signed code-signing certificate fixes that, because the approval is
+    # then tied to the certificate rather than to the bytes. This creates one and
+    # trusts it for code signing only. macOS will ask for your password twice —
+    # once to trust it, once when codesign first uses the key — and then stop.
+    #
+    # Undo with: security delete-certificate -c ytcli-dev
+    set -euo pipefail
+    if [ "$(uname)" != "Darwin" ]; then echo "macOS only; nothing to do"; exit 0; fi
+    if security find-identity -v -p codesigning | grep -q ytcli-dev; then
+        echo "ytcli-dev already exists"; exit 0
+    fi
+    work=$(mktemp -d)
+    trap 'rm -rf "$work"' EXIT
+    # The private key lives in the keychain from here on; these files do not
+    # outlive the command.
+    openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
+        -keyout "$work/key.pem" -out "$work/cert.pem" -subj "/CN=ytcli-dev" \
+        -addext "basicConstraints=critical,CA:false" \
+        -addext "keyUsage=critical,digitalSignature" \
+        -addext "extendedKeyUsage=critical,codeSigning" 2>/dev/null
+    openssl pkcs12 -export -inkey "$work/key.pem" -in "$work/cert.pem" \
+        -name ytcli-dev -out "$work/id.p12" -passout pass:
+    keychain="$HOME/Library/Keychains/login.keychain-db"
+    # -T grants codesign, and only codesign, use of the key without a prompt.
+    security import "$work/id.p12" -k "$keychain" -P "" -T /usr/bin/codesign
+    # Trusted for code signing alone: this certificate must not become something
+    # that can vouch for a website or an email.
+    security add-trusted-cert -r trustRoot -p codeSign -k "$keychain" "$work/cert.pem"
+    security find-identity -v -p codesigning | grep ytcli-dev
+    echo "done — now run: just local-install"
+
 # Build and install the binary locally, signed so macOS stops asking
 local-install:
     #!/usr/bin/env bash
-    # On macOS the Keychain binds "Always Allow" to the exact binary it approved,
-    # and Cargo's ad-hoc signature changes on every build — so a plain
-    # `cargo install` earns a password dialog on the next run, every time.
-    # Signing with a stable identity makes the approval stick. Create one once:
-    #
-    #   Keychain Access -> Certificate Assistant -> Create a Certificate...
-    #   name: ytcli-dev, type: Code Signing, self-signed
-    #
-    # Without it this still installs; you just keep getting asked.
     set -euo pipefail
     {{cargo}} install --path . --locked
-    if [ "$(uname)" = "Darwin" ] && security find-identity -v -p codesigning | grep -q ytcli-dev; then
+    if [ "$(uname)" != "Darwin" ]; then exit 0; fi
+    if security find-identity -v -p codesigning | grep -q ytcli-dev; then
         codesign --force --sign ytcli-dev "$(command -v ytcli)"
-        echo "signed with ytcli-dev; Keychain approval will survive the next build"
+        echo "signed with ytcli-dev; the Keychain approval survives the next build"
+    else
+        echo "unsigned: macOS will ask for your password again after each build"
+        echo "run \`just signing-identity\` once to stop that"
     fi
 
 # Refresh Cargo.lock
