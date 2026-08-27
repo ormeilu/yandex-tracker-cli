@@ -43,6 +43,24 @@ the wrong one is a 403 that looks like a permissions problem.
 
 ## Credentials
 
+You need two things: an OAuth token and an organisation id.
+
+**Token** — create an application at [oauth.yandex.com/client/new](https://oauth.yandex.com/client/new),
+choose "For API access or debugging", grant `tracker:write` (or `tracker:read`
+to stay read-only), then open
+`https://oauth.yandex.com/authorize?response_type=token&client_id=<ClientID>`
+and sign in. The token comes back in the address bar and looks like `y0__xAbc…`.
+
+**Organisation id** — [tracker.yandex.ru/admin/orgs](https://tracker.yandex.ru/admin/orgs)
+lists every organisation you belong to, with its id and its kind. A Yandex 360
+organisation has a numeric id; a Yandex Cloud organisation has one made of
+letters and digits.
+
+Full reference: [Tracker API access](https://yandex.ru/support/tracker/en/api-ref/access).
+
+`ytcli` prints these steps itself when you need them — on a first login, on a
+rejected token, on an organisation it cannot reach.
+
 ```bash
 ytcli auth login --account admin --org-id 12345 --queue PROJ
 ```
