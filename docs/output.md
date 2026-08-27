@@ -102,6 +102,37 @@ not be able to look like the tool talking.
 Rendering happens only when stdout is a terminal. A pipe gets the source bytes,
 because reflowed prose is not what a caller diffing output asked for.
 
+## TOON, measured
+
+`--format toon` exists behind the `toon` feature. It was worth trying and it is
+not worth promoting, and the numbers are here so the question does not get
+re-opened from intuition.
+
+One page of 25 issues from a real queue, and one issue, counted with
+`o200k_base` — not Claude's tokenizer, but close enough to compare formats:
+
+| | `--format json` | `--format toon` | default text |
+|---|---|---|---|
+| `issue find --limit 25` | 20 033 | 18 644 (−7%) | **668 (−97%)** |
+| `issue get PROJ-1` | 1 067 | 932 (−13%) | **271 (−75%)** |
+
+TOON's documented 30–55% saving is real, and it needs a uniform array of flat
+objects, which it then encodes as a header plus one row per record:
+
+```
+[2]{key,status,assignee}:
+  "PROJ-1",Open,ilya
+```
+
+An issue is not that shape. `assignee` and `author` are objects, `links` is an
+array, and custom fields differ per queue — so the encoder falls back to a
+YAML-like expansion and saves a rounding error. Making our payloads uniform
+enough for TOON would mean emitting a flat projection of a few columns, which is
+precisely what the default text format already is, at a thirtieth of the size.
+
+So: it stays behind the flag, for anyone whose pipeline wants it. The way to
+spend fewer tokens on this tool is `--fields`, `count`, and the default format.
+
 ## Lists say what they did not show
 
 ```
