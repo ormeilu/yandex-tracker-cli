@@ -8,7 +8,8 @@
 use clap::{Args, Subcommand};
 
 use crate::api::query::Filter;
-use crate::cli::{Session, emit, not_implemented, report};
+use crate::cli::write::{Gate, Intent, check, parse_assignment};
+use crate::cli::{Session, emit, report};
 use crate::exit::ExitCode;
 use crate::render::{Format, machine, text};
 
@@ -108,10 +109,33 @@ pub async fn run(command: &IssueCommand, session: &Session) -> ExitCode {
         IssueCommand::Count(args) => count(args, session).await,
         IssueCommand::Links { key } => links(key, session).await,
         IssueCommand::Comments { key } => comments(key, session).await,
-        IssueCommand::Create { .. } => not_implemented("issue create"),
-        IssueCommand::Update { .. } => not_implemented("issue update"),
-        IssueCommand::Comment { .. } => not_implemented("issue comment"),
-        IssueCommand::Transition { .. } => not_implemented("issue transition"),
+        IssueCommand::Create {
+            queue,
+            summary,
+            description,
+            assignee,
+            tags,
+        } => {
+            create(
+                queue.as_deref(),
+                summary,
+                description.as_deref(),
+                assignee.as_deref(),
+                tags,
+                session,
+            )
+            .await
+        }
+        IssueCommand::Update {
+            key,
+            summary,
+            assignee,
+            set,
+        } => update(key, summary.as_deref(), assignee.as_deref(), set, session).await,
+        IssueCommand::Comment { key, text } => comment(key, text, session).await,
+        IssueCommand::Transition { key, transition } => {
+            transition_cmd(key, transition.as_deref(), session).await
+        }
     }
 }
 
@@ -367,5 +391,226 @@ fn finish(rendered: Result<String, crate::render::RenderError>) -> ExitCode {
             ExitCode::Success
         }
         Err(error) => report(&error, ExitCode::Failure),
+    }
+}
+
+/// Read a body that may have been piped in: `-` means stdin.
+///
+/// Agents produce long text; making them quote it into an argument invites
+/// mangling, and a shell argument is visible in `ps` besides.
+fn body_text(raw: &str) -> Result<String, ExitCode> {
+    if raw != "-" {
+        return Ok(raw.to_owned());
+    }
+
+    let mut text = String::new();
+    match std::io::Read::read_to_string(&mut std::io::stdin(), &mut text) {
+        Ok(_) => Ok(text),
+        Err(error) => Err(report(&error, ExitCode::Failure)),
+    }
+}
+
+async fn create(
+    queue: Option<&str>,
+    summary: &str,
+    description: Option<&str>,
+    assignee: Option<&str>,
+    tags: &[String],
+    session: &Session,
+) -> ExitCode {
+    let Some(queue) = queue.or_else(|| session.default_queue()) else {
+        return report(
+            &"no queue given: pass --queue or pin one in .tracker.toml",
+            ExitCode::ConfirmationRequired,
+        );
+    };
+
+    let description = match description.map(body_text).transpose() {
+        Ok(description) => description,
+        Err(code) => return code,
+    };
+
+    let mut body = serde_json::json!({
+        "queue": { "key": queue },
+        "summary": summary,
+    });
+    if let Some(description) = &description {
+        body["description"] = serde_json::json!(description);
+    }
+    if let Some(assignee) = assignee {
+        body["assignee"] = serde_json::json!(assignee);
+    }
+    if !tags.is_empty() {
+        body["tags"] = serde_json::json!(tags);
+    }
+
+    let intent = Intent {
+        action: &format!("create an issue in {queue}"),
+        targets: &[],
+        body: &body,
+    };
+    if let Gate::Stop(code) = check(&intent, session) {
+        return code;
+    }
+
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+
+    match client.create_issue(&body).await {
+        Ok(issue) => {
+            emit(&format!("{}  {}\n", issue.key, issue.summary));
+            ExitCode::Success
+        }
+        Err(error) => {
+            let code = error.exit_code();
+            report(&error, code)
+        }
+    }
+}
+
+async fn update(
+    key: &str,
+    summary: Option<&str>,
+    assignee: Option<&str>,
+    set: &[String],
+    session: &Session,
+) -> ExitCode {
+    let mut body = serde_json::Map::new();
+    if let Some(summary) = summary {
+        body.insert("summary".to_owned(), serde_json::json!(summary));
+    }
+    if let Some(assignee) = assignee {
+        body.insert("assignee".to_owned(), serde_json::json!(assignee));
+    }
+    for assignment in set {
+        match parse_assignment(assignment) {
+            Ok((field, value)) => {
+                body.insert(field, value);
+            }
+            Err(error) => return report(&error, ExitCode::ConfirmationRequired),
+        }
+    }
+
+    if body.is_empty() {
+        return report(
+            &"nothing to change: pass --summary, --assignee or --set key=value",
+            ExitCode::ConfirmationRequired,
+        );
+    }
+
+    let body = serde_json::Value::Object(body);
+    let targets = [key.to_owned()];
+    let intent = Intent {
+        action: &format!("update {key}"),
+        targets: &targets,
+        body: &body,
+    };
+    if let Gate::Stop(code) = check(&intent, session) {
+        return code;
+    }
+
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+
+    match client.update_issue(key, &body).await {
+        Ok(issue) => {
+            emit(&text::issue_selected(
+                &issue,
+                &["status".to_owned(), "assignee".to_owned()],
+            ));
+            ExitCode::Success
+        }
+        Err(error) => {
+            let code = error.exit_code();
+            report(&error, code)
+        }
+    }
+}
+
+async fn comment(key: &str, raw: &str, session: &Session) -> ExitCode {
+    let text_body = match body_text(raw) {
+        Ok(text) => text,
+        Err(code) => return code,
+    };
+
+    let body = serde_json::json!({ "text": text_body });
+    let targets = [key.to_owned()];
+    let intent = Intent {
+        action: &format!("comment on {key}"),
+        targets: &targets,
+        body: &body,
+    };
+    if let Gate::Stop(code) = check(&intent, session) {
+        return code;
+    }
+
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+
+    match client.add_comment(key, &text_body).await {
+        Ok(comment) => {
+            emit(&format!("{key} comment {}\n", comment.id));
+            ExitCode::Success
+        }
+        Err(error) => {
+            let code = error.exit_code();
+            report(&error, code)
+        }
+    }
+}
+
+/// With no transition named, list what is available.
+///
+/// That is the common case for a caller who does not know the workflow, and it
+/// is a read: listing must not require the write gate.
+async fn transition_cmd(key: &str, transition: Option<&str>, session: &Session) -> ExitCode {
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+
+    let Some(transition) = transition else {
+        return match client.transitions(key).await {
+            Ok(transitions) => {
+                let rendered = match session.render.format {
+                    Format::Text => Ok(text::transitions(key, &transitions)),
+                    Format::JsonRaw => machine(&transitions, Format::Json),
+                    other => machine(&transitions, other),
+                };
+                finish(rendered)
+            }
+            Err(error) => {
+                let code = error.exit_code();
+                report(&error, code)
+            }
+        };
+    };
+
+    let body = serde_json::json!({});
+    let targets = [key.to_owned()];
+    let intent = Intent {
+        action: &format!("move {key} through `{transition}`"),
+        targets: &targets,
+        body: &body,
+    };
+    if let Gate::Stop(code) = check(&intent, session) {
+        return code;
+    }
+
+    match client.execute_transition(key, transition, &body).await {
+        Ok(()) => {
+            emit(&format!("{key} {transition}\n"));
+            ExitCode::Success
+        }
+        Err(error) => {
+            let code = error.exit_code();
+            report(&error, code)
+        }
     }
 }

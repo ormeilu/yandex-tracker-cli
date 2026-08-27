@@ -182,6 +182,70 @@ impl Client {
             .ok_or_else(|| ApiError::NotFound("issue count".to_owned()))
     }
 
+    /// `POST /v3/issues/` — create an issue, returning it normalised.
+    pub async fn create_issue(&self, body: &Value) -> Result<Issue, ApiError> {
+        let (value, _) = self.post_value("/v3/issues/", body, "issue").await?;
+        parse::issue(&value).ok_or_else(|| ApiError::NotFound("created issue".to_owned()))
+    }
+
+    /// `PATCH /v3/issues/{key}` — change fields.
+    pub async fn update_issue(&self, key: &str, body: &Value) -> Result<Issue, ApiError> {
+        let value = self
+            .send_value(
+                reqwest::Method::PATCH,
+                &format!("/v3/issues/{key}"),
+                Some(body),
+                &format!("issue {key}"),
+            )
+            .await?
+            .0;
+        parse::issue(&value).ok_or_else(|| ApiError::NotFound(format!("issue {key}")))
+    }
+
+    /// `POST /v3/issues/{key}/comments` — add a comment.
+    pub async fn add_comment(&self, key: &str, text: &str) -> Result<Comment, ApiError> {
+        let body = serde_json::json!({ "text": text });
+        let (value, _) = self
+            .post_value(
+                &format!("/v3/issues/{key}/comments"),
+                &body,
+                &format!("issue {key}"),
+            )
+            .await?;
+        parse::comment(&value).ok_or_else(|| ApiError::NotFound("created comment".to_owned()))
+    }
+
+    /// Transitions available from the issue's current status.
+    pub async fn transitions(&self, key: &str) -> Result<Vec<Transition>, ApiError> {
+        let raw = self
+            .get_value(
+                &format!("/v3/issues/{key}/transitions"),
+                &format!("issue {key} transitions"),
+            )
+            .await?;
+
+        Ok(raw
+            .as_array()
+            .map(|entries| entries.iter().filter_map(Transition::parse).collect())
+            .unwrap_or_default())
+    }
+
+    /// Perform a transition.
+    pub async fn execute_transition(
+        &self,
+        key: &str,
+        transition: &str,
+        body: &Value,
+    ) -> Result<(), ApiError> {
+        self.post_value(
+            &format!("/v3/issues/{key}/transitions/{transition}/_execute"),
+            body,
+            &format!("transition {transition} of issue {key}"),
+        )
+        .await?;
+        Ok(())
+    }
+
     /// Queues visible to the active profile.
     ///
     /// Tracker paginates this endpoint; the ceiling is deliberately generous
@@ -238,46 +302,85 @@ impl Client {
         body: &Value,
         what: &str,
     ) -> Result<(Value, reqwest::header::HeaderMap), ApiError> {
+        self.send_value(reqwest::Method::POST, path, Some(body), what)
+            .await
+    }
+
+    async fn send_value(
+        &self,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<&Value>,
+        what: &str,
+    ) -> Result<(Value, reqwest::header::HeaderMap), ApiError> {
         let url = format!("{}{path}", self.base_url);
 
         let send = || async {
-            let response = self.http.post(&url).json(body).send().await?;
+            let mut request = self.http.request(method.clone(), &url);
+            if let Some(body) = body {
+                request = request.json(body);
+            }
+            let response = request.send().await?;
             let headers = response.headers().clone();
             let text = classify(response, what).await?;
             Ok((text, headers))
         };
 
-        let (text, headers) = send
-            .retry(
+        // Only idempotent work is retried. Re-sending a create after a timeout
+        // would risk a duplicate issue, which is worse than a clear failure.
+        let (text, headers) = if method == reqwest::Method::GET {
+            send.retry(
                 ExponentialBuilder::default()
                     .with_max_times(self.retries)
                     .with_jitter(),
             )
             .when(is_retryable)
-            .await?;
+            .await?
+        } else {
+            send().await?
+        };
 
-        let value = serde_json::from_str(&text).map_err(ApiError::Decode)?;
+        // A successful write may answer with an empty body.
+        let value = if text.trim().is_empty() {
+            Value::Null
+        } else {
+            serde_json::from_str(&text).map_err(ApiError::Decode)?
+        };
         Ok((value, headers))
     }
 
     async fn get_value(&self, path: &str, what: &str) -> Result<Value, ApiError> {
-        let url = format!("{}{path}", self.base_url);
+        Ok(self
+            .send_value(reqwest::Method::GET, path, None, what)
+            .await?
+            .0)
+    }
+}
 
-        let send = || async {
-            let response = self.http.get(&url).send().await?;
-            classify(response, what).await
-        };
+/// A workflow transition available from the current status.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Transition {
+    pub id: String,
+    pub name: String,
+    /// The status the issue lands in.
+    pub to: Option<String>,
+}
 
-        let body = send
-            .retry(
-                ExponentialBuilder::default()
-                    .with_max_times(self.retries)
-                    .with_jitter(),
-            )
-            .when(is_retryable)
-            .await?;
-
-        serde_json::from_str(&body).map_err(ApiError::Decode)
+impl Transition {
+    fn parse(value: &Value) -> Option<Self> {
+        Some(Self {
+            id: value.get("id").and_then(Value::as_str)?.to_owned(),
+            name: value
+                .get("display")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            to: value
+                .get("to")
+                .and_then(|to| to.get("display").or_else(|| to.get("key")))
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned),
+        })
     }
 }
 

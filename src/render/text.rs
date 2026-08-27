@@ -179,6 +179,30 @@ pub fn comments(key: &str, comments: &[Comment]) -> String {
     out
 }
 
+/// Render the transitions available from the current status.
+#[must_use]
+pub fn transitions(key: &str, transitions: &[crate::api::Transition]) -> String {
+    let mut out = String::with_capacity(transitions.len() * 40 + 32);
+
+    for transition in transitions {
+        let _ = writeln!(
+            out,
+            "{:<20} {:<24} → {}",
+            transition.id,
+            transition.name,
+            transition.to.as_deref().unwrap_or("-"),
+        );
+    }
+
+    let _ = writeln!(
+        out,
+        "shown {} of {} for {key}",
+        transitions.len(),
+        transitions.len()
+    );
+    out
+}
+
 /// Render only the requested fields, on one line.
 ///
 /// The cheapest rung of the ladder: a caller that needs a status does not need

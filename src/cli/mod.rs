@@ -12,6 +12,7 @@ pub mod goal;
 pub mod issue;
 pub mod project;
 pub mod queue;
+pub mod write;
 
 use std::io::Write;
 use std::path::PathBuf;
