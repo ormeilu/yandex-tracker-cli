@@ -62,10 +62,26 @@ Full reference: [Tracker API access](https://yandex.ru/support/tracker/en/api-re
 rejected token, on an organisation it cannot reach.
 
 ```bash
+ytcli auth login
+```
+
+In a terminal that walks you through it one question at a time — account, token
+(entered as a password, so it never reaches the scrollback or your shell
+history), organisation, profile name, and a default queue picked from the queues
+the token can actually see.
+
+Anything you already know can be passed as a flag, and only the rest is asked
+for:
+
+```bash
 ytcli auth login --account admin --org-id 12345 --queue PROJ
 ```
 
-That one command does the whole path: it prompts for the token (or reads stdin
+Outside a terminal — CI, a script, a pipe — the flags are all there is: the token
+is read from stdin and a missing `--account` is an error rather than a prompt
+that would hang.
+
+Either way it does the whole path: it prompts for the token (or reads stdin
 when piped), checks it against the API, stores it in the OS keychain — macOS
 Keychain, Windows Credential Manager, Secret Service on Linux — and writes the
 account and profile into the config file.

@@ -11,7 +11,7 @@ use std::io::Write as _;
 use clap::{Args, Subcommand};
 
 use crate::api::{Client, ClientConfig};
-use crate::cli::{Session, emit, guidance, report};
+use crate::cli::{Session, emit, guidance, report, wizard};
 use crate::config::{OrgKind, Profile, store};
 use crate::exit::ExitCode;
 use crate::secrets;
@@ -19,6 +19,7 @@ use crate::secrets;
 #[derive(Debug, Subcommand)]
 pub enum AuthCommand {
     /// Store a token for an account, and set up a profile to use it with.
+    #[command(long_about = crate::cli::guidance::LOGIN_HELP)]
     Login(LoginArgs),
     /// Remove a stored token.
     Logout {
@@ -45,9 +46,9 @@ pub enum AuthCommand {
 /// shell history.
 #[derive(Debug, Args)]
 pub struct LoginArgs {
-    /// Account name to store the token under.
+    /// Account name to store the token under. Asked for when omitted.
     #[arg(long, short = 'a')]
-    pub account: String,
+    pub account: Option<String>,
 
     /// Organisation id. Given this, login also writes a profile.
     #[arg(long)]
@@ -285,59 +286,37 @@ fn count_of<T>(page: &crate::api::models::Page<T>) -> String {
 
 /// Read the token, check it, store it, and write the config to use it.
 ///
-/// Before this, logging in left someone with a token in the keychain and no
-/// configuration to use it with — the account and profile still had to be
-/// hand-written. One command now covers the whole path.
+/// Flags and prompts are the same path: whatever was passed is taken as given,
+/// and anything missing is asked for — but only when someone is there to answer.
+/// Outside a terminal the flags are all there is, and a gap is an error rather
+/// than a prompt nobody will ever see.
 async fn login(args: &LoginArgs, session: &Session) -> ExitCode {
+    let interactive = wizard::is_interactive();
     let mut err = anstream::stderr();
 
-    // Guidance goes to stderr before the prompt, and only when it is likely to
-    // be needed: a first login for this account. Printing it every time trains
-    // people to scroll past it.
-    if !secrets::is_stored(&args.account) {
-        let _ = writeln!(err, "{}\n", guidance::TOKEN);
-    }
-
-    let token = match read_token(&args.account) {
-        Ok(token) => token,
+    let Identity {
+        account,
+        token,
+        org_id,
+        org_kind: verified,
+    } = match identity(args, session, interactive).await {
+        Ok(identity) => identity,
         Err(code) => return code,
     };
 
-    // Verify before storing. A mistyped token that lands in the keychain fails
-    // later, somewhere else, looking like a permissions problem.
-    let verified = match (&args.org_id, args.no_verify) {
-        (Some(org_id), false) => match verify(&token, org_id, args.org_kind).await {
-            Ok((kind, who)) => {
-                let _ = writeln!(err, "verified as {who} in org {org_id} ({kind:?})");
-                Some(kind)
-            }
-            Err(code) => return code,
-        },
-        (Some(_), true) => Some(args.org_kind.unwrap_or(OrgKind::Cloud)),
-        (None, _) => None,
-    };
-
-    // Login writes in two places — the keychain and the config file — so it
-    // honours --dry-run like every other write: verify, say what would happen,
-    // touch nothing.
     if session.global.dry_run {
         let _ = writeln!(
             err,
-            "dry run: would store a token for `{}` in the OS keychain",
-            args.account
+            "dry run: would store a token for `{account}` in the OS keychain"
         );
     } else {
-        if let Err(error) = secrets::store(&args.account, &token) {
+        if let Err(error) = secrets::store(&account, &token) {
             return report(&error, ExitCode::Auth);
         }
-        let _ = writeln!(
-            err,
-            "stored a token for `{}` in the OS keychain",
-            args.account
-        );
+        let _ = writeln!(err, "stored a token for `{account}` in the OS keychain");
     }
 
-    let Some(org_id) = args.org_id.clone() else {
+    let Some(org_id) = org_id else {
         let _ = writeln!(
             err,
             "no --org-id given, so no profile was written and nothing can be queried yet.\n"
@@ -345,22 +324,24 @@ async fn login(args: &LoginArgs, session: &Session) -> ExitCode {
         let _ = writeln!(err, "{}", guidance::ORG);
         let _ = writeln!(
             err,
-            "\nThen: ytcli auth login --account {} --org-id <id> [--queue <QUEUE>]",
-            args.account
+            "\nThen: ytcli auth login --account {account} --org-id <id> [--queue <QUEUE>]"
         );
         return ExitCode::Success;
     };
 
-    let profile_name = args.profile.clone().unwrap_or_else(|| args.account.clone());
-    let profile = Profile {
-        account: args.account.clone(),
-        org_id,
-        org_kind: verified.unwrap_or(OrgKind::Cloud),
-        default_queue: args.queue.clone(),
-        display: crate::config::Display::default(),
-    };
+    let org_kind = verified.unwrap_or(OrgKind::Cloud);
 
-    let make_default = args.default || session.config.default_profile.is_none();
+    let shape = Shape {
+        account: &account,
+        token: &token,
+        org_id: &org_id,
+        org_kind,
+        interactive,
+    };
+    let (profile_name, profile, make_default) = match shape_profile(args, session, &shape).await {
+        Ok(shaped) => shaped,
+        Err(code) => return code,
+    };
 
     if session.global.dry_run {
         let _ = writeln!(
@@ -377,7 +358,7 @@ async fn login(args: &LoginArgs, session: &Session) -> ExitCode {
 
     match store::upsert(
         &session.config_file,
-        &args.account,
+        &account,
         None,
         Some((&profile_name, &profile)),
         make_default,
@@ -389,6 +370,7 @@ async fn login(args: &LoginArgs, session: &Session) -> ExitCode {
                 session.config_file.display(),
                 if make_default { " (default)" } else { "" },
             );
+            let _ = writeln!(err, "try it: ytcli auth status --active-only");
             emit(&format!("{profile_name}\n"));
             ExitCode::Success
         }
@@ -396,22 +378,160 @@ async fn login(args: &LoginArgs, session: &Session) -> ExitCode {
     }
 }
 
-/// Read the token from a hidden prompt when someone is typing, from stdin when
-/// it is piped.
-fn read_token(account: &str) -> Result<String, ExitCode> {
-    use std::io::IsTerminal;
+/// Who is logging in, where, and with what — everything settled before anything
+/// is written.
+struct Identity {
+    account: String,
+    token: String,
+    org_id: Option<String>,
+    /// The organisation flavour that answered, once verified.
+    org_kind: Option<OrgKind>,
+}
 
-    let raw = if std::io::stdin().is_terminal() {
-        rpassword::prompt_password(format!("OAuth token for `{account}`: "))
-            .map_err(|error| report(&error, ExitCode::Failure))?
-    } else {
-        let mut piped = String::new();
-        std::io::Read::read_to_string(&mut std::io::stdin(), &mut piped)
-            .map_err(|error| report(&error, ExitCode::Failure))?;
-        piped
+/// Collect and check the credentials.
+///
+/// Flags win; a terminal fills the gaps; outside one, a gap is an error rather
+/// than a prompt nobody will see.
+async fn identity(
+    args: &LoginArgs,
+    session: &Session,
+    interactive: bool,
+) -> Result<Identity, ExitCode> {
+    let mut err = anstream::stderr();
+
+    let account = match args.account.clone() {
+        Some(account) => account,
+        None if interactive => {
+            let existing: Vec<String> = session.config.accounts.keys().cloned().collect();
+            wizard::account(&existing).map_err(|error| report(&error, error.exit_code()))?
+        }
+        None => {
+            return Err(report(
+                &"--account is required when not running in a terminal",
+                ExitCode::ConfirmationRequired,
+            ));
+        }
     };
 
-    let token = raw.trim().to_owned();
+    let token = read_token(&account, interactive)?;
+
+    // The organisation decides whether a profile can be written at all, so it is
+    // asked for rather than skipped when someone is there to answer.
+    let (org_id, org_kind) = match (&args.org_id, interactive) {
+        (Some(org_id), _) => (Some(org_id.clone()), args.org_kind),
+        (None, true) => wizard::organisation()
+            .map(|(id, kind)| (Some(id), kind))
+            .map_err(|error| report(&error, error.exit_code()))?,
+        (None, false) => (None, None),
+    };
+
+    let verified = match (&org_id, args.no_verify) {
+        (Some(org_id), false) => {
+            let (kind, who) = verify(&token, org_id, org_kind).await?;
+            let _ = writeln!(err, "verified as {who} in org {org_id} ({kind:?})");
+            Some(kind)
+        }
+        (Some(_), true) => Some(org_kind.unwrap_or(OrgKind::Cloud)),
+        (None, _) => None,
+    };
+
+    Ok(Identity {
+        account,
+        token,
+        org_id,
+        org_kind: verified,
+    })
+}
+
+/// What the profile is being built from, once identity is settled.
+struct Shape<'a> {
+    account: &'a str,
+    token: &'a str,
+    org_id: &'a str,
+    org_kind: OrgKind,
+    interactive: bool,
+}
+
+/// Decide the profile's name, its queue and whether it becomes the default.
+///
+/// Split out so each half of login stays readable: this one asks questions and
+/// touches nothing.
+async fn shape_profile(
+    args: &LoginArgs,
+    session: &Session,
+    shape: &Shape<'_>,
+) -> Result<(String, Profile, bool), ExitCode> {
+    let profile_name = match args.profile.clone() {
+        Some(name) => name,
+        None if shape.interactive => {
+            wizard::profile(shape.account).map_err(|error| report(&error, error.exit_code()))?
+        }
+        None => shape.account.to_owned(),
+    };
+
+    // Offer the queues this token can actually see. Verifying first is what makes
+    // that possible, and turns a spelling test into a choice.
+    let queue = match args.queue.clone() {
+        Some(queue) => Some(queue),
+        None if shape.interactive => {
+            let available = queue_keys(shape.token, shape.org_id, shape.org_kind).await;
+            wizard::queue(&available).map_err(|error| report(&error, error.exit_code()))?
+        }
+        None => None,
+    };
+
+    let current_default = session.config.default_profile.as_deref();
+    let make_default = if args.default || current_default.is_none() {
+        true
+    } else if shape.interactive {
+        wizard::make_default(&profile_name, current_default)
+            .map_err(|error| report(&error, error.exit_code()))?
+    } else {
+        false
+    };
+
+    Ok((
+        profile_name,
+        Profile {
+            account: shape.account.to_owned(),
+            org_id: shape.org_id.to_owned(),
+            org_kind: shape.org_kind,
+            default_queue: queue,
+            display: crate::config::Display::default(),
+        },
+        make_default,
+    ))
+}
+
+/// Queue keys this token can see, for the picker. Best-effort: failing to list
+/// them costs a dropdown, not the login.
+async fn queue_keys(token: &str, org_id: &str, kind: OrgKind) -> Vec<String> {
+    let mut config = ClientConfig::new(token.to_owned(), org_id.to_owned(), kind);
+    if let Ok(base) = std::env::var("YTCLI_BASE_URL") {
+        config.base_url = base;
+    }
+
+    let Ok(client) = Client::new(&config) else {
+        return Vec::new();
+    };
+
+    client.queues().await.map_or_else(
+        |_| Vec::new(),
+        |queues| queues.into_iter().map(|queue| queue.key).collect(),
+    )
+}
+
+/// Read the token: a hidden prompt when someone is typing, stdin when piped.
+fn read_token(account: &str, interactive: bool) -> Result<String, ExitCode> {
+    if interactive {
+        return wizard::token(account).map_err(|error| report(&error, error.exit_code()));
+    }
+
+    let mut piped = String::new();
+    std::io::Read::read_to_string(&mut std::io::stdin(), &mut piped)
+        .map_err(|error| report(&error, ExitCode::Failure))?;
+
+    let token = piped.trim().to_owned();
     if token.is_empty() {
         return Err(report(&"no token given", ExitCode::Auth));
     }

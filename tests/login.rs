@@ -353,3 +353,37 @@ async fn brief_skips_the_counts_and_their_requests() {
     let requests = harness.server.received_requests().await.expect("recorded");
     assert_eq!(requests.len(), 1);
 }
+
+/// The help must answer "where do I get these" without anyone having to fail
+/// first — the same text the wizard shows.
+#[test]
+fn login_help_carries_the_credential_instructions() {
+    let output = assert_cmd::Command::cargo_bin("ytcli")
+        .expect("binary built")
+        .args(["auth", "login", "--help"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert!(stdout.contains("oauth.yandex.com/client/new"));
+    assert!(stdout.contains("tracker:write"));
+    assert!(stdout.contains("tracker.yandex.ru/admin/orgs"));
+    assert!(stdout.contains("--org-kind yandex360"));
+    assert!(stdout.contains("walks you through each step"));
+}
+
+/// Outside a terminal there is nobody to answer, so a missing account is an
+/// error rather than a prompt that would hang a script.
+#[tokio::test]
+async fn without_a_terminal_a_missing_account_is_an_error_not_a_prompt() {
+    let harness = Harness::new().await;
+
+    harness
+        .run_raw(&["auth", "login", "--dry-run"])
+        .write_stdin("some-token\n")
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains(
+            "--account is required when not running in a terminal",
+        ));
+}

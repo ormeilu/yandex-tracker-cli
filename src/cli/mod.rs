@@ -14,6 +14,7 @@ pub mod guidance;
 pub mod issue;
 pub mod project;
 pub mod queue;
+pub mod wizard;
 pub mod write;
 
 use std::io::Write;

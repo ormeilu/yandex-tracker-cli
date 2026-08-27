@@ -31,6 +31,14 @@ an account. One login can reach several organisations, and one organisation can
 be reached through several logins.
 
 ```bash
+ytcli auth login
+```
+
+In a terminal it walks you through each step and takes the token as a password,
+so it never lands in your scrollback or shell history. Pass what you already know
+and only the rest is asked for:
+
+```bash
 ytcli auth login --account work --org-id 12345 --queue PROJ
 ```
 
@@ -38,8 +46,7 @@ You need an OAuth token ([how to get one](https://yandex.ru/support/tracker/en/a
 and an organisation id ([tracker.yandex.ru/admin/orgs](https://tracker.yandex.ru/admin/orgs)
 lists yours). `ytcli` prints both sets of steps itself when you need them.
 
-It prompts for the token (or reads it from stdin if you pipe it), checks it
-against the API, stores it in the OS keychain — macOS Keychain, Windows
+It checks the token against the API, stores it in the OS keychain — macOS Keychain, Windows
 Credential Manager, Secret Service on Linux — and writes the profile for you.
 The token is never written to a config file, never passed as an argument, and no
 command prints it back.
