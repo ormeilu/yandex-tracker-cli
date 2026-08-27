@@ -22,7 +22,7 @@ pub async fn list(kind: &str, query: Option<&str>, page: u32, session: &Session)
     match client.entities(kind, query, page.max(1), per_page).await {
         Ok(found) => {
             let rendered = match session.render.format {
-                Format::Text => Ok(render::entities(&found)),
+                Format::Text => Ok(render::entities(&found, &session.render)),
                 Format::JsonRaw => machine(&found.items, Format::Json),
                 other => machine(&found.items, other),
             };
@@ -45,7 +45,7 @@ pub async fn get(kind: &str, id: &str, session: &Session) -> ExitCode {
     match client.entity(kind, id).await {
         Ok(found) => {
             let rendered = match session.render.format {
-                Format::Text => Ok(render::entity(&found, session.render.description_lines)),
+                Format::Text => Ok(render::entity(&found, &session.render)),
                 Format::JsonRaw => machine(&found, Format::Json),
                 other => machine(&found, other),
             };

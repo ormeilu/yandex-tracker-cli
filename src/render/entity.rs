@@ -3,6 +3,8 @@
 use std::fmt::Write as _;
 
 use crate::api::models::{Attachment, Entity, Page};
+use crate::render::Context;
+use crate::render::style::Palette;
 
 /// A listing of projects or goals.
 ///
@@ -10,33 +12,54 @@ use crate::api::models::{Attachment, Entity, Page};
 /// refers to; the long id follows, because that is what `project get` takes.
 /// Printing only one of them guarantees somebody uses the wrong one.
 #[must_use]
-pub fn entities(page: &Page<Entity>) -> String {
+pub fn entities(page: &Page<Entity>, ctx: &Context) -> String {
     let mut out = String::with_capacity(page.items.len() * 72 + 32);
+    let paint = ctx.painter();
+
+    if ctx.is_human() && !page.items.is_empty() {
+        let _ = writeln!(
+            out,
+            "{}",
+            paint.paint(
+                &format!("{:<8} {:<26} {:<14} {}", "SHORT", "ID", "STATUS", "SUMMARY"),
+                Palette::label()
+            )
+        );
+    }
 
     for entity in &page.items {
         let _ = writeln!(
             out,
-            "{:<8} {:<26} {:<14} {}",
-            entity
-                .short_id
-                .map_or_else(|| "-".to_owned(), |id| id.to_string()),
-            truncate(&entity.id, 26),
+            "{} {} {:<14} {}",
+            paint.paint_padded(
+                &entity
+                    .short_id
+                    .map_or_else(|| "-".to_owned(), |id| id.to_string()),
+                8,
+                Palette::key()
+            ),
+            paint.paint_padded(&truncate(&entity.id, 26), 26, Palette::label()),
             truncate(entity.status.as_deref().unwrap_or("-"), 14),
             truncate(&entity.summary, 50),
         );
     }
 
     let shown = page.items.len();
-    match page.total {
-        Some(total) => {
-            let _ = write!(out, "shown {shown} of {total}");
-        }
-        None => {
-            let _ = write!(out, "shown {shown} of unknown total");
-        }
-    }
+    let tally = match page.total {
+        Some(total) => format!("shown {shown} of {total}"),
+        None => format!("shown {shown} of unknown total"),
+    };
+    let _ = write!(out, "{}", paint.paint(&tally, Palette::label()));
+
     if page.has_more() {
-        let _ = write!(out, " — next: --page {}", page.page + 1);
+        let _ = write!(
+            out,
+            "{}",
+            paint.paint(
+                &format!(" — next: --page {}", page.page + 1),
+                Palette::warn()
+            )
+        );
     }
     out.push('\n');
     out
@@ -44,17 +67,30 @@ pub fn entities(page: &Page<Entity>) -> String {
 
 /// One project or goal.
 #[must_use]
-pub fn entity(entity: &Entity, description_lines: Option<usize>) -> String {
+pub fn entity(entity: &Entity, ctx: &Context) -> String {
     let mut out = String::with_capacity(320);
+    let paint = ctx.painter();
+    let label = |text: &str| paint.paint(text, Palette::label());
 
-    let _ = writeln!(out, "{}  {}", entity.id, entity.summary);
     let _ = writeln!(
         out,
-        "short id: {}   status: {}   lead: {}",
-        entity
-            .short_id
-            .map_or_else(|| "-".to_owned(), |id| id.to_string()),
+        "{}  {}",
+        paint.paint(&entity.id, Palette::key()),
+        entity.summary
+    );
+    let _ = writeln!(
+        out,
+        "{} {}   {} {}   {} {}",
+        label("short id:"),
+        paint.paint(
+            &entity
+                .short_id
+                .map_or_else(|| "-".to_owned(), |id| id.to_string()),
+            Palette::key()
+        ),
+        label("status:"),
         entity.status.as_deref().unwrap_or("-"),
+        label("lead:"),
         entity
             .lead
             .as_ref()
@@ -63,21 +99,30 @@ pub fn entity(entity: &Entity, description_lines: Option<usize>) -> String {
     );
     let _ = writeln!(
         out,
-        "start: {}   end: {}",
+        "{} {}   {} {}",
+        label("start:"),
         entity.start.as_deref().unwrap_or("-"),
+        label("end:"),
         entity.end.as_deref().unwrap_or("-"),
     );
 
     if let Some(description) = entity.description.as_deref().filter(|d| !d.is_empty()) {
-        let (body, withheld) = crate::render::untrusted::head(description, description_lines);
-        let _ = writeln!(out, "---");
+        let (body, withheld) = crate::render::untrusted::head(description, ctx.description_lines);
+        let _ = writeln!(out, "{}", label("---"));
         let _ = writeln!(
             out,
             "{}",
-            crate::render::untrusted::fence(&format!("{}/description", entity.id), &body)
+            paint.paint(
+                &crate::render::untrusted::fence(&format!("{}/description", entity.id), &body),
+                Palette::untrusted()
+            )
         );
         if withheld > 0 {
-            let _ = writeln!(out, "(+{withheld} more lines: --full)");
+            let _ = writeln!(
+                out,
+                "{}",
+                label(&format!("(+{withheld} more lines: --full)"))
+            );
         }
     }
 
@@ -89,25 +134,45 @@ pub fn entity(entity: &Entity, description_lines: Option<usize>) -> String {
 /// The filename was chosen by whoever uploaded it, so it is fenced: a name can
 /// carry as much text as a comment can.
 #[must_use]
-pub fn attachments(key: &str, attachments: &[Attachment]) -> String {
+pub fn attachments(key: &str, attachments: &[Attachment], ctx: &Context) -> String {
     let mut out = String::with_capacity(attachments.len() * 72 + 32);
+    let paint = ctx.painter();
+
+    if ctx.is_human() && !attachments.is_empty() {
+        let _ = writeln!(
+            out,
+            "{}",
+            paint.paint(
+                &format!("{:<14} {:<10} {:<18} {}", "ID", "SIZE", "TYPE", "NAME"),
+                Palette::label()
+            )
+        );
+    }
 
     for attachment in attachments {
         let _ = writeln!(
             out,
-            "{:<14} {:<10} {:<18} {}",
-            attachment.id,
+            "{} {:<10} {:<18} {}",
+            paint.paint_padded(&attachment.id, 14, Palette::key()),
             attachment.size.map_or_else(|| "-".to_owned(), human_size),
             truncate(attachment.mimetype.as_deref().unwrap_or("-"), 18),
-            attachment.name,
+            // The filename was chosen by whoever uploaded it, so it does not get
+            // the styling our own output uses.
+            paint.paint(&attachment.name, Palette::untrusted()),
         );
     }
 
     let _ = writeln!(
         out,
-        "shown {} of {} for {key}",
-        attachments.len(),
-        attachments.len()
+        "{}",
+        paint.paint(
+            &format!(
+                "shown {} of {} for {key}",
+                attachments.len(),
+                attachments.len()
+            ),
+            Palette::label()
+        )
     );
     out
 }

@@ -54,7 +54,7 @@ async fn list(key: &str, session: &Session) -> ExitCode {
     match client.attachments(key).await {
         Ok(attachments) => {
             let rendered = match session.render.format {
-                Format::Text => Ok(render::attachments(key, &attachments)),
+                Format::Text => Ok(render::attachments(key, &attachments, &session.render)),
                 Format::JsonRaw => machine(&attachments, Format::Json),
                 other => machine(&attachments, other),
             };

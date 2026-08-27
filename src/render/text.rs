@@ -8,6 +8,7 @@
 use std::fmt::Write as _;
 
 use crate::api::models::{Comment, Issue, Link, Page, User};
+use crate::render::style::Palette;
 use crate::render::{Context, untrusted};
 
 fn who(user: Option<&User>) -> &str {
@@ -23,98 +24,52 @@ fn or_dash(value: Option<&String>) -> &str {
 #[must_use]
 pub fn issue(issue: &Issue, ctx: &Context) -> String {
     let mut out = String::with_capacity(512);
+    let paint = ctx.painter();
+    let label = |text: &str| paint.paint(text, Palette::label());
 
-    let _ = writeln!(out, "{}  {}", issue.key, issue.summary);
     let _ = writeln!(
         out,
-        "status: {}   type: {}   prio: {}",
-        or_dash(issue.status.as_ref()),
+        "{}  {}",
+        paint.paint(&issue.key, Palette::key()),
+        issue.summary
+    );
+    let _ = writeln!(
+        out,
+        "{} {}   {} {}   {} {}",
+        label("status:"),
+        status_painted(issue.status.as_deref(), ctx),
+        label("type:"),
         or_dash(issue.issue_type.as_ref()),
-        or_dash(issue.priority.as_ref()),
+        label("prio:"),
+        priority_painted(issue.priority.as_deref(), ctx),
     );
     let _ = writeln!(
         out,
-        "assignee: {}   author: {}   queue: {}",
+        "{} {}   {} {}   {} {}",
+        label("assignee:"),
         who(issue.assignee.as_ref()),
+        label("author:"),
         who(issue.author.as_ref()),
-        or_dash(issue.queue.as_ref()),
+        label("queue:"),
+        paint.paint(or_dash(issue.queue.as_ref()), Palette::key()),
     );
     let _ = writeln!(
         out,
-        "updated: {}   comments: {}",
+        "{} {}   {} {}",
+        label("updated:"),
         issue
             .updated_at
             .map_or_else(|| "-".to_owned(), |ts| ts.to_string()),
+        label("comments:"),
         issue
             .comment_count
             .map_or_else(|| "-".to_owned(), |n| n.to_string()),
     );
 
-    for key in &ctx.extra_fields {
-        if let Some(value) = issue.extra.get(key) {
-            let _ = writeln!(out, "{key}: {}", compact_value(value));
-        }
-    }
+    custom_fields(&mut out, issue, ctx);
 
-    // Custom fields are summarised rather than dumped: they differ per queue, so
-    // printing them all makes the view unstable and mostly empty.
-    //
-    // The sort is load-bearing, not tidiness. `serde_json::Map` is a BTreeMap
-    // only until some dependency turns on `preserve_order`, at which point it
-    // becomes insertion-ordered and this line would start varying with whatever
-    // order Tracker happened to serialise the payload in. Field order is a
-    // contract (ADR 3), so it is enforced here rather than inherited.
-    let mut unpinned: Vec<&String> = issue
-        .extra
-        .keys()
-        .filter(|key| !ctx.extra_fields.contains(key))
-        .collect();
-    unpinned.sort();
-    if !unpinned.is_empty() {
-        let shown: Vec<&str> = unpinned.iter().take(3).map(|k| k.as_str()).collect();
-        let rest = unpinned.len().saturating_sub(shown.len());
-        let suffix = if rest > 0 {
-            format!(", +{rest}")
-        } else {
-            String::new()
-        };
-        let _ = writeln!(
-            out,
-            "custom: {} set ({}{suffix}) — see --fields",
-            unpinned.len(),
-            shown.join(", "),
-        );
-    }
-
-    if issue.links.is_empty() {
-        let _ = writeln!(out, "links: none");
-    } else {
-        let _ = writeln!(out, "links:");
-        for link in &issue.links {
-            let _ = writeln!(
-                out,
-                "  {} {}{}",
-                link.kind.label(),
-                link.key,
-                link.status
-                    .as_ref()
-                    .map_or_else(String::new, |status| format!(" [{status}]")),
-            );
-        }
-    }
-
-    if let Some(description) = issue.description.as_deref().filter(|d| !d.is_empty()) {
-        let (body, withheld) = untrusted::head(description, ctx.description_lines);
-        let _ = writeln!(out, "---");
-        let _ = writeln!(
-            out,
-            "{}",
-            untrusted::fence(&format!("{}/description", issue.key), &body)
-        );
-        if withheld > 0 {
-            let _ = writeln!(out, "(+{withheld} more lines: --full)");
-        }
-    }
+    links_section(&mut out, issue, ctx);
+    description_section(&mut out, issue, ctx);
 
     out
 }
@@ -177,6 +132,108 @@ pub fn comments(key: &str, comments: &[Comment]) -> String {
         comments.len()
     );
     out
+}
+
+/// The pinned custom fields, then a count of the rest.
+fn custom_fields(out: &mut String, issue: &Issue, ctx: &Context) {
+    let paint = ctx.painter();
+    let label = |text: &str| paint.paint(text, Palette::label());
+
+    for key in &ctx.extra_fields {
+        if let Some(value) = issue.extra.get(key) {
+            let _ = writeln!(
+                out,
+                "{} {}",
+                label(&format!("{key}:")),
+                compact_value(value)
+            );
+        }
+    }
+
+    // Custom fields are summarised rather than dumped: they differ per queue, so
+    // printing them all makes the view unstable and mostly empty.
+    //
+    // The sort is load-bearing, not tidiness. `serde_json::Map` is a BTreeMap
+    // only until some dependency turns on `preserve_order`, at which point it
+    // becomes insertion-ordered and this line would start varying with whatever
+    // order Tracker happened to serialise the payload in. Field order is a
+    // contract (ADR 3), so it is enforced here rather than inherited.
+    let mut unpinned: Vec<&String> = issue
+        .extra
+        .keys()
+        .filter(|key| !ctx.extra_fields.contains(key))
+        .collect();
+    unpinned.sort();
+    if !unpinned.is_empty() {
+        let shown: Vec<&str> = unpinned.iter().take(3).map(|k| k.as_str()).collect();
+        let rest = unpinned.len().saturating_sub(shown.len());
+        let suffix = if rest > 0 {
+            format!(", +{rest}")
+        } else {
+            String::new()
+        };
+        let _ = writeln!(
+            out,
+            "{} {} set ({}{suffix}) — see --fields",
+            label("custom:"),
+            unpinned.len(),
+            shown.join(", "),
+        );
+    }
+}
+
+/// Links, one per line, always with their type.
+fn links_section(out: &mut String, issue: &Issue, ctx: &Context) {
+    let paint = ctx.painter();
+    let label = |text: &str| paint.paint(text, Palette::label());
+
+    if issue.links.is_empty() {
+        let _ = writeln!(out, "{} none", label("links:"));
+        return;
+    }
+
+    let _ = writeln!(out, "{}", label("links:"));
+    for link in &issue.links {
+        let _ = writeln!(
+            out,
+            "  {} {}{}",
+            label(link.kind.label()),
+            paint.paint(&link.key, Palette::key()),
+            link.status
+                .as_ref()
+                .map_or_else(String::new, |status| format!(" [{status}]")),
+        );
+    }
+}
+
+/// The description, fenced and trimmed.
+fn description_section(out: &mut String, issue: &Issue, ctx: &Context) {
+    let paint = ctx.painter();
+    let label = |text: &str| paint.paint(text, Palette::label());
+
+    let Some(description) = issue.description.as_deref().filter(|d| !d.is_empty()) else {
+        return;
+    };
+
+    let (body, withheld) = untrusted::head(description, ctx.description_lines);
+    let _ = writeln!(out, "{}", label("---"));
+    // The fence is dimmed and nothing more. Giving someone else's text the same
+    // styling as our own output would let it impersonate the tool.
+    let _ = writeln!(
+        out,
+        "{}",
+        paint.paint(
+            &untrusted::fence(&format!("{}/description", issue.key), &body),
+            Palette::untrusted()
+        )
+    );
+    if withheld > 0 {
+        let _ = writeln!(
+            out,
+            "{}",
+            label(&format!("(+{withheld} more lines: --full)"))
+        );
+    }
 }
 
 /// Render the transitions available from the current status.
@@ -266,35 +323,109 @@ fn field_value(issue: &Issue, field: &str) -> String {
 /// tell a complete answer from a truncated one, and "there are no open issues"
 /// is a worse failure than a few wasted tokens.
 #[must_use]
-pub fn issue_page(page: &Page<Issue>, _ctx: &Context) -> String {
+pub fn issue_page(page: &Page<Issue>, ctx: &Context) -> String {
     let mut out = String::with_capacity(page.items.len() * 80 + 64);
+    let paint = ctx.painter();
+
+    // A header helps a person and costs a machine a line it did not ask for, so
+    // it appears only for the terminal — the rows are identical either way.
+    if ctx.is_human() && !page.items.is_empty() {
+        let _ = writeln!(
+            out,
+            "{}",
+            paint.paint(
+                &format!(
+                    "{:<12} {:<14} {:<14} {}",
+                    "KEY", "STATUS", "ASSIGNEE", "SUMMARY"
+                ),
+                Palette::label()
+            )
+        );
+    }
 
     for issue in &page.items {
         let _ = writeln!(
             out,
-            "{:<12} {:<14} {:<14} {}",
-            issue.key,
-            truncate(or_dash(issue.status.as_ref()), 14),
-            truncate(who(issue.assignee.as_ref()), 14),
+            "{} {} {} {}",
+            paint.paint_padded(&issue.key, 12, Palette::key()),
+            padded(
+                &status_painted(issue.status.as_deref(), ctx),
+                or_dash(issue.status.as_ref()),
+                14
+            ),
+            format_args!("{:<14}", truncate(who(issue.assignee.as_ref()), 14)),
             truncate(&issue.summary, 60),
         );
     }
 
     let shown = page.items.len();
-    match page.total {
-        Some(total) => {
-            let _ = write!(out, "shown {shown} of {total}");
-        }
-        None => {
-            let _ = write!(out, "shown {shown} of unknown total");
-        }
-    }
+    let tally = match page.total {
+        Some(total) => format!("shown {shown} of {total}"),
+        None => format!("shown {shown} of unknown total"),
+    };
+    let _ = write!(out, "{}", paint.paint(&tally, Palette::label()));
+
     if page.has_more() {
-        let _ = write!(out, " — next: --page {}", page.page + 1);
+        let _ = write!(
+            out,
+            "{}",
+            paint.paint(
+                &format!(" — next: --page {}", page.page + 1),
+                Palette::warn()
+            )
+        );
     }
     out.push('\n');
 
     out
+}
+
+/// Pad an already-styled string to the visible width of its plain form.
+fn padded(styled: &str, plain: &str, width: usize) -> String {
+    let truncated = truncate(plain, width);
+    let padding = width.saturating_sub(truncated.chars().count());
+    if styled.contains('\u{1b}') {
+        format!("{styled}{}", " ".repeat(padding))
+    } else {
+        format!("{truncated}{}", " ".repeat(padding))
+    }
+}
+
+/// Colour a status by what it means, not by its name: Tracker lets every queue
+/// invent its own, so the mapping is on the few well-known keys and everything
+/// else stays unpainted rather than guessed at.
+fn status_painted(status: Option<&str>, ctx: &Context) -> String {
+    let paint = ctx.painter();
+    let Some(status) = status else {
+        return "-".to_owned();
+    };
+
+    let lower = status.to_ascii_lowercase();
+    let style = if lower.contains("closed") || lower.contains("resolved") || lower.contains("done")
+    {
+        Palette::ok()
+    } else if lower.contains("progress") || lower.contains("review") || lower.contains("test") {
+        Palette::warn()
+    } else {
+        return status.to_owned();
+    };
+
+    paint.paint(status, style)
+}
+
+/// Critical and blocker are worth noticing; the rest are not worth a colour.
+fn priority_painted(priority: Option<&str>, ctx: &Context) -> String {
+    let paint = ctx.painter();
+    let Some(priority) = priority else {
+        return "-".to_owned();
+    };
+
+    let lower = priority.to_ascii_lowercase();
+    if lower.contains("critical") || lower.contains("blocker") {
+        paint.paint(priority, Palette::bad())
+    } else {
+        priority.to_owned()
+    }
 }
 
 fn truncate(value: &str, width: usize) -> String {
@@ -386,6 +517,50 @@ mod tests {
     #[test]
     fn issue_compact_view_is_stable() {
         insta::assert_snapshot!(issue(&sample(), &ctx()));
+    }
+
+    fn human_ctx() -> Context {
+        Context {
+            audience: Audience::Human,
+            ..ctx()
+        }
+    }
+
+    /// The terminal form is pinned too, escape codes and all: colour is part of
+    /// what people see, and a change to it should be as visible in review as a
+    /// change to the words.
+    #[test]
+    fn issue_terminal_view_is_stable() {
+        insta::assert_snapshot!(issue(&sample(), &human_ctx()));
+    }
+
+    /// The rule that makes styling safe: same words, same order, same data —
+    /// only escape codes differ.
+    #[test]
+    fn styling_changes_nothing_but_the_escape_codes() {
+        let plain = issue(&sample(), &ctx());
+        let coloured = issue(&sample(), &human_ctx());
+
+        let stripped: String = strip_ansi(&coloured);
+        assert_eq!(stripped, plain);
+    }
+
+    fn strip_ansi(text: &str) -> String {
+        let mut out = String::with_capacity(text.len());
+        let mut chars = text.chars();
+        while let Some(c) = chars.next() {
+            if c != '\u{1b}' {
+                out.push(c);
+                continue;
+            }
+            // Skip until the terminating letter of the CSI sequence.
+            for c in chars.by_ref() {
+                if c.is_ascii_alphabetic() {
+                    break;
+                }
+            }
+        }
+        out
     }
 
     #[test]

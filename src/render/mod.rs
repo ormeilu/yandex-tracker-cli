@@ -14,6 +14,7 @@
 
 pub mod entity;
 pub mod queue;
+pub mod style;
 pub mod text;
 pub mod untrusted;
 
@@ -91,6 +92,15 @@ impl Context {
     #[must_use]
     pub fn is_human(&self) -> bool {
         self.audience == Audience::Human
+    }
+
+    /// The painter for this context.
+    ///
+    /// Machine output is never styled — not stripped after the fact, never
+    /// produced — so what a snapshot test pins is exactly what a pipe receives.
+    #[must_use]
+    pub fn painter(&self) -> style::Painter {
+        style::Painter::for_stream(self.is_human())
     }
 }
 

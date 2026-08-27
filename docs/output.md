@@ -2,9 +2,25 @@
 
 ## Decoration follows the terminal, format follows the flag
 
-When stdout is a terminal you get colour and tables. When it is a pipe you get
-plain, stable lines. `--format` chooses the data shape separately: `text`,
-`json`, `json-raw`, `toon`.
+When stdout is a terminal you get colour, column headers and emphasis. When it is
+a pipe you get plain, stable lines. `--format` chooses the data shape separately:
+`text`, `json`, `json-raw`, `toon`.
+
+Styling never changes the data. Same fields, same order, same words either way —
+only escape codes differ, so a terminal and a pipe disagree about nothing that
+matters. A test asserts exactly that: strip the escape codes from the coloured
+form and it equals the plain one, byte for byte. Machine output is never styled
+and then cleaned up; it is never styled in the first place, so what a snapshot
+test pins is what a pipe receives.
+
+The palette is small — bold for identifiers you will type back, dim for labels,
+green/yellow/red where a state is worth noticing. A listing that uses six colours
+communicates less than one that uses two.
+
+**Text other people wrote is never given our styling.** Descriptions, comments
+and attachment filenames are dimmed and nothing else. Painting them the way the
+tool paints its own output would let an issue's text impersonate the tool
+talking, which is the confusion the fence exists to prevent.
 
 ## The ladder
 

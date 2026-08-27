@@ -14,6 +14,7 @@ use crate::api::{Client, ClientConfig};
 use crate::cli::{Session, emit, guidance, report, wizard};
 use crate::config::{OrgKind, Profile, store};
 use crate::exit::ExitCode;
+use crate::render::style::{Painter, Palette, prose};
 use crate::secrets;
 
 #[derive(Debug, Subcommand)]
@@ -85,6 +86,15 @@ pub async fn run(command: &AuthCommand, session: &Session) -> ExitCode {
     }
 }
 
+/// Colour for stderr, which is where guidance and progress go.
+///
+/// Judged separately from stdout: one of the two is often a pipe while the other
+/// is still a terminal.
+fn stderr_painter() -> Painter {
+    use std::io::IsTerminal;
+    Painter::for_stream(std::io::stderr().is_terminal())
+}
+
 /// Report on the configured profiles.
 ///
 /// This is the command someone runs when something is wrong, so it answers the
@@ -98,10 +108,11 @@ pub async fn run(command: &AuthCommand, session: &Session) -> ExitCode {
 async fn status(session: &Session, brief: bool, active_only: bool) -> ExitCode {
     let mut out = anstream::stdout();
     let mut err = anstream::stderr();
+    let paint = session.render.painter();
 
     if session.config.profiles.is_empty() {
         let _ = writeln!(err, "no profiles configured yet.\n");
-        let _ = writeln!(err, "{}", guidance::full());
+        let _ = writeln!(err, "{}", prose(&guidance::full(), stderr_painter()));
         let _ = writeln!(
             err,
             "Then: ytcli auth login --account <name> --org-id <id> [--queue <QUEUE>]"
@@ -135,17 +146,27 @@ async fn status(session: &Session, brief: bool, active_only: bool) -> ExitCode {
         };
         let marks = if is_active { "  [active]" } else { "" };
 
-        let _ = writeln!(out, "profile {name}{source}{marks}");
         let _ = writeln!(
             out,
-            "  account: {}   org: {} ({:?})   queue: {}",
+            "{} {}{}{}",
+            paint.paint("profile", Palette::label()),
+            paint.paint(name, Palette::key()),
+            paint.paint(&source, Palette::label()),
+            paint.paint(marks, Palette::ok()),
+        );
+        let _ = writeln!(
+            out,
+            "  {} {}   {} {} ({:?})   {} {}",
+            paint.paint("account:", Palette::label()),
             profile.account,
+            paint.paint("org:", Palette::label()),
             profile.org_id,
             profile.org_kind,
+            paint.paint("queue:", Palette::label()),
             profile.default_queue.as_deref().unwrap_or("-"),
         );
 
-        let code = report_profile(profile, brief, &mut out, &mut err).await;
+        let code = report_profile(profile, brief, paint, &mut out, &mut err).await;
         if code == ExitCode::Success {
             any_success = true;
         } else {
@@ -168,13 +189,19 @@ async fn status(session: &Session, brief: bool, active_only: bool) -> ExitCode {
 async fn report_profile(
     profile: &crate::config::Profile,
     brief: bool,
+    paint: Painter,
     out: &mut impl std::io::Write,
     err: &mut impl std::io::Write,
 ) -> ExitCode {
     let token = match secrets::token(&profile.account) {
         Ok(token) => token,
         Err(error) => {
-            let _ = writeln!(out, "  token: missing");
+            let _ = writeln!(
+                out,
+                "  {} {}",
+                paint.paint("token:", Palette::label()),
+                paint.paint("missing", Palette::bad())
+            );
             let _ = writeln!(err, "  {error}");
             return ExitCode::Auth;
         }
@@ -196,7 +223,10 @@ async fn report_profile(
         Ok(user) => {
             let _ = writeln!(
                 out,
-                "  token: ok   user: {}{}",
+                "  {} {}   {} {}{}",
+                paint.paint("token:", Palette::label()),
+                paint.paint("ok", Palette::ok()),
+                paint.paint("user:", Palette::label()),
                 user.login.as_deref().unwrap_or(&user.id),
                 user.display
                     .as_deref()
@@ -204,10 +234,15 @@ async fn report_profile(
             );
         }
         Err(error) => {
-            let _ = writeln!(out, "  token: rejected");
+            let _ = writeln!(
+                out,
+                "  {} {}",
+                paint.paint("token:", Palette::label()),
+                paint.paint("rejected", Palette::bad())
+            );
             let _ = writeln!(err, "  {error}");
             if matches!(error, crate::api::error::ApiError::Unauthorized) {
-                let _ = writeln!(err, "\n{}", guidance::TOKEN);
+                let _ = writeln!(err, "\n{}", prose(guidance::TOKEN, stderr_painter()));
             }
             return error.exit_code();
         }
@@ -217,8 +252,15 @@ async fn report_profile(
         return ExitCode::Success;
     }
 
-    // Each of these is best-effort: a profile without access to projects should
-    // still report its queues rather than failing the whole line.
+    reach(&client, paint, out).await;
+    ExitCode::Success
+}
+
+/// What this profile can actually see.
+///
+/// Every lookup is best-effort: a profile without access to projects should
+/// still report its queues rather than losing the whole line.
+async fn reach(client: &Client, paint: Painter, out: &mut impl std::io::Write) {
     let queues = client.queues().await.ok();
     let projects = client.entities("project", None, 1, 5).await.ok();
     let goals = client.entities("goal", None, 1, 1).await.ok();
@@ -229,12 +271,16 @@ async fn report_profile(
 
     let _ = writeln!(
         out,
-        "  queues: {}   projects: {}   goals: {}   my open issues: {}",
+        "  {} {}   {} {}   {} {}   {} {}",
+        paint.paint("queues:", Palette::label()),
         queues
             .as_ref()
             .map_or_else(|| "-".to_owned(), |queues| queues.len().to_string()),
+        paint.paint("projects:", Palette::label()),
         projects.as_ref().map_or_else(|| "-".to_owned(), count_of),
+        paint.paint("goals:", Palette::label()),
         goals.as_ref().map_or_else(|| "-".to_owned(), count_of),
+        paint.paint("my open issues:", Palette::label()),
         mine.map_or_else(|| "-".to_owned(), |count| count.to_string()),
     );
 
@@ -258,7 +304,12 @@ async fn report_profile(
         } else {
             String::new()
         };
-        let _ = writeln!(out, "  projects: {}{suffix}", names.join(", "));
+        let _ = writeln!(
+            out,
+            "  {} {}{suffix}",
+            paint.paint("projects:", Palette::label()),
+            names.join(", ")
+        );
     }
 
     if let Some(queues) = queues.filter(|queues| !queues.is_empty()) {
@@ -273,10 +324,13 @@ async fn report_profile(
         } else {
             String::new()
         };
-        let _ = writeln!(out, "  queues: {}{suffix}", keys.join(", "));
+        let _ = writeln!(
+            out,
+            "  {} {}{suffix}",
+            paint.paint("queues:", Palette::label()),
+            keys.join(", ")
+        );
     }
-
-    ExitCode::Success
 }
 
 fn count_of<T>(page: &crate::api::models::Page<T>) -> String {
@@ -321,7 +375,7 @@ async fn login(args: &LoginArgs, session: &Session) -> ExitCode {
             err,
             "no --org-id given, so no profile was written and nothing can be queried yet.\n"
         );
-        let _ = writeln!(err, "{}", guidance::ORG);
+        let _ = writeln!(err, "{}", prose(guidance::ORG, stderr_painter()));
         let _ = writeln!(
             err,
             "\nThen: ytcli auth login --account {account} --org-id <id> [--queue <QUEUE>]"
@@ -582,7 +636,7 @@ async fn verify(
                 let code = error.exit_code();
                 let reported = report(&error, code);
                 let mut err = anstream::stderr();
-                let _ = writeln!(err, "\n{}", guidance::TOKEN);
+                let _ = writeln!(err, "\n{}", prose(guidance::TOKEN, stderr_painter()));
                 return Err(reported);
             }
             Err(error) => last = Some(error),
@@ -596,7 +650,7 @@ async fn verify(
         code,
     );
     let mut err = anstream::stderr();
-    let _ = writeln!(err, "\n{}", guidance::ORG);
+    let _ = writeln!(err, "\n{}", prose(guidance::ORG, stderr_painter()));
     Err(reported)
 }
 

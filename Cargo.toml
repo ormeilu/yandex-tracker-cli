@@ -16,6 +16,7 @@ exclude = ["/.github", "/docs", "/tests/fixtures"]
 
 [dependencies]
 anstream = "1.0.0"
+anstyle = "1.0.14"
 anyhow = "1.0.104"
 backon = "1.6.0"
 clap = { version = "4.6.6", features = ["derive", "env", "wrap_help"] }

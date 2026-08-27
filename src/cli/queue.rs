@@ -26,14 +26,18 @@ pub async fn run(command: &QueueCommand, session: &Session) -> ExitCode {
 
     match command {
         QueueCommand::List => match client.queues().await {
-            Ok(queues) => render(&queues, session, queue::queues),
+            Ok(queues) => render(&queues, session, |queues| {
+                queue::queues(queues, &session.render)
+            }),
             Err(error) => {
                 let code = error.exit_code();
                 report(&error, code)
             }
         },
         QueueCommand::Fields { key } => match client.queue_fields(key).await {
-            Ok(fields) => render(&fields, session, queue::fields),
+            Ok(fields) => render(&fields, session, |fields| {
+                queue::fields(fields, &session.render)
+            }),
             Err(error) => {
                 let code = error.exit_code();
                 report(&error, code)
