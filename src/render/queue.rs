@@ -5,43 +5,30 @@ use std::fmt::Write as _;
 use crate::api::{Queue, QueueField};
 use crate::render::Context;
 use crate::render::style::Palette;
+use crate::render::table::{Column, render, tally};
 
 /// One line per queue: key first, because the key is what every other command
 /// takes.
 #[must_use]
 pub fn queues(queues: &[Queue], ctx: &Context) -> String {
-    let mut out = String::with_capacity(queues.len() * 48 + 32);
-    let paint = ctx.painter();
+    let columns = [
+        Column::whole("KEY", 12, Palette::key()),
+        Column::whole("NAME", 28, anstyle::Style::new()),
+        Column::whole("LEAD", 20, anstyle::Style::new()),
+    ];
+    let rows: Vec<Vec<String>> = queues
+        .iter()
+        .map(|queue| {
+            vec![
+                queue.key.clone(),
+                queue.name.clone(),
+                queue.lead.as_deref().unwrap_or("-").to_owned(),
+            ]
+        })
+        .collect();
 
-    if ctx.is_human() && !queues.is_empty() {
-        let _ = writeln!(
-            out,
-            "{}",
-            paint.paint(
-                &format!("{:<12} {:<28} {}", "KEY", "NAME", "LEAD"),
-                Palette::label()
-            )
-        );
-    }
-
-    for queue in queues {
-        let _ = writeln!(
-            out,
-            "{} {:<28} {}",
-            paint.paint_padded(&queue.key, 12, Palette::key()),
-            queue.name,
-            queue.lead.as_deref().unwrap_or("-"),
-        );
-    }
-
-    let _ = writeln!(
-        out,
-        "{}",
-        paint.paint(
-            &format!("shown {} of {}", queues.len(), queues.len()),
-            Palette::label()
-        )
-    );
+    let mut out = render(&columns, &rows, ctx);
+    out.push_str(&tally(queues.len(), Some(queues.len() as u64), None, ctx));
     out
 }
 
@@ -53,39 +40,36 @@ pub fn queues(queues: &[Queue], ctx: &Context) -> String {
 /// therefore the ones worth pinning in a profile.
 #[must_use]
 pub fn fields(fields: &[QueueField], ctx: &Context) -> String {
-    let mut out = String::with_capacity(fields.len() * 56 + 32);
-    let paint = ctx.painter();
-
-    if ctx.is_human() && !fields.is_empty() {
-        let _ = writeln!(
-            out,
-            "{}",
-            paint.paint(
-                &format!("{:<28} {:<12} {:<8} {}", "KEY", "TYPE", "ORIGIN", "NAME"),
-                Palette::label()
-            )
-        );
-    }
-
-    for field in fields {
+    let columns = [
+        Column::whole("KEY", 28, Palette::key()),
+        Column::whole("TYPE", 12, anstyle::Style::new()),
         // Custom fields are the reason to run this command, so they are the ones
         // that stand out.
-        let origin = if field.system {
-            paint.paint_padded("system", 8, Palette::label())
-        } else {
-            paint.paint_padded("custom", 8, Palette::warn())
-        };
-        let _ = writeln!(
-            out,
-            "{} {:<12} {} {}",
-            paint.paint_padded(&field.key, 28, Palette::key()),
-            field.field_type,
-            origin,
-            field.name,
-        );
-    }
+        Column::by_value("ORIGIN", 8, |origin| {
+            if origin == "custom" {
+                Palette::warn()
+            } else {
+                Palette::label()
+            }
+        }),
+        Column::whole("NAME", 30, anstyle::Style::new()),
+    ];
+    let rows: Vec<Vec<String>> = fields
+        .iter()
+        .map(|field| {
+            vec![
+                field.key.clone(),
+                field.field_type.clone(),
+                if field.system { "system" } else { "custom" }.to_owned(),
+                field.name.clone(),
+            ]
+        })
+        .collect();
+
+    let mut out = render(&columns, &rows, ctx);
 
     let custom = fields.iter().filter(|field| !field.system).count();
+    let paint = ctx.painter();
     let _ = writeln!(
         out,
         "{}",

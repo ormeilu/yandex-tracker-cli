@@ -9,6 +9,7 @@ use std::fmt::Write as _;
 
 use crate::api::models::{Comment, Issue, Link, Page, User};
 use crate::render::style::Palette;
+use crate::render::table::Column;
 use crate::render::{Context, untrusted};
 
 fn who(user: Option<&User>) -> &str {
@@ -387,100 +388,61 @@ fn field_value(issue: &Issue, field: &str) -> String {
     }
 }
 
-/// Render a page of issues as fixed-width columns plus an explicit tally.
+/// Render a page of issues.
 ///
-/// The tally is not decoration. Without it a caller that receives 25 rows cannot
-/// tell a complete answer from a truncated one, and "there are no open issues"
-/// is a worse failure than a few wasted tokens.
+/// The tally that follows is not decoration. Without it a caller that receives
+/// 25 rows cannot tell a complete answer from a truncated one, and "there are no
+/// open issues" is a worse failure than a few wasted tokens.
 #[must_use]
 pub fn issue_page(page: &Page<Issue>, ctx: &Context) -> String {
-    let mut out = String::with_capacity(page.items.len() * 80 + 64);
-    let paint = ctx.painter();
+    let columns = [
+        Column::whole("KEY", 12, Palette::key()),
+        Column::by_value("STATUS", 14, status_style),
+        Column::new("ASSIGNEE", 14, anstyle::Style::new()),
+        Column::new("SUMMARY", 60, anstyle::Style::new()),
+    ];
+    let rows: Vec<Vec<String>> = page
+        .items
+        .iter()
+        .map(|issue| {
+            vec![
+                issue.key.clone(),
+                or_dash(issue.status.as_ref()).to_owned(),
+                who(issue.assignee.as_ref()).to_owned(),
+                issue.summary.clone(),
+            ]
+        })
+        .collect();
 
-    // A header helps a person and costs a machine a line it did not ask for, so
-    // it appears only for the terminal — the rows are identical either way.
-    if ctx.is_human() && !page.items.is_empty() {
-        let _ = writeln!(
-            out,
-            "{}",
-            paint.paint(
-                &format!(
-                    "{:<12} {:<14} {:<14} {}",
-                    "KEY", "STATUS", "ASSIGNEE", "SUMMARY"
-                ),
-                Palette::label()
-            )
-        );
-    }
-
-    for issue in &page.items {
-        let _ = writeln!(
-            out,
-            "{} {} {} {}",
-            paint.paint_padded(&issue.key, 12, Palette::key()),
-            padded(
-                &status_painted(issue.status.as_deref(), ctx),
-                or_dash(issue.status.as_ref()),
-                14
-            ),
-            format_args!("{:<14}", truncate(who(issue.assignee.as_ref()), 14)),
-            truncate(&issue.summary, 60),
-        );
-    }
-
-    let shown = page.items.len();
-    let tally = match page.total {
-        Some(total) => format!("shown {shown} of {total}"),
-        None => format!("shown {shown} of unknown total"),
-    };
-    let _ = write!(out, "{}", paint.paint(&tally, Palette::label()));
-
-    if page.has_more() {
-        let _ = write!(
-            out,
-            "{}",
-            paint.paint(
-                &format!(" — next: --page {}", page.page + 1),
-                Palette::warn()
-            )
-        );
-    }
-    out.push('\n');
-
+    let mut out = crate::render::table::render(&columns, &rows, ctx);
+    out.push_str(&crate::render::table::tally(
+        page.items.len(),
+        page.total,
+        page.has_more().then_some(page.page + 1),
+        ctx,
+    ));
     out
 }
 
-/// Pad an already-styled string to the visible width of its plain form.
-fn padded(styled: &str, plain: &str, width: usize) -> String {
-    let truncated = truncate(plain, width);
-    let padding = width.saturating_sub(truncated.chars().count());
-    if styled.contains('\u{1b}') {
-        format!("{styled}{}", " ".repeat(padding))
-    } else {
-        format!("{truncated}{}", " ".repeat(padding))
-    }
-}
-
 /// Colour a status by what it means, not by its name: Tracker lets every queue
-/// invent its own, so the mapping is on the few well-known keys and everything
+/// invent its own, so the mapping is on the few well-known words and everything
 /// else stays unpainted rather than guessed at.
-fn status_painted(status: Option<&str>, ctx: &Context) -> String {
-    let paint = ctx.painter();
-    let Some(status) = status else {
-        return "-".to_owned();
-    };
-
+fn status_style(status: &str) -> anstyle::Style {
     let lower = status.to_ascii_lowercase();
-    let style = if lower.contains("closed") || lower.contains("resolved") || lower.contains("done")
-    {
+    if lower.contains("closed") || lower.contains("resolved") || lower.contains("done") {
         Palette::ok()
     } else if lower.contains("progress") || lower.contains("review") || lower.contains("test") {
         Palette::warn()
     } else {
-        return status.to_owned();
-    };
+        anstyle::Style::new()
+    }
+}
 
-    paint.paint(status, style)
+fn status_painted(status: Option<&str>, ctx: &Context) -> String {
+    let Some(status) = status else {
+        return "-".to_owned();
+    };
+    ctx.painter().paint(status, status_style(status))
 }
 
 /// Critical and blocker are worth noticing; the rest are not worth a colour.
@@ -498,22 +460,6 @@ fn priority_painted(priority: Option<&str>, ctx: &Context) -> String {
     }
 }
 
-fn truncate(value: &str, width: usize) -> String {
-    if value.chars().count() <= width {
-        return value.to_owned();
-    }
-    let mut kept: String = value.chars().take(width.saturating_sub(1)).collect();
-    kept.push('…');
-    kept
-}
-
-/// One custom field value, as a person or a model would say it.
-///
-/// Tracker returns references as objects — `{"display": "Platform: backend",
-/// "id": "6", "self": "https://…"}` — and printing them verbatim buries one
-/// readable word under sixty of plumbing. The `display` string is what the
-/// field means; the id and the self link are reachable through `--format json`
-/// by anyone who needs them.
 fn compact_value(value: &serde_json::Value) -> String {
     match value {
         serde_json::Value::String(s) => s.clone(),

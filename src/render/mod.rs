@@ -16,6 +16,7 @@ pub mod entity;
 pub mod markdown;
 pub mod queue;
 pub mod style;
+pub mod table;
 pub mod text;
 pub mod untrusted;
 

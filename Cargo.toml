@@ -37,7 +37,9 @@ reqwest = { version = "0.13.4", default-features = false, features = ["json", "c
 rpassword = "7.5.4"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
-tabled = "0.21.0"
+# `ansi` so column widths count characters, not escape bytes; no derive, since
+# the rows are built by hand.
+tabled = { version = "0.21.0", default-features = false, features = ["std", "ansi"] }
 termimad = "0.35.2"
 thiserror = "2.0.20"
 tokio = { version = "1.53.1", features = ["rt", "macros", "fs", "time"] }

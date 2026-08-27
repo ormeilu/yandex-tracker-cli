@@ -5,6 +5,7 @@ use std::fmt::Write as _;
 use crate::api::models::{Attachment, Entity, Page};
 use crate::render::Context;
 use crate::render::style::Palette;
+use crate::render::table::{Column, render, tally};
 
 /// A listing of projects or goals.
 ///
@@ -13,55 +14,34 @@ use crate::render::style::Palette;
 /// Printing only one of them guarantees somebody uses the wrong one.
 #[must_use]
 pub fn entities(page: &Page<Entity>, ctx: &Context) -> String {
-    let mut out = String::with_capacity(page.items.len() * 72 + 32);
-    let paint = ctx.painter();
-
-    if ctx.is_human() && !page.items.is_empty() {
-        let _ = writeln!(
-            out,
-            "{}",
-            paint.paint(
-                &format!("{:<8} {:<26} {:<14} {}", "SHORT", "ID", "STATUS", "SUMMARY"),
-                Palette::label()
-            )
-        );
-    }
-
-    for entity in &page.items {
-        let _ = writeln!(
-            out,
-            "{} {} {:<14} {}",
-            paint.paint_padded(
-                &entity
+    let columns = [
+        Column::whole("SHORT", 8, Palette::key()),
+        Column::new("ID", 26, Palette::label()),
+        Column::new("STATUS", 14, anstyle::Style::new()),
+        Column::new("SUMMARY", 50, anstyle::Style::new()),
+    ];
+    let rows: Vec<Vec<String>> = page
+        .items
+        .iter()
+        .map(|entity| {
+            vec![
+                entity
                     .short_id
                     .map_or_else(|| "-".to_owned(), |id| id.to_string()),
-                8,
-                Palette::key()
-            ),
-            paint.paint_padded(&truncate(&entity.id, 26), 26, Palette::label()),
-            truncate(entity.status.as_deref().unwrap_or("-"), 14),
-            truncate(&entity.summary, 50),
-        );
-    }
+                entity.id.clone(),
+                entity.status.as_deref().unwrap_or("-").to_owned(),
+                entity.summary.clone(),
+            ]
+        })
+        .collect();
 
-    let shown = page.items.len();
-    let tally = match page.total {
-        Some(total) => format!("shown {shown} of {total}"),
-        None => format!("shown {shown} of unknown total"),
-    };
-    let _ = write!(out, "{}", paint.paint(&tally, Palette::label()));
-
-    if page.has_more() {
-        let _ = write!(
-            out,
-            "{}",
-            paint.paint(
-                &format!(" — next: --page {}", page.page + 1),
-                Palette::warn()
-            )
-        );
-    }
-    out.push('\n');
+    let mut out = render(&columns, &rows, ctx);
+    out.push_str(&tally(
+        page.items.len(),
+        page.total,
+        page.has_more().then_some(page.page + 1),
+        ctx,
+    ));
     out
 }
 
@@ -122,37 +102,30 @@ pub fn entity(entity: &Entity, ctx: &Context) -> String {
 
 /// Attachments of an issue.
 ///
-/// The filename was chosen by whoever uploaded it, so it is fenced: a name can
-/// carry as much text as a comment can.
+/// The filename was chosen by whoever uploaded it, so it does not get the
+/// styling our own output uses: a name carries as much text as a comment can.
 #[must_use]
 pub fn attachments(key: &str, attachments: &[Attachment], ctx: &Context) -> String {
-    let mut out = String::with_capacity(attachments.len() * 72 + 32);
+    let columns = [
+        Column::whole("ID", 14, Palette::key()),
+        Column::whole("SIZE", 10, anstyle::Style::new()),
+        Column::new("TYPE", 18, anstyle::Style::new()),
+        Column::whole("NAME", 40, Palette::untrusted()),
+    ];
+    let rows: Vec<Vec<String>> = attachments
+        .iter()
+        .map(|attachment| {
+            vec![
+                attachment.id.clone(),
+                attachment.size.map_or_else(|| "-".to_owned(), human_size),
+                attachment.mimetype.as_deref().unwrap_or("-").to_owned(),
+                attachment.name.clone(),
+            ]
+        })
+        .collect();
+
+    let mut out = render(&columns, &rows, ctx);
     let paint = ctx.painter();
-
-    if ctx.is_human() && !attachments.is_empty() {
-        let _ = writeln!(
-            out,
-            "{}",
-            paint.paint(
-                &format!("{:<14} {:<10} {:<18} {}", "ID", "SIZE", "TYPE", "NAME"),
-                Palette::label()
-            )
-        );
-    }
-
-    for attachment in attachments {
-        let _ = writeln!(
-            out,
-            "{} {:<10} {:<18} {}",
-            paint.paint_padded(&attachment.id, 14, Palette::key()),
-            attachment.size.map_or_else(|| "-".to_owned(), human_size),
-            truncate(attachment.mimetype.as_deref().unwrap_or("-"), 18),
-            // The filename was chosen by whoever uploaded it, so it does not get
-            // the styling our own output uses.
-            paint.paint(&attachment.name, Palette::untrusted()),
-        );
-    }
-
     let _ = writeln!(
         out,
         "{}",
@@ -184,15 +157,6 @@ fn human_size(bytes: u64) -> String {
     } else {
         format!("{size:.1} {}", UNITS[unit])
     }
-}
-
-fn truncate(value: &str, width: usize) -> String {
-    if value.chars().count() <= width {
-        return value.to_owned();
-    }
-    let mut kept: String = value.chars().take(width.saturating_sub(1)).collect();
-    kept.push('…');
-    kept
 }
 
 #[cfg(test)]
