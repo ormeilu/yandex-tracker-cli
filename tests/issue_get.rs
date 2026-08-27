@@ -279,3 +279,49 @@ async fn a_collision_with_a_deleted_profile_stops_mattering() {
 
     harness.run(&["issue", "get", "PROJ-1"]).assert().success();
 }
+
+/// The cost promise: drawing images must not make the cheap path more
+/// expensive. Without a terminal that can draw, the attachments are not
+/// fetched, so the view still costs the two requests it always cost.
+#[tokio::test]
+async fn a_pipe_never_pays_for_the_images_it_cannot_see() {
+    let harness = Harness::new().await;
+    issue_available(&harness).await;
+
+    harness.run(&["issue", "get", "PROJ-1"]).assert().success();
+
+    let paths: Vec<String> = harness
+        .server
+        .received_requests()
+        .await
+        .expect("recorded")
+        .iter()
+        .map(|request| request.url.path().to_owned())
+        .collect();
+
+    assert_eq!(
+        paths,
+        vec!["/v3/issues/PROJ-1", "/v3/issues/PROJ-1/links"],
+        "the issue view asked for something it cannot show"
+    );
+}
+
+/// The flag exists to be usable everywhere the images are, and turning them off
+/// must not disturb anything else in the view.
+#[tokio::test]
+async fn no_images_changes_nothing_else_about_the_output() {
+    let harness = Harness::new().await;
+    issue_available(&harness).await;
+
+    let plain = harness.run(&["issue", "get", "PROJ-1"]).assert().success();
+    let without = harness
+        .run(&["issue", "get", "PROJ-1", "--no-images"])
+        .assert()
+        .success();
+
+    assert_eq!(
+        plain.get_output().stdout,
+        without.get_output().stdout,
+        "--no-images altered output that has no images in it"
+    );
+}

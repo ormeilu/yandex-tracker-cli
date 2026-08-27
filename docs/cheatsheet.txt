@@ -7,6 +7,7 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
       --full                            print the whole description, not the first lines
       --yes                             confirm a change that touches more than one issue
       --dry-run                         show what would change, send nothing
+      --no-images                       never draw image attachments inline
   -v, -vv                               logs to stderr; stdout stays pipeable
   Exit codes: 0 ok, 1 error, 2 confirmation required, 3 auth, 4 not found, 5 rejected.
   Read verbs (get/find/count/list/status/show) never write. There is no pass-through verb.
@@ -26,7 +27,8 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   An account holds one credential. A profile is an organisation seen through an account.
 
 ## issue
-  ytcli issue get PROJ-1                summary, fields, links, first 10 description lines
+  ytcli issue get PROJ-1                summary, fields, links, first 10 description lines;
+                                        image attachments drawn where the terminal can
   ytcli issue get work/PROJ-1           same, against the `work` profile. Always accepted;
                                         required only when two profiles share the queue key,
                                         in which case the bare form is refused, not guessed

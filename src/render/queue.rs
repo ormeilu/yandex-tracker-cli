@@ -97,6 +97,7 @@ mod tests {
             description_lines: Some(10),
             extra_fields: Vec::new(),
             width: 80,
+            images: false,
         }
     }
 

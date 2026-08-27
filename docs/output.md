@@ -104,8 +104,16 @@ because reflowed prose is not what a caller diffing output asked for.
 
 ## Images
 
-`ytcli attachment show PROJ-1 29` draws an image attachment in Kitty, Ghostty,
-WezTerm and iTerm2.
+`ytcli issue get PROJ-1` draws the issue's image attachments under it, and
+`ytcli attachment show PROJ-1 29` draws one on its own. Kitty, Ghostty, WezTerm
+and iTerm2.
+
+The issue view draws four and names the rest: a screenshot is worth the space,
+six of them are a wall between the reader and the next command. None of it costs
+anything where it cannot be used — a pipe, an agent, `--format json`, a terminal
+without a graphics protocol, or `--no-images` — because the attachments are not
+requested at all in those cases. `images = false` in a profile's display block
+turns it off permanently.
 
 Support is decided by what the terminal exports about itself — `TERM` set to
 `xterm-kitty` or `xterm-ghostty`, `TERM_PROGRAM`, or the terminal's own

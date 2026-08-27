@@ -93,6 +93,9 @@ pub struct Context {
     /// Columns available for wrapped prose. Fixed for machine output, so a pipe
     /// gets the same bytes whatever the window happens to be.
     pub width: usize,
+    /// Whether image attachments may be drawn inline. Says nothing about whether
+    /// the terminal can: that is [`image::protocol`].
+    pub images: bool,
 }
 
 impl Context {

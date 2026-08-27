@@ -11,7 +11,7 @@ use crate::api::query::Filter;
 use crate::cli::write::{Gate, Intent, check, parse_assignment};
 use crate::cli::{Session, emit, report};
 use crate::exit::ExitCode;
-use crate::render::{Format, machine, text};
+use crate::render::{Format, image, machine, text};
 
 #[derive(Debug, Subcommand)]
 pub enum IssueCommand {
@@ -187,9 +187,89 @@ async fn get(target: &str, fields: &[String], session: &Session) -> ExitCode {
     match rendered {
         Ok(text) => {
             emit(&text);
+            draw_images(&client, key, session).await;
             ExitCode::Success
         }
         Err(error) => report(&error, ExitCode::Failure),
+    }
+}
+
+/// How many images an issue view draws before it stops and names the rest.
+///
+/// A screenshot is worth the space; six of them are a wall between the reader
+/// and the next command. The rest are one `attachment show` away.
+const IMAGES_SHOWN: usize = 4;
+
+/// Draw the issue's image attachments under it, in a terminal that can.
+///
+/// Nothing here happens for a pipe, an agent, a `--format` other than text, a
+/// terminal without a graphics protocol, or `--no-images`: in every one of those
+/// cases the attachments are not even fetched, so the issue view costs exactly
+/// what it did before. That is the point — this must not make the cheap path
+/// more expensive.
+///
+/// Failures are logged and swallowed. The caller asked for an issue and already
+/// has it; losing a picture is a smaller loss than replacing the issue with an
+/// error about one.
+async fn draw_images(client: &crate::api::Client, key: &str, session: &Session) {
+    let ctx = &session.render;
+    if !ctx.images || !ctx.is_human() || ctx.format != Format::Text {
+        return;
+    }
+    let Some(protocol) = image::protocol() else {
+        return;
+    };
+
+    let attachments = match client.attachments(key).await {
+        Ok(attachments) => attachments,
+        Err(error) => {
+            tracing::warn!(%error, "could not fetch attachments");
+            return;
+        }
+    };
+
+    // The declared type decides what is worth downloading; the bytes decide
+    // what is actually drawn. Trusting the declaration alone would fetch a
+    // 40 MB video that claimed to be a PNG.
+    let images: Vec<_> = attachments
+        .iter()
+        .filter(|attachment| {
+            attachment
+                .mimetype
+                .as_deref()
+                .is_some_and(|kind| kind.starts_with("image/"))
+        })
+        .collect();
+
+    for attachment in images.iter().take(IMAGES_SHOWN) {
+        let Some(url) = attachment.content.as_deref() else {
+            continue;
+        };
+        let bytes = match client.download(url).await {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                tracing::warn!(%error, id = attachment.id, "could not download attachment");
+                continue;
+            }
+        };
+        let Some(kind) = image::Kind::of(&bytes) else {
+            continue;
+        };
+        if !protocol.carries(kind) {
+            continue;
+        }
+
+        // The name is above the picture, because a picture with no caption in a
+        // list of four is a picture nobody can refer to afterwards.
+        emit(&format!("{}\n", attachment.name));
+        emit(&image::draw(protocol, &bytes, &attachment.name));
+    }
+
+    if images.len() > IMAGES_SHOWN {
+        emit(&format!(
+            "{} more image(s): ytcli attachment show {key} <id>\n",
+            images.len() - IMAGES_SHOWN
+        ));
     }
 }
 

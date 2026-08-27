@@ -76,6 +76,12 @@ pub struct Display {
     pub extra_fields: Vec<String>,
     /// Output format when stdout is not a terminal.
     pub format: OutputFormat,
+    /// Draw image attachments inline where the terminal can draw them.
+    ///
+    /// On by default: a screenshot is usually the most informative thing on a
+    /// bug, and this costs nothing anywhere it cannot be used — no terminal that
+    /// draws means no request for the attachments in the first place.
+    pub images: bool,
 }
 
 impl Default for Display {
@@ -87,6 +93,7 @@ impl Default for Display {
             description_lines_human: None,
             extra_fields: Vec::new(),
             format: OutputFormat::Text,
+            images: true,
         }
     }
 }
@@ -231,5 +238,29 @@ impl Config {
             profile,
             source,
         })
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use figment::providers::Format as _;
+
+    use super::*;
+
+    /// A screenshot is usually the most informative thing on a bug, so the
+    /// default is to show it. Turning it off is a profile's decision.
+    #[test]
+    fn images_are_on_by_default_and_can_be_turned_off() {
+        assert!(Display::default().images);
+
+        let display: Display = figment::Figment::new()
+            .merge(figment::providers::Toml::string("images = false"))
+            .extract()
+            .expect("parses");
+        assert!(!display.images);
+
+        // And the rest of the defaults survive naming only one of them.
+        assert_eq!(display.limit, Display::default().limit);
     }
 }

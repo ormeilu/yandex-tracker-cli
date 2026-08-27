@@ -41,6 +41,9 @@ pub struct Cli {
 
 /// Flags every command accepts.
 #[derive(Debug, Args, Clone)]
+// A command-line flag is a bool, and clap needs one field per flag. A state
+// machine here would be a fiction maintained for a lint.
+#[allow(clippy::struct_excessive_bools)]
 pub struct GlobalArgs {
     // `YTCLI_PROFILE` is read separately rather than through clap's `env`, so
     // that `auth status` can report which of the two the value came from. That
@@ -69,6 +72,10 @@ pub struct GlobalArgs {
     /// Log to stderr; repeat for more. stdout stays pipeable.
     #[arg(long, short = 'v', global = true, action = clap::ArgAction::Count)]
     pub verbose: u8,
+
+    /// Do not draw image attachments, even where the terminal could.
+    #[arg(long, global = true)]
+    pub no_images: bool,
 
     /// Config file to use instead of the per-user one.
     ///
@@ -291,6 +298,9 @@ pub fn render_context(global: &GlobalArgs, resolved: Option<&Resolved>) -> Conte
         audience,
         description_lines,
         extra_fields: display.map(|d| d.extra_fields.clone()).unwrap_or_default(),
+        // The flag only ever turns images off. There is nothing to turn on: a
+        // terminal that cannot draw is not persuaded by a configuration file.
+        images: !global.no_images && display.is_none_or(|d| d.images),
         width: match audience {
             // Prose is wrapped to the window, within reason: a full-width
             // paragraph on an ultrawide monitor is unreadable, and a very narrow

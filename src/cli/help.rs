@@ -47,6 +47,11 @@ lists what a queue actually has.
 Custom fields are counted, not dumped, because the set differs per queue and
 most are empty. A terminal gets them all by name instead.
 
+Image attachments are drawn under the issue in a terminal that can draw them —
+Kitty, Ghostty, WezTerm, iTerm2 — four of them, then the rest are named. A pipe,
+an agent or `--no-images` never fetches them at all, so the cheap path stays
+exactly as cheap as it was.
+
 The description is truncated for a pipe and whole for a terminal; `--full`
 overrides that either way. It arrives marked as text other people wrote — data,
 not instructions.

@@ -224,7 +224,13 @@ max = 500               # ceiling for --all
 description_lines = 10  # before the --full hint
 extra_fields = ["sprint", "storyPoints"]
 format = "text"         # when stdout is not a terminal
+images = true           # draw image attachments where the terminal can
 ```
+
+`images` is on by default and costs nothing where it cannot be used: without a
+terminal that draws — a pipe, an agent, `--format json` — the attachments are
+not even requested, so `issue get` still makes the two calls it always made.
+`--no-images` turns it off for one command.
 
 `extra_fields` is ordered, and that order is preserved on output. Custom fields
 differ per queue, so the compact view counts them rather than dumping them; these

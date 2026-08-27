@@ -233,6 +233,7 @@ mod tests {
             description_lines: None,
             extra_fields: Vec::new(),
             width: 80,
+            images: false,
         }
     }
 

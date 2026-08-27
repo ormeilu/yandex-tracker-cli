@@ -492,6 +492,7 @@ mod tests {
             description_lines: Some(2),
             extra_fields: vec!["storyPoints".to_owned()],
             width: 80,
+            images: false,
         }
     }
 
