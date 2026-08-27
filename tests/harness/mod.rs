@@ -61,12 +61,21 @@ impl Harness {
     }
 
     /// The binary, pointed at the stub and given a token the way CI would.
+    ///
+    /// `--profile` is passed explicitly rather than left to resolution, so a
+    /// developer's own config cannot change what a test sees. Commands that take
+    /// their own `--profile` (login) call [`Self::run_raw`] instead.
     pub fn run(&self, args: &[&str]) -> Command {
+        let mut command = self.run_raw(args);
+        command.arg("--profile").arg("test");
+        command
+    }
+
+    /// The binary with no profile flag of ours.
+    pub fn run_raw(&self, args: &[&str]) -> Command {
         let mut command = Command::cargo_bin("ytcli").expect("binary built");
         command
             .args(args)
-            .arg("--profile")
-            .arg("test")
             .arg("--config")
             .arg(&self.config)
             .env("YTCLI_BASE_URL", self.server.uri())

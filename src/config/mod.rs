@@ -10,6 +10,7 @@
 //! That is why the token is keyed by account and never by profile.
 
 pub mod paths;
+pub mod store;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -22,8 +23,9 @@ use crate::render::Format as OutputFormat;
 
 /// Which header carries the organisation id. Sending the wrong one is a 403,
 /// so it is a profile-level decision rather than something we probe at runtime.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "kebab-case")]
+#[value(rename_all = "kebab-case")]
 pub enum OrgKind {
     /// Yandex Cloud Organization — `X-Cloud-Org-Id`.
     Cloud,

@@ -85,6 +85,7 @@ fn build_session(global: &GlobalArgs) -> Result<Session, ExitCode> {
         render: render_context(global, resolved.as_ref()),
         resolved,
         config,
+        config_file,
         global: global.clone(),
     })
 }

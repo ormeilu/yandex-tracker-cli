@@ -31,14 +31,22 @@ an account. One login can reach several organisations, and one organisation can
 be reached through several logins.
 
 ```bash
-ytcli auth login --account work
+ytcli auth login --account work --org-id 12345 --queue PROJ
 ```
 
-The token goes into the OS keychain — macOS Keychain, Windows Credential Manager,
-Secret Service on Linux. It is never written to a config file, and no command
-prints it back.
+It prompts for the token (or reads it from stdin if you pipe it), checks it
+against the API, stores it in the OS keychain — macOS Keychain, Windows
+Credential Manager, Secret Service on Linux — and writes the profile for you.
+The token is never written to a config file, never passed as an argument, and no
+command prints it back.
 
-`~/.config/ytcli/config.toml`:
+`--org-kind` is detected if you do not know it: the two organisation flavours use
+different headers, and the wrong one answers 403 in a way that looks like a
+permissions problem. `--dry-run` checks the token and reports what would be
+written without touching anything.
+
+That leaves `~/.config/ytcli/config.toml` looking like this — hand-edit it freely,
+`auth login` preserves your comments and only touches the keys it owns:
 
 ```toml
 default_profile = "work"

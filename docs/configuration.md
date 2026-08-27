@@ -44,12 +44,23 @@ the wrong one is a 403 that looks like a permissions problem.
 ## Credentials
 
 ```bash
-ytcli auth login --account admin
+ytcli auth login --account admin --org-id 12345 --queue PROJ
 ```
 
-Log in once per **account**; every profile naming it is then usable. The token
-goes into the OS keychain: macOS Keychain, Windows Credential Manager, Secret
-Service on Linux.
+That one command does the whole path: it prompts for the token (or reads stdin
+when piped), checks it against the API, stores it in the OS keychain — macOS
+Keychain, Windows Credential Manager, Secret Service on Linux — and writes the
+account and profile into the config file.
+
+`--org-kind` is detected when omitted. The two flavours use different headers and
+the wrong one answers 403, which reads like a permissions problem rather than a
+configuration mistake; one extra request at login saves that afternoon.
+
+Add `--dry-run` to check a token and see what would be written without changing
+anything. Add a second organisation for the same login by running it again with
+a different `--org-id` and `--profile`.
+
+Log in once per **account**; every profile naming it is then usable.
 
 There is no plaintext fallback. If no keychain is available the command fails and
 says so, rather than quietly writing a token to a file that a stray `git add -A`

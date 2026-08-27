@@ -107,6 +107,8 @@ pub enum Command {
 #[derive(Debug)]
 pub struct Session {
     pub config: Config,
+    /// Where `config` came from, so `auth login` can write back to it.
+    pub config_file: PathBuf,
     pub resolved: Option<Resolved>,
     pub render: Context,
     pub global: GlobalArgs,

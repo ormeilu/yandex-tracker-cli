@@ -14,7 +14,10 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
 ## auth
   ytcli auth status                     active profile, where it came from, token check
   ytcli auth list                       accounts and profiles
-  ytcli auth login --account NAME       store a token (prompt or stdin; never an argument)
+  ytcli auth login --account NAME --org-id ID [--profile NAME] [--queue KEY]
+                                        prompts for the token (or reads stdin), checks it,
+                                        stores it in the keychain and writes the profile.
+                                        --org-kind is detected if omitted; --dry-run checks only
   ytcli auth logout --account NAME      forget a token
   An account holds one credential. A profile is an organisation seen through an account.
 
