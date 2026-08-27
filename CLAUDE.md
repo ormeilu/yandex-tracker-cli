@@ -1,7 +1,14 @@
 # Working in this repository
 
 Read `CONTEXT.md` first for the vocabulary; `docs/adr/` records why the awkward
-parts are the way they are. `docs/TODO.md` is the running state of what is built.
+parts are the way they are.
+
+**Planned work lives in GitHub issues**, not in a file in the tree. Before
+starting anything, check whether an issue already covers it, and work against
+that issue rather than a private plan; when you find something worth doing that
+is out of scope for the change at hand, file an issue instead of leaving a TODO
+comment. `docs/TODO.md` records only what is already built and what was
+deliberately ruled out.
 
 ## What this project is
 

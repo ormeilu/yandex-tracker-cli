@@ -107,6 +107,6 @@ docs:
 docs-serve:
     mdbook serve --open
 
-# What is left to build
-todo:
-    @cat docs/TODO.md
+# Open work, from GitHub issues
+todo *ARGS:
+    gh issue list --limit 50 {{ARGS}}

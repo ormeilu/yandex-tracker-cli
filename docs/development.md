@@ -10,6 +10,11 @@ just docs-serve  # this site, with live reload
 
 `just` with no arguments lists everything.
 
+Planned work is tracked in
+[GitHub issues](https://github.com/ormeilu/yandex-tracker-cli/issues); pick one
+there rather than inventing a plan, and file a new issue for anything you find on
+the way.
+
 ## Layout
 
 ```
