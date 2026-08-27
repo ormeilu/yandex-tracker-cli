@@ -31,7 +31,7 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build --release --target ${{ matrix.target }}
+      - run: cargo build --release --locked --target ${{ matrix.target }}
       - name: Package
         shell: bash
         run: |
@@ -72,7 +72,7 @@ jobs:
       - uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist
+          args: --release --locked --out dist
           manylinux: auto
       - uses: actions/upload-artifact@v4
         with:
@@ -81,8 +81,12 @@ jobs:
   release:
     needs: [binaries, wheels]
     runs-on: ubuntu-latest
+    # A `workflow_dispatch` run is a rehearsal: everything is built, nothing is
+    # published. A pipeline whose publishing half has never run is not a
+    # pipeline, and neither is one that can only be tested by publishing.
+    if: startsWith(github.ref, 'refs/tags/v')
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v4
         with:
           pattern: binary-*
           merge-multiple: true
@@ -96,13 +100,14 @@ jobs:
   pypi:
     needs: wheels
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
     environment: pypi
     # OIDC: no API token is stored anywhere. PyPI verifies the repository,
     # the workflow filename and this environment.
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v4
         with:
           pattern: wheel-*
           merge-multiple: true

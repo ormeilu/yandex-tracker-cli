@@ -9,15 +9,19 @@ No Rust toolchain needed. The wheel carries the compiled binary and no Python
 code.
 
 ```bash
-uvx yandex-tracker-cli --help      # run without installing
+uvx --from yandex-tracker-cli ytcli --help   # run without installing
 uv tool install yandex-tracker-cli # keep it around
 ```
 
 ## cargo
 
 ```bash
-cargo install ytcli
+cargo install --git https://github.com/ormeilu/yandex-tracker-cli ytcli
 ```
+
+Not on crates.io yet
+([#16](https://github.com/ormeilu/yandex-tracker-cli/issues/16)); until it is,
+`cargo install ytcli` installs somebody else's crate or nothing at all.
 
 ## A binary
 

@@ -7,8 +7,9 @@ so there is one list rather than two that disagree.
 - [Milestone v1](https://github.com/ormeilu/yandex-tracker-cli/milestone/1) — read
   and write issues, queues, projects, goals, attachments; both distribution
   channels; the agent skill.
-- [Milestone v1.1](https://github.com/ormeilu/yandex-tracker-cli/milestone/2) —
-  worklogs, checklists, portfolios, administration.
+- [Milestone v2](https://github.com/ormeilu/yandex-tracker-cli/milestone/2) —
+  worklogs, checklists, portfolios, administration. Everything v1.x leaves out,
+  rather than a next point release: v1 stays open for the whole 1.x line.
 - [`kind:question`](https://github.com/ormeilu/yandex-tracker-cli/labels/kind%3Aquestion)
   — open design questions, filed so they are not re-litigated from scratch.
 

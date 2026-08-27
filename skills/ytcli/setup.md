@@ -10,7 +10,7 @@ cargo install --git https://github.com/ormeilu/yandex-tracker-cli ytcli
 ```
 
 Planned, not yet available: prebuilt binaries for macOS, Linux and Windows,
-crates.io, a Homebrew tap, and a wheel so `uvx ytcli` works.
+crates.io, a Homebrew tap, and a wheel for `uvx --from yandex-tracker-cli ytcli`.
 
 ## Two words that are not the same thing
 

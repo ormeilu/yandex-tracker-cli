@@ -15,11 +15,11 @@ fifteen lines.
 
 ```bash
 # with uv, no Rust needed
-uvx yandex-tracker-cli --help
+uvx --from yandex-tracker-cli ytcli --help
 uv tool install yandex-tracker-cli
 
-# with cargo
-cargo install ytcli
+# with cargo, from source until it reaches crates.io
+cargo install --git https://github.com/ormeilu/yandex-tracker-cli ytcli
 ```
 
 Or download a binary from [Releases](https://github.com/ormeilu/yandex-tracker-cli/releases).
