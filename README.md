@@ -31,12 +31,15 @@ work, and topic files it reads only when they are relevant. It is separate from
 the binary — install both.
 
 ```bash
+# any of ~75 agents, via the skills CLI
+npx skills add ormeilu/yandex-tracker-cli
+
 # Claude Code, as a plugin
 claude plugin marketplace add ormeilu/yandex-tracker-cli
 claude plugin install ytcli@ytcli
 ```
 
-Or drop the directory in, for either host:
+Or drop the directory in, which is all either of the above does:
 
 ```bash
 git clone https://github.com/ormeilu/yandex-tracker-cli /tmp/ytcli

@@ -53,6 +53,14 @@ the output text, never in the exit code.
 The skill lives in `skills/ytcli/` and is shipped as a plugin for both hosts from
 the same directory — there is one copy of it, not one per vendor.
 
+The layout is the conventional one, so the [skills
+CLI](https://github.com/vercel-labs/skills) finds it without any packaging on
+our side, and installs it into whichever of some seventy-five agents you use:
+
+```bash
+npx skills add ormeilu/yandex-tracker-cli
+```
+
 Claude Code:
 
 ```bash
