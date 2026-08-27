@@ -7,7 +7,7 @@
 
 use std::fmt::Write as _;
 
-use crate::api::models::{Issue, Page, User};
+use crate::api::models::{Comment, Issue, Link, Page, User};
 use crate::render::{Context, untrusted};
 
 fn who(user: Option<&User>) -> &str {
@@ -116,6 +116,66 @@ pub fn issue(issue: &Issue, ctx: &Context) -> String {
         }
     }
 
+    out
+}
+
+/// Render the links of an issue on their own.
+///
+/// Same one-line-per-link shape as the compact view, so a caller that has seen
+/// one has seen both.
+#[must_use]
+pub fn links(key: &str, links: &[Link]) -> String {
+    let mut out = String::with_capacity(links.len() * 40 + 32);
+
+    for link in links {
+        let _ = writeln!(
+            out,
+            "{} {}{}{}",
+            link.kind.label(),
+            link.key,
+            link.status
+                .as_ref()
+                .map_or_else(String::new, |status| format!(" [{status}]")),
+            link.summary
+                .as_ref()
+                .map_or_else(String::new, |summary| format!("  {summary}")),
+        );
+    }
+
+    let _ = writeln!(out, "shown {} of {} for {key}", links.len(), links.len());
+    out
+}
+
+/// Render comments, each fenced with its own source.
+///
+/// The fence names the comment and its author, so a reader can tell which part
+/// of the output someone else wrote — the whole point of the marking (ADR 1).
+#[must_use]
+pub fn comments(key: &str, comments: &[Comment]) -> String {
+    let mut out = String::with_capacity(comments.len() * 160 + 32);
+
+    for comment in comments {
+        let author = who(comment.author.as_ref());
+        let when = comment
+            .created_at
+            .map_or_else(|| "-".to_owned(), |ts| ts.to_string());
+        let _ = writeln!(out, "--- {} by {author} at {when}", comment.id);
+        let _ = writeln!(
+            out,
+            "{}",
+            untrusted::fence(
+                &format!("{key}/comment/{} by {author}", comment.id),
+                &comment.text
+            )
+        );
+    }
+
+    let _ = writeln!(
+        out,
+        "shown {} of {} for {key}",
+        comments.len(),
+        comments.len()
+    );
     out
 }
 

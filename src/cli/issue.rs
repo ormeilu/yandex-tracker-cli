@@ -106,8 +106,8 @@ pub async fn run(command: &IssueCommand, session: &Session) -> ExitCode {
         IssueCommand::Get { key, fields } => get(key, fields, session).await,
         IssueCommand::Find(args) => find(args, session).await,
         IssueCommand::Count(args) => count(args, session).await,
-        IssueCommand::Links { .. } => not_implemented("issue links"),
-        IssueCommand::Comments { .. } => not_implemented("issue comments"),
+        IssueCommand::Links { key } => links(key, session).await,
+        IssueCommand::Comments { key } => comments(key, session).await,
         IssueCommand::Create { .. } => not_implemented("issue create"),
         IssueCommand::Update { .. } => not_implemented("issue update"),
         IssueCommand::Comment { .. } => not_implemented("issue comment"),
@@ -313,5 +313,59 @@ async fn count(args: &FindArgs, session: &Session) -> ExitCode {
             let code = error.exit_code();
             report(&error, code)
         }
+    }
+}
+
+async fn links(key: &str, session: &Session) -> ExitCode {
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+
+    match client.issue_links(key).await {
+        Ok(links) => {
+            let rendered = match session.render.format {
+                Format::Text => Ok(text::links(key, &links)),
+                Format::JsonRaw => machine(&links, Format::Json),
+                other => machine(&links, other),
+            };
+            finish(rendered)
+        }
+        Err(error) => {
+            let code = error.exit_code();
+            report(&error, code)
+        }
+    }
+}
+
+async fn comments(key: &str, session: &Session) -> ExitCode {
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+
+    match client.issue_comments(key).await {
+        Ok(comments) => {
+            let rendered = match session.render.format {
+                Format::Text => Ok(text::comments(key, &comments)),
+                Format::JsonRaw => machine(&comments, Format::Json),
+                other => machine(&comments, other),
+            };
+            finish(rendered)
+        }
+        Err(error) => {
+            let code = error.exit_code();
+            report(&error, code)
+        }
+    }
+}
+
+fn finish(rendered: Result<String, crate::render::RenderError>) -> ExitCode {
+    match rendered {
+        Ok(text) => {
+            emit(&text);
+            ExitCode::Success
+        }
+        Err(error) => report(&error, ExitCode::Failure),
     }
 }

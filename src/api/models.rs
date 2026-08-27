@@ -120,3 +120,18 @@ impl<T> Page<T> {
         }
     }
 }
+
+/// One comment, reduced to what output shows.
+///
+/// `text` is the single most attacker-influenced string this tool handles: it is
+/// free-form, written by anyone with access to the issue, and read by whatever
+/// called us. It is never rewritten, only fenced (`render::untrusted`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Comment {
+    pub id: String,
+    pub text: String,
+    #[serde(default)]
+    pub author: Option<User>,
+    #[serde(default)]
+    pub created_at: Option<jiff::Timestamp>,
+}

@@ -8,7 +8,7 @@
 
 use serde_json::{Map, Value};
 
-use crate::api::models::{Issue, Link, LinkKind, User};
+use crate::api::models::{Comment, Issue, Link, LinkKind, User};
 
 /// System fields we map explicitly. Anything outside this set is treated as a
 /// custom field and lands in `extra`.
@@ -176,6 +176,27 @@ pub fn link(value: &Value) -> Option<Link> {
         key: object.get("key").and_then(Value::as_str)?.to_owned(),
         summary: label(object.get("display")),
         status: label(object.get("status")),
+    })
+}
+
+/// Parse one entry of `GET /v3/issues/{key}/comments`.
+#[must_use]
+pub fn comment(value: &Value) -> Option<Comment> {
+    Some(Comment {
+        id: value
+            .get("id")
+            .map(|id| match id {
+                Value::String(text) => text.clone(),
+                other => other.to_string(),
+            })
+            .unwrap_or_default(),
+        text: value
+            .get("text")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+        author: user(value.get("createdBy")),
+        created_at: timestamp(value.get("createdAt")),
     })
 }
 

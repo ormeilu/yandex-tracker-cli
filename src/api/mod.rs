@@ -16,7 +16,7 @@ use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderName, HeaderValue,
 use serde_json::Value;
 
 use crate::api::error::ApiError;
-use crate::api::models::{Issue, Link, Page, User};
+use crate::api::models::{Comment, Issue, Link, Page, User};
 use crate::config::OrgKind;
 
 /// Default API root. Overridable so tests can point at a `wiremock` server.
@@ -193,6 +193,25 @@ impl Client {
         Ok(raw
             .as_array()
             .map(|entries| entries.iter().filter_map(Queue::parse).collect())
+            .unwrap_or_default())
+    }
+
+    /// The comments of an issue.
+    ///
+    /// Fetched in one generous page: an issue with more than a hundred comments
+    /// is rare enough that paginating here would cost more in complexity than it
+    /// saves anyone.
+    pub async fn issue_comments(&self, key: &str) -> Result<Vec<Comment>, ApiError> {
+        let raw = self
+            .get_value(
+                &format!("/v3/issues/{key}/comments?perPage=100"),
+                &format!("issue {key} comments"),
+            )
+            .await?;
+
+        Ok(raw
+            .as_array()
+            .map(|entries| entries.iter().filter_map(parse::comment).collect())
             .unwrap_or_default())
     }
 
