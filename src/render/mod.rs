@@ -91,3 +91,32 @@ impl Context {
         self.audience == Audience::Human
     }
 }
+
+/// Serialise a value in whichever machine format was asked for.
+///
+/// `text` is not handled here: it is per-entity and lives in [`text`].
+pub fn machine<T: serde::Serialize>(value: &T, format: Format) -> Result<String, RenderError> {
+    match format {
+        Format::Json | Format::JsonRaw => {
+            Ok(serde_json::to_string_pretty(value).map(|json| json + "\n")?)
+        }
+        #[cfg(feature = "toon")]
+        Format::Toon => Ok(toon_format::encode_default(value)? + "\n"),
+        #[cfg(not(feature = "toon"))]
+        Format::Toon => Err(RenderError::ToonUnavailable),
+        Format::Text => Err(RenderError::NotMachineReadable),
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum RenderError {
+    #[error("could not serialise the result")]
+    Serialise(#[from] serde_json::Error),
+    #[error("this build has no TOON support; rebuild with `--features toon`")]
+    ToonUnavailable,
+    #[error("text output is rendered per entity, not generically")]
+    NotMachineReadable,
+    #[cfg(feature = "toon")]
+    #[error("could not encode as TOON")]
+    Toon(#[from] toon_format::ToonError),
+}

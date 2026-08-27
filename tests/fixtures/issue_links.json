@@ -1,0 +1,62 @@
+[
+  {
+    "self": "https://api.tracker.yandex.net/v3/issues/PROJ-1/links/101",
+    "id": "101",
+    "type": {
+      "self": "https://api.tracker.yandex.net/v3/linktypes/depends",
+      "id": "depends",
+      "inward": "Depends on",
+      "outward": "Is dependent by"
+    },
+    "direction": "inward",
+    "object": {
+      "self": "https://api.tracker.yandex.net/v3/issues/PROJ-3",
+      "id": "5f7e1a2b3c4d5e6f7a8b9c11",
+      "key": "PROJ-3",
+      "display": "Storage migration",
+      "status": {
+        "self": "https://api.tracker.yandex.net/v3/statuses/1",
+        "id": "1",
+        "key": "open",
+        "display": "Open"
+      }
+    },
+    "createdAt": "2026-08-21T10:00:00.000+0000"
+  },
+  {
+    "self": "https://api.tracker.yandex.net/v3/issues/PROJ-1/links/102",
+    "id": "102",
+    "type": {
+      "self": "https://api.tracker.yandex.net/v3/linktypes/subtask",
+      "id": "subtask",
+      "inward": "Is subtask for",
+      "outward": "Is parent task for"
+    },
+    "direction": "inward",
+    "object": {
+      "self": "https://api.tracker.yandex.net/v3/issues/PROJ-9",
+      "id": "5f7e1a2b3c4d5e6f7a8b9c22",
+      "key": "PROJ-9",
+      "display": "Attachment subsystem"
+    },
+    "createdAt": "2026-08-21T10:05:00.000+0000"
+  },
+  {
+    "self": "https://api.tracker.yandex.net/v3/issues/PROJ-1/links/103",
+    "id": "103",
+    "type": {
+      "self": "https://api.tracker.yandex.net/v3/linktypes/relates",
+      "id": "relates",
+      "inward": "Relates",
+      "outward": "Relates"
+    },
+    "direction": "outward",
+    "object": {
+      "self": "https://api.tracker.yandex.net/v3/issues/PROJ-7",
+      "id": "5f7e1a2b3c4d5e6f7a8b9c33",
+      "key": "PROJ-7",
+      "display": "Flaky upload test"
+    },
+    "createdAt": "2026-08-22T08:00:00.000+0000"
+  }
+]

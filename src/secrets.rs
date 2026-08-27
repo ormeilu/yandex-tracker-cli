@@ -10,6 +10,12 @@
 
 const SERVICE: &str = "ytcli";
 
+/// Environment override, for CI and containers where no keychain exists.
+///
+/// It is not a general escape hatch: it applies to whichever account is active,
+/// so it only makes sense where exactly one identity is in play.
+const TOKEN_ENV: &str = "YTCLI_TOKEN";
+
 #[derive(Debug, thiserror::Error)]
 pub enum SecretError {
     #[error("no token stored for account `{0}`; run `ytcli auth login --account {0}`")]
@@ -25,7 +31,17 @@ fn entry(account: &str) -> Result<keyring::Entry, SecretError> {
 }
 
 /// Fetch the OAuth token for an account.
+///
+/// The environment wins over the keychain so that a CI run, which has no
+/// keychain at all, does not have to pretend otherwise.
 pub fn token(account: &str) -> Result<String, SecretError> {
+    if let Ok(token) = std::env::var(TOKEN_ENV)
+        && !token.is_empty()
+    {
+        tracing::debug!("using the token from {TOKEN_ENV}");
+        return Ok(token);
+    }
+
     match entry(account)?.get_password() {
         Ok(token) => Ok(token),
         Err(keyring::Error::NoEntry) => Err(SecretError::Missing(account.to_owned())),

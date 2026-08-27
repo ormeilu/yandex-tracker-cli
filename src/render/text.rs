@@ -119,6 +119,63 @@ pub fn issue(issue: &Issue, ctx: &Context) -> String {
     out
 }
 
+/// Render only the requested fields, on one line.
+///
+/// The cheapest rung of the ladder: a caller that needs a status does not need
+/// the other fourteen lines. Fields come back in the order they were asked for,
+/// and an unknown or unset field renders as `-` rather than vanishing — a
+/// missing column would silently shift everything after it.
+#[must_use]
+pub fn issue_selected(issue: &Issue, fields: &[String]) -> String {
+    let mut out = String::with_capacity(64 + fields.len() * 24);
+    out.push_str(&issue.key);
+
+    for field in fields {
+        let _ = write!(out, "  {field}={}", field_value(issue, field));
+    }
+
+    out.push('\n');
+    out
+}
+
+fn field_value(issue: &Issue, field: &str) -> String {
+    match field {
+        "key" => issue.key.clone(),
+        "summary" => issue.summary.clone(),
+        "status" => or_dash(issue.status.as_ref()).to_owned(),
+        "type" => or_dash(issue.issue_type.as_ref()).to_owned(),
+        "priority" => or_dash(issue.priority.as_ref()).to_owned(),
+        "queue" => or_dash(issue.queue.as_ref()).to_owned(),
+        "assignee" => who(issue.assignee.as_ref()).to_owned(),
+        "author" => who(issue.author.as_ref()).to_owned(),
+        "created" => issue
+            .created_at
+            .map_or_else(|| "-".to_owned(), |ts| ts.to_string()),
+        "updated" => issue
+            .updated_at
+            .map_or_else(|| "-".to_owned(), |ts| ts.to_string()),
+        "comments" => issue
+            .comment_count
+            .map_or_else(|| "-".to_owned(), |n| n.to_string()),
+        "links" => {
+            if issue.links.is_empty() {
+                "none".to_owned()
+            } else {
+                issue
+                    .links
+                    .iter()
+                    .map(|link| format!("{} {}", link.kind.label(), link.key))
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            }
+        }
+        custom => issue
+            .extra
+            .get(custom)
+            .map_or_else(|| "-".to_owned(), compact_value),
+    }
+}
+
 /// Render a page of issues as fixed-width columns plus an explicit tally.
 ///
 /// The tally is not decoration. Without it a caller that receives 25 rows cannot
@@ -298,6 +355,30 @@ mod tests {
         shuffled.extra = entries.into_iter().collect();
 
         assert_eq!(issue(&sample(), &ctx()), issue(&shuffled, &ctx()));
+    }
+
+    #[test]
+    fn selected_fields_keep_the_order_they_were_asked_for() {
+        let fields = vec![
+            "status".to_owned(),
+            "storyPoints".to_owned(),
+            "assignee".to_owned(),
+        ];
+        assert_eq!(
+            issue_selected(&sample(), &fields),
+            "PROJ-1  status=In Progress  storyPoints=3  assignee=ilubenets\n"
+        );
+    }
+
+    /// A field that is absent must still occupy its place: silently dropping it
+    /// shifts every column after it for anything parsing the line.
+    #[test]
+    fn an_unknown_field_renders_as_a_dash() {
+        let fields = vec!["nonsense".to_owned(), "status".to_owned()];
+        assert_eq!(
+            issue_selected(&sample(), &fields),
+            "PROJ-1  nonsense=-  status=In Progress\n"
+        );
     }
 
     #[test]

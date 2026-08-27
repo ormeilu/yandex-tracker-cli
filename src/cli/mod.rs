@@ -117,6 +117,55 @@ impl Session {
             .as_ref()
             .ok_or(crate::config::ConfigError::NoProfile)
     }
+
+    /// Build an API client for the active profile.
+    ///
+    /// Every failure on the way here — no profile, no stored token, a token the
+    /// keychain will not release — is an auth problem from the caller's point of
+    /// view, and reports as one.
+    pub fn client(&self) -> Result<crate::api::Client, ExitCode> {
+        let resolved = self
+            .resolved()
+            .map_err(|error| report(&error, ExitCode::Auth))?;
+
+        let token = crate::secrets::token(&resolved.profile.account)
+            .map_err(|error| report(&error, ExitCode::Auth))?;
+
+        let mut config = crate::api::ClientConfig::new(
+            token,
+            resolved.profile.org_id.clone(),
+            resolved.profile.org_kind,
+        );
+        // Pointing the client at a stub server is how the CLI is tested end to
+        // end; nothing else should be setting this.
+        if let Ok(base) = std::env::var("YTCLI_BASE_URL") {
+            config.base_url = base;
+        }
+
+        crate::api::Client::new(&config).map_err(|error| {
+            let code = error.exit_code();
+            report(&error, code)
+        })
+    }
+
+    /// The queue to act on when the command did not name one.
+    #[must_use]
+    pub fn default_queue(&self) -> Option<&str> {
+        self.resolved.as_ref().and_then(|r| r.queue.as_deref())
+    }
+}
+
+/// Print an error to stderr and hand back the exit code to return.
+pub fn report(error: &dyn std::fmt::Display, code: ExitCode) -> ExitCode {
+    let mut err = anstream::stderr();
+    let _ = writeln!(err, "error: {error}");
+    code
+}
+
+/// Write rendered output to stdout.
+pub fn emit(text: &str) {
+    let mut out = anstream::stdout();
+    let _ = write!(out, "{text}");
 }
 
 /// Build the rendering context from flags, profile defaults and the terminal.

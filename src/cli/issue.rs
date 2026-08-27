@@ -7,8 +7,9 @@
 
 use clap::{Args, Subcommand};
 
-use crate::cli::{Session, not_implemented};
+use crate::cli::{Session, emit, not_implemented, report};
 use crate::exit::ExitCode;
+use crate::render::{Format, machine, text};
 
 #[derive(Debug, Subcommand)]
 pub enum IssueCommand {
@@ -95,12 +96,9 @@ pub struct FindArgs {
     pub max: Option<usize>,
 }
 
-// The dispatcher is async because the implementations landing behind it are;
-// the placeholders simply do not await anything yet.
-#[allow(clippy::unused_async)]
-pub async fn run(command: &IssueCommand, _session: &Session) -> ExitCode {
+pub async fn run(command: &IssueCommand, session: &Session) -> ExitCode {
     match command {
-        IssueCommand::Get { .. } => not_implemented("issue get"),
+        IssueCommand::Get { key, fields } => get(key, fields, session).await,
         IssueCommand::Find(_) => not_implemented("issue find"),
         IssueCommand::Count(_) => not_implemented("issue count"),
         IssueCommand::Links { .. } => not_implemented("issue links"),
@@ -109,5 +107,46 @@ pub async fn run(command: &IssueCommand, _session: &Session) -> ExitCode {
         IssueCommand::Update { .. } => not_implemented("issue update"),
         IssueCommand::Comment { .. } => not_implemented("issue comment"),
         IssueCommand::Transition { .. } => not_implemented("issue transition"),
+    }
+}
+
+/// Fetch one issue and render it at whichever rung of the ladder was asked for.
+async fn get(key: &str, fields: &[String], session: &Session) -> ExitCode {
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+
+    let (mut issue, raw) = match client.issue(key).await {
+        Ok(pair) => pair,
+        Err(error) => {
+            let code = error.exit_code();
+            return report(&error, code);
+        }
+    };
+
+    // Links live on their own endpoint. A failure to fetch them must not hide
+    // the issue itself: the caller asked for the issue, and a missing links
+    // section is a smaller loss than no output at all.
+    match client.issue_links(key).await {
+        Ok(links) => issue.links = links,
+        Err(error) => {
+            tracing::warn!(%error, "could not fetch links");
+        }
+    }
+
+    let rendered = match session.render.format {
+        Format::Text if !fields.is_empty() => Ok(text::issue_selected(&issue, fields)),
+        Format::Text => Ok(text::issue(&issue, &session.render)),
+        Format::JsonRaw => machine(&raw, Format::JsonRaw),
+        other => machine(&issue, other),
+    };
+
+    match rendered {
+        Ok(text) => {
+            emit(&text);
+            ExitCode::Success
+        }
+        Err(error) => report(&error, ExitCode::Failure),
     }
 }

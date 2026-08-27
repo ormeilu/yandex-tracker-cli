@@ -1,0 +1,62 @@
+{
+  "self": "https://api.tracker.yandex.net/v3/issues/PROJ-1",
+  "id": "5f7e1a2b3c4d5e6f7a8b9c0d",
+  "key": "PROJ-1",
+  "version": 12,
+  "summary": "Attachments are lost when an issue moves between queues",
+  "description": "Steps:\n1. Attach a file\n2. Move the issue to another queue\n3. The attachment is gone\n\nExpected: attachments survive the move.\nSeen on production since Monday.",
+  "queue": {
+    "self": "https://api.tracker.yandex.net/v3/queues/PROJ",
+    "id": "7",
+    "key": "PROJ",
+    "display": "Product"
+  },
+  "status": {
+    "self": "https://api.tracker.yandex.net/v3/statuses/2",
+    "id": "2",
+    "key": "inProgress",
+    "display": "In Progress"
+  },
+  "type": {
+    "self": "https://api.tracker.yandex.net/v3/issuetypes/1",
+    "id": "1",
+    "key": "bug",
+    "display": "Bug"
+  },
+  "priority": {
+    "self": "https://api.tracker.yandex.net/v3/priorities/4",
+    "id": "4",
+    "key": "critical",
+    "display": "Critical"
+  },
+  "createdBy": {
+    "self": "https://api.tracker.yandex.net/v3/users/1120000000000218",
+    "id": "1120000000000218",
+    "login": "reporter",
+    "display": "Sam Reporter"
+  },
+  "assignee": {
+    "self": "https://api.tracker.yandex.net/v3/users/1120000000000219",
+    "id": "1120000000000219",
+    "login": "ilubenets",
+    "display": "Ilya Lubenets"
+  },
+  "createdAt": "2026-08-20T09:14:02.113+0000",
+  "updatedAt": "2026-08-27T13:00:00.000+0300",
+  "commentWithoutExternalMessageCount": 3,
+  "tags": ["regression", "storage"],
+  "sprint": [
+    {
+      "self": "https://api.tracker.yandex.net/v3/sprints/42",
+      "id": "42",
+      "display": "Sprint 12"
+    }
+  ],
+  "storyPoints": 3,
+  "603bd9b6cdc7ba0d2f4b1a55--component": {
+    "self": "https://api.tracker.yandex.net/v3/components/9",
+    "id": "9",
+    "display": "storage"
+  },
+  "emptyCustomField": null
+}

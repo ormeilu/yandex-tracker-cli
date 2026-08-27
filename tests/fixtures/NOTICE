@@ -1,0 +1,12 @@
+The JSON response shapes in this directory follow the fixtures and smoke tests of
+the official Yandex Tracker Python client, which documents what the API actually
+returns per endpoint:
+
+    https://github.com/yandex/yandex_tracker_client
+
+Copyright (c) 2019, YANDEX LLC. All rights reserved.
+Released under the BSD 3-Clause licence; see the upstream repository for the full
+text.
+
+The values here are invented — no real issue, user, organisation or token appears
+in these files. Only the structure is borrowed.
