@@ -177,9 +177,19 @@ async fn get(target: &str, fields: &[String], session: &Session) -> ExitCode {
         }
     }
 
-    let rendered = match session.render.format {
+    // Pictures are fetched before the issue is rendered, because the ones the
+    // description points at are drawn where it points at them.
+    let mut ctx = session.render.clone();
+    let mut drawn = Vec::new();
+    if fields.is_empty() {
+        let (inline, used) = inline_images(&client, key, issue.description.as_deref(), &ctx).await;
+        ctx.inline = inline;
+        drawn = used;
+    }
+
+    let rendered = match ctx.format {
         Format::Text if !fields.is_empty() => Ok(text::issue_selected(&issue, fields)),
-        Format::Text => Ok(text::issue(&issue, &session.render)),
+        Format::Text => Ok(text::issue(&issue, &ctx)),
         Format::JsonRaw => machine(&raw, Format::JsonRaw),
         other => machine(&issue, other),
     };
@@ -187,36 +197,158 @@ async fn get(target: &str, fields: &[String], session: &Session) -> ExitCode {
     match rendered {
         Ok(text) => {
             emit(&text);
-            draw_images(&client, key, session).await;
+            // Whatever the description did not point at is still worth seeing,
+            // and it goes after the issue because nothing said where it belongs.
+            draw_remaining_images(&client, key, &drawn, &ctx).await;
             ExitCode::Success
         }
         Err(error) => report(&error, ExitCode::Failure),
     }
 }
 
-/// How many images an issue view draws before it stops and names the rest.
+/// How many unreferenced images are drawn after an issue before it stops and
+/// names the rest.
 ///
 /// A screenshot is worth the space; six of them are a wall between the reader
 /// and the next command. The rest are one `attachment show` away.
 const IMAGES_SHOWN: usize = 4;
 
-/// Draw the issue's image attachments under it, in a terminal that can.
+/// Whether this command may draw at all, and how wide.
 ///
-/// Nothing here happens for a pipe, an agent, a `--format` other than text, a
-/// terminal without a graphics protocol, or `--no-images`: in every one of those
-/// cases the attachments are not even fetched, so the issue view costs exactly
-/// what it did before. That is the point — this must not make the cheap path
-/// more expensive.
+/// Nothing is drawn for a pipe, an agent, a `--format` other than text, a
+/// terminal without a graphics protocol, or `--no-images`. In every one of
+/// those cases the attachments are not requested either, so the cheap path
+/// costs exactly what it did before.
+fn drawing(ctx: &crate::render::Context) -> Option<image::Protocol> {
+    if !ctx.images || !ctx.is_human() || ctx.format != Format::Text {
+        return None;
+    }
+    image::protocol()
+}
+
+/// Fetch and draw the pictures the description points at.
+///
+/// Returns them keyed by the URL as written, plus the ids that were used, so
+/// the caller knows which attachments have already been shown.
+///
+/// Only attachments are drawn. A description can name any URL it likes, and
+/// following one would turn reading an issue into fetching whatever an issue's
+/// author decided this tool should fetch — with the client's own credentials,
+/// at that. The reference has to resolve to a file already attached to this
+/// issue, or it stays the markdown it was.
+async fn inline_images(
+    client: &crate::api::Client,
+    key: &str,
+    description: Option<&str>,
+    ctx: &crate::render::Context,
+) -> (image::Inline, Vec<String>) {
+    let mut inline = image::Inline::default();
+    let mut used = Vec::new();
+
+    let Some(protocol) = drawing(ctx) else {
+        return (inline, used);
+    };
+    let Some(description) = description else {
+        return (inline, used);
+    };
+    let references = crate::render::markdown::image_references(description);
+    if references.is_empty() {
+        return (inline, used);
+    }
+
+    let attachments = match client.attachments(key).await {
+        Ok(attachments) => attachments,
+        Err(error) => {
+            tracing::warn!(%error, "could not fetch attachments");
+            return (inline, used);
+        }
+    };
+
+    // Two columns for the margin bar the quoted block puts on every line.
+    let width = ctx.width.saturating_sub(2);
+
+    for (alt, url) in references {
+        let Some(attachment) = attachment_for(&attachments, url) else {
+            tracing::debug!(url, "no attachment matches this image reference");
+            continue;
+        };
+        let Some(picture) = fetch_picture(client, attachment, protocol, width).await else {
+            continue;
+        };
+
+        used.push(attachment.id.clone());
+        // The caption names the file, because the alt text is what the author
+        // said and the filename is what `attachment show` and `download` take.
+        let caption = if alt.is_empty() {
+            attachment.name.clone()
+        } else {
+            format!("{alt} — {}", attachment.name)
+        };
+        inline.insert(url.to_owned(), image::Picture { caption, ..picture });
+    }
+
+    (inline, used)
+}
+
+/// The attachment a markdown image URL refers to.
+///
+/// Tracker writes these as `/ajax/v2/attachments/29?inline=true`, so the id is
+/// the last path segment; a description written by hand may name the file
+/// instead. Both are matched against what is actually attached to this issue,
+/// and nothing else is followed.
+fn attachment_for<'a>(
+    attachments: &'a [crate::api::models::Attachment],
+    url: &str,
+) -> Option<&'a crate::api::models::Attachment> {
+    let path = url.split(['?', '#']).next().unwrap_or(url);
+    let last = path.rsplit('/').find(|segment| !segment.is_empty())?;
+
+    attachments
+        .iter()
+        .find(|attachment| attachment.id == last || attachment.name == last)
+}
+
+/// Download one attachment and turn it into a picture, if it is one.
+async fn fetch_picture(
+    client: &crate::api::Client,
+    attachment: &crate::api::models::Attachment,
+    protocol: image::Protocol,
+    width: usize,
+) -> Option<image::Picture> {
+    let url = attachment.content.as_deref()?;
+    let bytes = match client.download(url).await {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            tracing::warn!(%error, id = attachment.id, "could not download attachment");
+            return None;
+        }
+    };
+
+    // The declared type is a claim; the bytes are the fact. Drawing on the
+    // claim alone would hand a terminal whatever a file said it was.
+    let kind = image::Kind::of(&bytes)?;
+    if !protocol.carries(kind) {
+        return None;
+    }
+
+    Some(image::Picture {
+        escape: image::draw(protocol, &bytes, &attachment.name, width),
+        caption: attachment.name.clone(),
+    })
+}
+
+/// Draw the image attachments the description never mentioned.
 ///
 /// Failures are logged and swallowed. The caller asked for an issue and already
 /// has it; losing a picture is a smaller loss than replacing the issue with an
 /// error about one.
-async fn draw_images(client: &crate::api::Client, key: &str, session: &Session) {
-    let ctx = &session.render;
-    if !ctx.images || !ctx.is_human() || ctx.format != Format::Text {
-        return;
-    }
-    let Some(protocol) = image::protocol() else {
+async fn draw_remaining_images(
+    client: &crate::api::Client,
+    key: &str,
+    already_drawn: &[String],
+    ctx: &crate::render::Context,
+) {
+    let Some(protocol) = drawing(ctx) else {
         return;
     };
 
@@ -233,6 +365,7 @@ async fn draw_images(client: &crate::api::Client, key: &str, session: &Session) 
     // 40 MB video that claimed to be a PNG.
     let images: Vec<_> = attachments
         .iter()
+        .filter(|attachment| !already_drawn.contains(&attachment.id))
         .filter(|attachment| {
             attachment
                 .mimetype
@@ -242,27 +375,10 @@ async fn draw_images(client: &crate::api::Client, key: &str, session: &Session) 
         .collect();
 
     for attachment in images.iter().take(IMAGES_SHOWN) {
-        let Some(url) = attachment.content.as_deref() else {
-            continue;
-        };
-        let bytes = match client.download(url).await {
-            Ok(bytes) => bytes,
-            Err(error) => {
-                tracing::warn!(%error, id = attachment.id, "could not download attachment");
-                continue;
-            }
-        };
-        let Some(kind) = image::Kind::of(&bytes) else {
-            continue;
-        };
-        if !protocol.carries(kind) {
-            continue;
+        if let Some(picture) = fetch_picture(client, attachment, protocol, ctx.width).await {
+            emit(&picture.escape);
+            emit(&format!("{}\n", picture.caption));
         }
-
-        // The name is above the picture, because a picture with no caption in a
-        // list of four is a picture nobody can refer to afterwards.
-        emit(&format!("{}\n", attachment.name));
-        emit(&image::draw(protocol, &bytes, &attachment.name));
     }
 
     if images.len() > IMAGES_SHOWN {
@@ -727,5 +843,56 @@ async fn transition_cmd(target: &str, transition: Option<&str>, session: &Sessio
             let code = error.exit_code();
             report(&error, code)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::models::Attachment;
+
+    fn attachment(id: &str, name: &str) -> Attachment {
+        Attachment {
+            id: id.to_owned(),
+            name: name.to_owned(),
+            size: None,
+            mimetype: Some("image/png".to_owned()),
+            author: None,
+            created_at: None,
+            content: Some("https://api.tracker.yandex.net/x".to_owned()),
+        }
+    }
+
+    /// The form Tracker actually writes into a description.
+    #[test]
+    fn an_attachment_url_resolves_by_its_last_path_segment() {
+        let attachments = [attachment("29", "screenshot.png")];
+
+        assert_eq!(
+            attachment_for(&attachments, "/ajax/v2/attachments/29?inline=true").map(|a| &a.id),
+            Some(&"29".to_owned())
+        );
+        assert_eq!(
+            attachment_for(&attachments, "/ajax/v2/attachments/29/").map(|a| &a.id),
+            Some(&"29".to_owned())
+        );
+        // A description written by hand names the file instead.
+        assert_eq!(
+            attachment_for(&attachments, "screenshot.png").map(|a| &a.id),
+            Some(&"29".to_owned())
+        );
+    }
+
+    /// A description can name any URL its author likes. Following one would
+    /// turn reading an issue into fetching whatever that author chose — with
+    /// this client's own credentials attached. Only files already on the issue
+    /// are drawn; everything else stays the markdown it was.
+    #[test]
+    fn a_url_that_is_not_an_attachment_of_this_issue_is_not_followed() {
+        let attachments = [attachment("29", "screenshot.png")];
+
+        assert!(attachment_for(&attachments, "https://example.com/evil.png").is_none());
+        assert!(attachment_for(&attachments, "/ajax/v2/attachments/30").is_none());
+        assert!(attachment_for(&attachments, "http://169.254.169.254/latest/meta-data").is_none());
     }
 }

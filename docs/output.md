@@ -108,7 +108,16 @@ because reflowed prose is not what a caller diffing output asked for.
 `ytcli attachment show PROJ-1 29` draws one on its own. Kitty, Ghostty, WezTerm
 and iTerm2.
 
-The issue view draws four and names the rest: a screenshot is worth the space,
+In the issue view a picture appears **where the description points at it** —
+the markdown reference is replaced by the image, with the filename captioned
+underneath. That is where the author put it, and a screenshot three paragraphs
+from the sentence about it is a different document. Only files already attached
+to the issue are drawn: a description can name any URL its author likes, and
+following one would turn reading an issue into fetching whatever that author
+chose, with this client's credentials attached.
+
+Images the description never mentioned come after the issue, four of them, and
+the rest are named: a screenshot is worth the space,
 six of them are a wall between the reader and the next command. None of it costs
 anything where it cannot be used — a pipe, an agent, `--format json`, a terminal
 without a graphics protocol, or `--no-images` — because the attachments are not

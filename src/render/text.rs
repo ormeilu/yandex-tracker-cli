@@ -286,7 +286,12 @@ pub(crate) fn quoted_block(
             "{}",
             label(&format!("--- {source} (written by Tracker users)"))
         );
-        out.push_str(&crate::render::markdown::quoted(body, ctx.width, paint));
+        out.push_str(&crate::render::markdown::quoted(
+            body,
+            ctx.width,
+            paint,
+            &ctx.inline,
+        ));
     } else {
         let _ = writeln!(out, "{}", label("---"));
         // The fence is dimmed and nothing more. Giving someone else's text the
@@ -493,6 +498,7 @@ mod tests {
             extra_fields: vec!["storyPoints".to_owned()],
             width: 80,
             images: false,
+            inline: crate::render::image::Inline::default(),
         }
     }
 

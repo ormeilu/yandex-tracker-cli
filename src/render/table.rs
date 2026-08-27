@@ -234,6 +234,7 @@ mod tests {
             extra_fields: Vec::new(),
             width: 80,
             images: false,
+            inline: crate::render::image::Inline::default(),
         }
     }
 

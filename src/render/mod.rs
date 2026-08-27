@@ -96,6 +96,9 @@ pub struct Context {
     /// Whether image attachments may be drawn inline. Says nothing about whether
     /// the terminal can: that is [`image::protocol`].
     pub images: bool,
+    /// Pictures to put where the text references them, keyed by URL. Filled in
+    /// by the command, once it knows there is a terminal to draw on.
+    pub inline: image::Inline,
 }
 
 impl Context {

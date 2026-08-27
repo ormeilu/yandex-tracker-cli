@@ -243,7 +243,16 @@ async fn show(target: &str, attachment: &str, session: &Session) -> ExitCode {
         return ExitCode::Success;
     }
 
-    emit(&image::draw(protocol, &bytes, &found.name));
+    emit(&image::draw(
+        protocol,
+        &bytes,
+        &found.name,
+        session.render.width,
+    ));
+    // Under the picture, not over it: the caption belongs to what precedes it,
+    // and a name printed first is a name read before there is anything to
+    // attach it to.
+    emit(&format!("{what}\n"));
     ExitCode::Success
 }
 

@@ -174,17 +174,55 @@ fn decide(var: &dyn Fn(&str) -> Option<String>) -> Result<Protocol, Refusal> {
     Err(Refusal::Unrecognised)
 }
 
+/// A picture ready to be written, and the caption that goes under it.
+///
+/// The caption is separate because the block it lands in decides how it is
+/// marked: inside a quoted description every line carries the margin bar,
+/// including this one.
+#[derive(Debug, Clone)]
+pub struct Picture {
+    pub escape: String,
+    pub caption: String,
+}
+
+/// Pictures to substitute for the markdown image references that name them,
+/// keyed by the URL exactly as it appears in the text.
+#[derive(Debug, Clone, Default)]
+pub struct Inline(std::collections::BTreeMap<String, Picture>);
+
+impl Inline {
+    pub fn insert(&mut self, url: String, picture: Picture) {
+        self.0.insert(url, picture);
+    }
+
+    #[must_use]
+    pub fn get(&self, url: &str) -> Option<&Picture> {
+        self.0.get(url)
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
 /// The escape sequence that draws these bytes, ready to write to stdout.
+///
+/// `columns` bounds the width in cells. Both protocols scale to fit and keep
+/// the aspect ratio, which matters more than it sounds: a screenshot is
+/// commonly two thousand pixels wide, and drawn at its natural size it takes
+/// the whole window and several screens of scrollback with it.
 #[must_use]
-pub fn draw(protocol: Protocol, bytes: &[u8], name: &str) -> String {
+pub fn draw(protocol: Protocol, bytes: &[u8], name: &str, columns: usize) -> String {
     let encoded = BASE64.encode(bytes);
+    let columns = columns.max(1);
     match protocol {
         Protocol::Iterm2 => {
             // `inline=1` draws it rather than offering it as a download; the
             // name is only a label, and the terminal never writes a file.
             let label = BASE64.encode(name.as_bytes());
             format!(
-                "\x1b]1337;File=name={label};size={};inline=1;preserveAspectRatio=1:{encoded}\x07\n",
+                "\x1b]1337;File=name={label};size={};inline=1;width={columns};preserveAspectRatio=1:{encoded}\x07\n",
                 bytes.len()
             )
         }
@@ -202,8 +240,9 @@ pub fn draw(protocol: Protocol, bytes: &[u8], name: &str) -> String {
                 let more = u8::from(index + 1 < chunks.len());
                 if index == 0 {
                     // f=100: the payload is a file in a format kitty decodes.
-                    // a=T: transmit and display at once.
-                    let _ = write!(out, "\x1b_Gf=100,a=T,m={more};{chunk}\x1b\\");
+                    // a=T: transmit and display at once. c= without r= bounds
+                    // the width and lets the height follow the aspect ratio.
+                    let _ = write!(out, "\x1b_Gf=100,a=T,c={columns},m={more};{chunk}\x1b\\");
                 } else {
                     let _ = write!(out, "\x1b_Gm={more};{chunk}\x1b\\");
                 }
@@ -323,17 +362,28 @@ mod tests {
     #[test]
     fn a_payload_over_the_chunk_limit_is_split_and_terminated() {
         let bytes = vec![0u8; 8000];
-        let drawn = draw(Protocol::Kitty, &bytes, "big.png");
+        let drawn = draw(Protocol::Kitty, &bytes, "big.png", 40);
 
-        assert!(drawn.starts_with("\x1b_Gf=100,a=T,m=1;"));
+        assert!(drawn.starts_with("\x1b_Gf=100,a=T,c=40,m=1;"));
         assert!(drawn.contains("\x1b_Gm=0;"));
         assert!(drawn.ends_with("\x1b\\\n"));
     }
 
     #[test]
     fn the_iterm_sequence_carries_the_size_and_draws_inline() {
-        let drawn = draw(Protocol::Iterm2, b"1234", "a.png");
+        let drawn = draw(Protocol::Iterm2, b"1234", "a.png", 40);
         assert!(drawn.contains("size=4"));
         assert!(drawn.contains("inline=1"));
+        assert!(drawn.contains("width=40"));
+    }
+
+    /// A screenshot drawn at its natural size takes the window and several
+    /// screens of scrollback with it, so both protocols are told a width.
+    #[test]
+    fn every_protocol_is_given_a_width_to_fit_into() {
+        assert!(draw(Protocol::Kitty, b"x", "a.png", 72).contains("c=72"));
+        assert!(draw(Protocol::Iterm2, b"x", "a.png", 72).contains("width=72"));
+        // A zero-width window would otherwise ask for a zero-column image.
+        assert!(draw(Protocol::Kitty, b"x", "a.png", 0).contains("c=1"));
     }
 }

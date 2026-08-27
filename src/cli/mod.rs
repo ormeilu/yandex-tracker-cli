@@ -301,6 +301,7 @@ pub fn render_context(global: &GlobalArgs, resolved: Option<&Resolved>) -> Conte
         // The flag only ever turns images off. There is nothing to turn on: a
         // terminal that cannot draw is not persuaded by a configuration file.
         images: !global.no_images && display.is_none_or(|d| d.images),
+        inline: crate::render::image::Inline::default(),
         width: match audience {
             // Prose is wrapped to the window, within reason: a full-width
             // paragraph on an ultrawide monitor is unreadable, and a very narrow
