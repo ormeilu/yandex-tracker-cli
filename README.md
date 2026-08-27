@@ -24,6 +24,30 @@ cargo install --git https://github.com/ormeilu/yandex-tracker-cli ytcli
 
 Or download a binary from [Releases](https://github.com/ormeilu/yandex-tracker-cli/releases).
 
+## Install the skill
+
+The skill teaches an agent the tool: what it is, the commands that cover most
+work, and topic files it reads only when they are relevant. It is separate from
+the binary — install both.
+
+```bash
+# Claude Code, as a plugin
+claude plugin marketplace add ormeilu/yandex-tracker-cli
+claude plugin install ytcli@ytcli
+```
+
+Or drop the directory in, for either host:
+
+```bash
+git clone https://github.com/ormeilu/yandex-tracker-cli /tmp/ytcli
+cp -r /tmp/ytcli/skills/ytcli ~/.claude/skills/ytcli   # Claude Code
+cp -r /tmp/ytcli/skills/ytcli ~/.codex/skills/ytcli    # Codex
+```
+
+The permission allowlist — read verbs allowed, write verbs prompted — is a block
+of JSON in [`skills/ytcli/setup.md`](skills/ytcli/setup.md). No plugin can
+install that for you, and one that could should not.
+
 ## Set up
 
 An **account** holds a credential; a **profile** is an organisation seen through

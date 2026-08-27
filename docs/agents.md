@@ -60,10 +60,12 @@ claude plugin marketplace add ormeilu/yandex-tracker-cli
 claude plugin install ytcli@ytcli
 ```
 
-Codex reads `~/.codex/skills/`; copy or link the directory there:
+Codex reads `~/.codex/skills/`, and Claude Code also loads `~/.claude/skills/`
+directly, so a checkout can be linked into either without a plugin at all:
 
 ```bash
 ln -s "$PWD/skills/ytcli" ~/.codex/skills/ytcli
+ln -s "$PWD/skills/ytcli" ~/.claude/skills/ytcli
 ```
 
 Neither host lets a plugin grant itself permissions, which is correct. The
