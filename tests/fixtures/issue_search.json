@@ -1,0 +1,25 @@
+[
+  {
+    "self": "https://api.tracker.yandex.net/v3/issues/PROJ-1",
+    "id": "5f7e1a2b3c4d5e6f7a8b9c0d",
+    "key": "PROJ-1",
+    "summary": "Attachments are lost when an issue moves between queues",
+    "status": { "id": "2", "key": "inProgress", "display": "In Progress" },
+    "type": { "id": "1", "key": "bug", "display": "Bug" },
+    "queue": { "id": "7", "key": "PROJ", "display": "Product" },
+    "assignee": { "id": "1120000000000219", "login": "ilubenets", "display": "Ilya Lubenets" },
+    "createdAt": "2026-08-20T09:14:02.113+0000",
+    "updatedAt": "2026-08-27T13:00:00.000+0300"
+  },
+  {
+    "self": "https://api.tracker.yandex.net/v3/issues/PROJ-4",
+    "id": "5f7e1a2b3c4d5e6f7a8b9c44",
+    "key": "PROJ-4",
+    "summary": "Retry uploads on 5xx",
+    "status": { "id": "1", "key": "open", "display": "Open" },
+    "type": { "id": "2", "key": "task", "display": "Task" },
+    "queue": { "id": "7", "key": "PROJ", "display": "Product" },
+    "createdAt": "2026-08-22T11:00:00.000+0000",
+    "updatedAt": "2026-08-26T08:30:00.000+0000"
+  }
+]

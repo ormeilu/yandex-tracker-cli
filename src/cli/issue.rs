@@ -7,6 +7,7 @@
 
 use clap::{Args, Subcommand};
 
+use crate::api::query::Filter;
 use crate::cli::{Session, emit, not_implemented, report};
 use crate::exit::ExitCode;
 use crate::render::{Format, machine, text};
@@ -80,7 +81,11 @@ pub struct FindArgs {
     #[arg(long, value_delimiter = ',')]
     pub tags: Vec<String>,
     /// Raw Yandex Query Language filter. Read-only, like every other search.
-    #[arg(long)]
+    ///
+    /// Conflicts with the flag filters on purpose: combining them would have to
+    /// either silently drop half of what was asked for or invent an AND the
+    /// caller did not write.
+    #[arg(long, conflicts_with_all = ["queue", "assignee", "status", "tags"])]
     pub yql: Option<String>,
     /// Rows per page.
     #[arg(long)]
@@ -99,8 +104,8 @@ pub struct FindArgs {
 pub async fn run(command: &IssueCommand, session: &Session) -> ExitCode {
     match command {
         IssueCommand::Get { key, fields } => get(key, fields, session).await,
-        IssueCommand::Find(_) => not_implemented("issue find"),
-        IssueCommand::Count(_) => not_implemented("issue count"),
+        IssueCommand::Find(args) => find(args, session).await,
+        IssueCommand::Count(args) => count(args, session).await,
         IssueCommand::Links { .. } => not_implemented("issue links"),
         IssueCommand::Comments { .. } => not_implemented("issue comments"),
         IssueCommand::Create { .. } => not_implemented("issue create"),
@@ -148,5 +153,165 @@ async fn get(key: &str, fields: &[String], session: &Session) -> ExitCode {
             ExitCode::Success
         }
         Err(error) => report(&error, ExitCode::Failure),
+    }
+}
+
+/// Turn the search flags into a query, falling back to the profile's queue.
+///
+/// A search with nothing to narrow it would ask Tracker for every issue in the
+/// organisation, so the pinned queue steps in — that is what pinning is for.
+fn query_for(args: &FindArgs, session: &Session) -> Result<String, ExitCode> {
+    if let Some(yql) = &args.yql {
+        return Ok(yql.clone());
+    }
+
+    let mut filter = Filter {
+        queue: args.queue.clone(),
+        assignee: args.assignee.clone(),
+        status: args.status.clone(),
+        tags: args.tags.clone(),
+    };
+
+    if filter.queue.is_none() {
+        filter.queue = session.default_queue().map(ToOwned::to_owned);
+    }
+
+    if filter.is_empty() {
+        return Err(report(
+            &"no filter given: pass --queue, --assignee, --status, --tags or --yql, \
+              or pin a queue in .tracker.toml",
+            ExitCode::ConfirmationRequired,
+        ));
+    }
+
+    Ok(filter.to_query())
+}
+
+async fn find(args: &FindArgs, session: &Session) -> ExitCode {
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+    let query = match query_for(args, session) {
+        Ok(query) => query,
+        Err(code) => return code,
+    };
+
+    let display = session.display();
+    let per_page = args.limit.unwrap_or(display.limit);
+    let Ok(per_page) = u32::try_from(per_page.max(1)) else {
+        return report(&"--limit is too large", ExitCode::ConfirmationRequired);
+    };
+
+    if args.all {
+        return find_all(&client, &query, per_page, args, session).await;
+    }
+
+    match client.search(&query, args.page.max(1), per_page).await {
+        Ok(page) => emit_page(&page, session),
+        Err(error) => {
+            let code = error.exit_code();
+            report(&error, code)
+        }
+    }
+}
+
+/// Walk every page up to the ceiling.
+///
+/// Refusing past `--max` rather than truncating is the whole point: a silently
+/// short answer reads exactly like a complete one.
+async fn find_all(
+    client: &crate::api::Client,
+    query: &str,
+    per_page: u32,
+    args: &FindArgs,
+    session: &Session,
+) -> ExitCode {
+    let max = args.max.unwrap_or(session.display().max);
+    let mut collected: Vec<crate::api::models::Issue> = Vec::new();
+    let mut page_number = 1;
+    let mut total = None;
+
+    loop {
+        let page = match client.search(query, page_number, per_page).await {
+            Ok(page) => page,
+            Err(error) => {
+                let code = error.exit_code();
+                return report(&error, code);
+            }
+        };
+        total = page.total.or(total);
+
+        if collected.len() + page.items.len() > max {
+            return report(
+                &format!(
+                    "more than --max {max} issues match ({}); narrow the filter or raise --max",
+                    total.map_or_else(|| "unknown total".to_owned(), |t| t.to_string()),
+                ),
+                ExitCode::ConfirmationRequired,
+            );
+        }
+
+        let more = page.has_more();
+        collected.extend(page.items);
+        if !more {
+            break;
+        }
+        page_number += 1;
+    }
+
+    let Ok(count) = u32::try_from(collected.len()) else {
+        return report(&"too many results to render", ExitCode::Failure);
+    };
+    let page = crate::api::models::Page {
+        items: collected,
+        page: 1,
+        per_page: count.max(1),
+        total: total.or(Some(u64::from(count))),
+    };
+    emit_page(&page, session)
+}
+
+fn emit_page(
+    page: &crate::api::models::Page<crate::api::models::Issue>,
+    session: &Session,
+) -> ExitCode {
+    let rendered = match session.render.format {
+        Format::Text => Ok(text::issue_page(page, &session.render)),
+        // The upstream payload for a search is an array of issues; raw and
+        // normalised differ only in field names, so raw maps onto our schema.
+        Format::JsonRaw => machine(&page.items, Format::Json),
+        other => machine(&page.items, other),
+    };
+
+    match rendered {
+        Ok(text) => {
+            emit(&text);
+            ExitCode::Success
+        }
+        Err(error) => report(&error, ExitCode::Failure),
+    }
+}
+
+/// The cheapest question in the tool: one number, no issue bodies.
+async fn count(args: &FindArgs, session: &Session) -> ExitCode {
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+    let query = match query_for(args, session) {
+        Ok(query) => query,
+        Err(code) => return code,
+    };
+
+    match client.count(&query).await {
+        Ok(count) => {
+            emit(&format!("{count}\n"));
+            ExitCode::Success
+        }
+        Err(error) => {
+            let code = error.exit_code();
+            report(&error, code)
+        }
     }
 }

@@ -148,6 +148,15 @@ impl Session {
         })
     }
 
+    /// Display defaults for the active profile, or the built-in ones.
+    #[must_use]
+    pub fn display(&self) -> crate::config::Display {
+        self.resolved
+            .as_ref()
+            .map(|r| r.profile.display.clone())
+            .unwrap_or_default()
+    }
+
     /// The queue to act on when the command did not name one.
     #[must_use]
     pub fn default_queue(&self) -> Option<&str> {

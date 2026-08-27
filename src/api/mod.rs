@@ -6,6 +6,7 @@
 pub mod error;
 pub mod models;
 pub mod parse;
+pub mod query;
 
 use std::time::Duration;
 
@@ -15,7 +16,7 @@ use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderName, HeaderValue,
 use serde_json::Value;
 
 use crate::api::error::ApiError;
-use crate::api::models::{Issue, Link, User};
+use crate::api::models::{Issue, Link, Page, User};
 use crate::config::OrgKind;
 
 /// Default API root. Overridable so tests can point at a `wiremock` server.
@@ -138,6 +139,49 @@ impl Client {
             .unwrap_or_default())
     }
 
+    /// One page of search results.
+    ///
+    /// Tracker reports the total in `X-Total-Count`. When it does not, the page
+    /// still has to be honest about whether more exists, which is why
+    /// [`Page::has_more`] falls back to "a full page probably is not the last".
+    pub async fn search(
+        &self,
+        query: &str,
+        page: u32,
+        per_page: u32,
+    ) -> Result<Page<Issue>, ApiError> {
+        let path = format!("/v3/issues/_search?page={page}&perPage={per_page}");
+        let body = serde_json::json!({ "query": query });
+        let (value, headers) = self.post_value(&path, &body, "issues").await?;
+
+        let items = value
+            .as_array()
+            .map(|entries| entries.iter().filter_map(parse::issue).collect())
+            .unwrap_or_default();
+
+        Ok(Page {
+            items,
+            page,
+            per_page,
+            total: headers
+                .get("x-total-count")
+                .and_then(|count| count.to_str().ok())
+                .and_then(|count| count.parse().ok()),
+        })
+    }
+
+    /// How many issues match, without fetching any of them.
+    pub async fn count(&self, query: &str) -> Result<u64, ApiError> {
+        let body = serde_json::json!({ "query": query });
+        let (value, _) = self
+            .post_value("/v3/issues/_count", &body, "issues")
+            .await?;
+
+        value
+            .as_u64()
+            .ok_or_else(|| ApiError::NotFound("issue count".to_owned()))
+    }
+
     /// Queues visible to the active profile.
     ///
     /// Tracker paginates this endpoint; the ceiling is deliberately generous
@@ -165,6 +209,36 @@ impl Client {
             .as_array()
             .map(|entries| entries.iter().filter_map(QueueField::parse).collect())
             .unwrap_or_default())
+    }
+
+    /// A POST that also hands back the response headers, which is where Tracker
+    /// puts the pagination totals.
+    async fn post_value(
+        &self,
+        path: &str,
+        body: &Value,
+        what: &str,
+    ) -> Result<(Value, reqwest::header::HeaderMap), ApiError> {
+        let url = format!("{}{path}", self.base_url);
+
+        let send = || async {
+            let response = self.http.post(&url).json(body).send().await?;
+            let headers = response.headers().clone();
+            let text = classify(response, what).await?;
+            Ok((text, headers))
+        };
+
+        let (text, headers) = send
+            .retry(
+                ExponentialBuilder::default()
+                    .with_max_times(self.retries)
+                    .with_jitter(),
+            )
+            .when(is_retryable)
+            .await?;
+
+        let value = serde_json::from_str(&text).map_err(ApiError::Decode)?;
+        Ok((value, headers))
     }
 
     async fn get_value(&self, path: &str, what: &str) -> Result<Value, ApiError> {
