@@ -58,11 +58,18 @@ pub fn issue(issue: &Issue, ctx: &Context) -> String {
 
     // Custom fields are summarised rather than dumped: they differ per queue, so
     // printing them all makes the view unstable and mostly empty.
-    let unpinned: Vec<&String> = issue
+    //
+    // The sort is load-bearing, not tidiness. `serde_json::Map` is a BTreeMap
+    // only until some dependency turns on `preserve_order`, at which point it
+    // becomes insertion-ordered and this line would start varying with whatever
+    // order Tracker happened to serialise the payload in. Field order is a
+    // contract (ADR 3), so it is enforced here rather than inherited.
+    let mut unpinned: Vec<&String> = issue
         .extra
         .keys()
         .filter(|key| !ctx.extra_fields.contains(key))
         .collect();
+    unpinned.sort();
     if !unpinned.is_empty() {
         let shown: Vec<&str> = unpinned.iter().take(3).map(|k| k.as_str()).collect();
         let rest = unpinned.len().saturating_sub(shown.len());
@@ -273,6 +280,24 @@ mod tests {
             total: Some(340),
         };
         insta::assert_snapshot!(issue_page(&page, &ctx()));
+    }
+
+    /// Enabling an unrelated feature must not reorder the view. `serde_json`'s
+    /// map type changes behaviour when any dependency turns on `preserve_order`,
+    /// which is exactly the kind of silent drift a fixed field order forbids.
+    #[test]
+    fn custom_field_summary_does_not_depend_on_payload_order() {
+        let mut shuffled = sample();
+        let entries: Vec<(String, serde_json::Value)> = vec![
+            ("team".to_owned(), serde_json::json!("core")),
+            ("component".to_owned(), serde_json::json!("api")),
+            ("risk".to_owned(), serde_json::json!("low")),
+            ("sprint".to_owned(), serde_json::json!("S-12")),
+            ("storyPoints".to_owned(), serde_json::json!(3)),
+        ];
+        shuffled.extra = entries.into_iter().collect();
+
+        assert_eq!(issue(&sample(), &ctx()), issue(&shuffled, &ctx()));
     }
 
     #[test]

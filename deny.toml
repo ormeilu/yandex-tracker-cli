@@ -1,9 +1,25 @@
 # cargo-deny replaces a separate audit step: advisories, licences and duplicate
 # dependencies are all gates in `just check`.
 
+# Check every platform and feature, not just the host's: a licence or advisory
+# that only appears in the Windows dependency tree still ships in our releases.
+[graph]
+all-features = true
+targets = [
+  "x86_64-unknown-linux-gnu",
+  "aarch64-unknown-linux-gnu",
+  "aarch64-apple-darwin",
+  "x86_64-apple-darwin",
+  "x86_64-pc-windows-msvc",
+]
+
 [advisories]
 version = 2
 yanked = "deny"
+# Security advisories are hard errors. "Unmaintained" is only one for crates we
+# depend on directly, where we can actually act; a transitive proc-macro that
+# nobody has adopted yet is not something a release should block on.
+unmaintained = "workspace"
 
 [licenses]
 version = 2
@@ -19,6 +35,8 @@ allow = [
   "Zlib",
   "MPL-2.0",
   "CDLA-Permissive-2.0",
+  # error-code, reached through keyring's Windows backend.
+  "BSL-1.0",
 ]
 confidence-threshold = 0.9
 
