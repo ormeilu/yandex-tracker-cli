@@ -131,9 +131,12 @@ test *ARGS:
 test-fast:
     {{cargo}} nextest run --all-features
 
-# Tests against a real organisation. Needs .env; creates issues in YTCLI_TEST_QUEUE
+# Tests against a real organisation. Needs credentials; writes only if YTCLI_TEST_QUEUE
+#
+# One at a time on purpose: Tracker rate-limits, and a suite that fails on its
+# own concurrency reports its own noise rather than the API's behaviour.
 test-live:
-    {{cargo}} nextest run --all-features --features live -- --ignored
+    {{cargo}} test --all-features --test live -- --ignored --test-threads=1
 
 # Coverage report
 cov:

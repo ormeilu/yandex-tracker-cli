@@ -2,15 +2,21 @@
 
 ## Getting the binary
 
-The plugin carries this skill; the CLI is a separate program. Until the first
-release is published there is one way to install it:
+This skill is documentation; the CLI is a separate program. However the skill
+arrived, the binary still has to be installed:
 
 ```bash
+uvx --from yandex-tracker-cli ytcli --help    # run it without installing
+uv tool install yandex-tracker-cli            # keep it
 cargo install --git https://github.com/ormeilu/yandex-tracker-cli ytcli
 ```
 
-Planned, not yet available: prebuilt binaries for macOS, Linux and Windows,
-crates.io, a Homebrew tap, and a wheel for `uvx --from yandex-tracker-cli ytcli`.
+Or a prebuilt binary for Linux, macOS or Windows, x86-64 or arm64, from
+[Releases](https://github.com/ormeilu/yandex-tracker-cli/releases).
+
+`uvx ytcli` will not work: `uvx` looks for an executable named after the
+package, and `ytcli` on PyPI belongs to somebody else. Not on crates.io yet
+either ([#16](https://github.com/ormeilu/yandex-tracker-cli/issues/16)).
 
 ## Two words that are not the same thing
 

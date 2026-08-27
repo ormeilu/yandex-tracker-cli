@@ -22,7 +22,11 @@ jobs:
           - {os: ubuntu-latest, target: x86_64-unknown-linux-gnu}
           - {os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu}
           - {os: macos-latest, target: aarch64-apple-darwin}
-          - {os: macos-13, target: x86_64-apple-darwin}
+          # Intel macOS is cross-compiled from the arm runner. Apple's linker
+          # targets both architectures, and the Intel runners queue for tens
+          # of minutes when they are free at all — a release that cannot start
+          # is worse than one built on a host of a different architecture.
+          - {os: macos-latest, target: x86_64-apple-darwin}
           - {os: windows-latest, target: x86_64-pc-windows-msvc}
     runs-on: ${{ matrix.os }}
     steps:
@@ -64,7 +68,7 @@ jobs:
           - {os: ubuntu-latest, target: x86_64}
           - {os: ubuntu-24.04-arm, target: aarch64}
           - {os: macos-latest, target: aarch64}
-          - {os: macos-13, target: x86_64}
+          - {os: macos-latest, target: x86_64}
           - {os: windows-latest, target: x64}
     runs-on: ${{ matrix.os }}
     steps:

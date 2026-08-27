@@ -17,16 +17,20 @@ ytcli auth status --brief
 
 Two failures are possible here, and **neither is yours to fix silently.**
 
-**`ytcli: command not found`.** This plugin ships the skill, not the binary — a
-plugin cannot install software, and should not. There is no published release
-yet, so today the only route is from source:
+**`ytcli: command not found`.** You have the skill; the binary is a separate
+program, and whichever way the skill arrived — `skills add`, a plugin, a copied
+directory — none of them installs software, and none of them should.
 
 ```bash
-cargo install --git https://github.com/ormeilu/yandex-tracker-cli ytcli
+uvx --from yandex-tracker-cli ytcli --help    # no install
+uv tool install yandex-tracker-cli            # or keep it
 ```
 
-Tell the user that, and let them decide. Installing a toolchain and a binary on
-someone's machine is not a step to take on their behalf.
+Or a binary from https://github.com/ormeilu/yandex-tracker-cli/releases, or
+`cargo install --git https://github.com/ormeilu/yandex-tracker-cli ytcli`.
+
+Say which and let the user choose. Putting a program on someone's machine is
+not a step to take on their behalf.
 
 **Exit code 3** means there are no usable credentials. Say so and stop:
 `ytcli auth login` is an interactive prompt the user runs themselves, and a

@@ -62,6 +62,10 @@ default = []
 # TOON output format (https://toonformat.dev). Experimental: the format is young
 # and only pays off on uniform lists, so it stays behind a flag until measured.
 toon = ["dep:toon-format"]
+# Tests against a real organisation. Off by default and `#[ignore]`d on top of
+# that: they need credentials, they cost API calls, and one of them creates an
+# issue Tracker will not let anyone delete.
+live = []
 
 [profile.release]
 # The binary is invoked dozens of times per agent session; size and startup win

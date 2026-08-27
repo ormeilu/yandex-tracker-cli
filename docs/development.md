@@ -36,6 +36,12 @@ but readable by anything running as you. It is the trade the tool refuses to
 make for users, made deliberately for one machine; use an account whose rights
 you would not mind losing.
 
+`just test-live` runs a small suite against a real organisation, one test at a
+time. It exists for the class of bug fixtures cannot catch — three shipped past
+the mocked suite because the fixtures encoded the same wrong beliefs the code
+did. Reads need credentials; the one write test only runs when `YTCLI_TEST_QUEUE`
+names a queue, because Tracker has no delete.
+
 Planned work is tracked in
 [GitHub issues](https://github.com/ormeilu/yandex-tracker-cli/issues); pick one
 there rather than inventing a plan, and file a new issue for anything you find on

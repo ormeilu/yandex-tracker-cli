@@ -59,8 +59,10 @@ token, no token passed as a command-line argument (arguments are visible in `ps`
 
 - Renderers: `insta` snapshots.
 - HTTP: `wiremock` against recorded fixtures. Do not write tests that reach the
-  real API outside the `live` feature, which is ignored by default and needs
-  `.env`.
+  real API outside the `live` feature, which is ignored by default and takes its
+  credentials from the environment or the configured profile — `just test-live`.
+  Live tests answer what fixtures cannot: whether the payload still has the shape
+  we believe it has. They do not re-test the parsing that mocks already cover.
 - The binary's behaviour, exit codes and help: `tests/cli.rs` with `assert_cmd`.
 - A test that only restates the implementation is not worth its maintenance. Test
   the promises: exit codes, field order, tallies, fencing, profile provenance.
