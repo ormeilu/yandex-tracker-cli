@@ -15,10 +15,25 @@ asked. Every default here is chosen to keep output small and its shape stable.
 ytcli auth status --brief
 ```
 
-Exit code 3 means there are no usable credentials, and no other command will
-work until a human runs `ytcli auth login`. That is an interactive login: do not
-try to complete it, and never ask the user to paste a token into the
-conversation — say what is missing and stop.
+Two failures are possible here, and **neither is yours to fix silently.**
+
+**`ytcli: command not found`.** This plugin ships the skill, not the binary — a
+plugin cannot install software, and should not. There is no published release
+yet, so today the only route is from source:
+
+```bash
+cargo install --git https://github.com/ormeilu/yandex-tracker-cli ytcli
+```
+
+Tell the user that, and let them decide. Installing a toolchain and a binary on
+someone's machine is not a step to take on their behalf.
+
+**Exit code 3** means there are no usable credentials. Say so and stop:
+`ytcli auth login` is an interactive prompt the user runs themselves, and a
+token must never be requested in the conversation — it would end up in a
+transcript, and a token in a transcript is a token to revoke.
+
+Anything else, including exit 0, means you can work.
 
 ## The commands that cover most work
 

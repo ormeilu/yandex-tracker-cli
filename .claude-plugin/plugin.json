@@ -1,7 +1,7 @@
 {
   "name": "ytcli",
   "version": "0.1.0",
-  "description": "Yandex Tracker from the command line, sized for agents: read, search and change issues without spending a context window on it.",
+  "description": "Yandex Tracker from the command line, sized for agents: read, search and change issues without spending a context window on it. Ships the skill; the ytcli binary is installed separately.",
   "author": {
     "name": "Ilya Lubenets",
     "url": "https://github.com/ormeilu"
@@ -9,6 +9,12 @@
   "homepage": "https://ormeilu.github.io/yandex-tracker-cli/",
   "repository": "https://github.com/ormeilu/yandex-tracker-cli",
   "license": "MIT",
-  "keywords": ["yandex", "tracker", "issues", "cli", "agent"],
+  "keywords": [
+    "yandex",
+    "tracker",
+    "issues",
+    "cli",
+    "agent"
+  ],
   "skills": "./skills/"
 }

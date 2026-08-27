@@ -1,5 +1,17 @@
 # Profiles, several organisations, CI, permissions
 
+## Getting the binary
+
+The plugin carries this skill; the CLI is a separate program. Until the first
+release is published there is one way to install it:
+
+```bash
+cargo install --git https://github.com/ormeilu/yandex-tracker-cli ytcli
+```
+
+Planned, not yet available: prebuilt binaries for macOS, Linux and Windows,
+crates.io, a Homebrew tap, and a wheel so `uvx ytcli` works.
+
 ## Two words that are not the same thing
 
 An **account** holds one credential. A **profile** is one organisation seen

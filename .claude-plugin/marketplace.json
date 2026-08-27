@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "ytcli",
-      "description": "Read and change Yandex Tracker issues from the command line. Compact output by default; read verbs cannot write.",
+      "description": "Read and change Yandex Tracker issues from the command line. Compact output by default; read verbs cannot write. Requires the ytcli binary, installed separately.",
       "source": "./",
       "category": "productivity"
     }
