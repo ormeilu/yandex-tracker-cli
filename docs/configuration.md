@@ -161,16 +161,24 @@ each see an `LMS`, and `LMS-12` then names two different issues. Whichever
 profile is active decides — which is fine in a repository with a `.tracker.toml`,
 and a trap when you are switching between organisations by hand.
 
-Say which one on the key itself:
+A bare `LMS-12` keeps working — the prefix is only *required* when a collision
+actually exists, and only once this tool has seen it:
 
 ```bash
-ytcli issue get work/LMS-12
-ytcli issue comment personal/LMS-12 "not this one"
+ytcli issue get LMS-12          # fine, when only one profile sees LMS
+ytcli issue get work/LMS-12     # always accepted, collision or not
 ```
 
-The prefix overrides everything else for that command, and the command reports
-which profile it used. `ytcli auth status` warns when it sees the same queue key
-in more than one profile, so you find out before it matters rather than after.
+When two profiles do share a queue key, the bare form is refused rather than
+guessed at, and the message names both candidates. The prefix overrides
+everything else for that command, and the command reports the profile it used.
+
+The collision is known from what `ytcli auth status` and `ytcli auth login`
+already had to look up — the queue lists they fetch are recorded next to the
+config, so nothing extra is requested on a normal command. That means the
+knowledge is only as current as the last `auth status`: an unknown collision
+does not block anything, which is deliberate. Refusing on a guess would make the
+common case worse to guard against a situation most people never have.
 
 ## Display defaults
 

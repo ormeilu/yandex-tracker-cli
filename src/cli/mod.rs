@@ -132,6 +132,7 @@ impl Session {
     /// the command runs against that profile.
     pub fn client_for(&self, target: &str) -> Result<(crate::api::Client, String), ExitCode> {
         let Some((profile, key)) = target.split_once('/') else {
+            self.refuse_if_ambiguous(target)?;
             return Ok((self.client()?, target.to_owned()));
         };
 
@@ -156,6 +157,41 @@ impl Session {
         );
 
         Ok((self.client_with(&resolved)?, key.to_owned()))
+    }
+
+    /// Stop a bare key that could mean two different issues.
+    ///
+    /// Only a *known* collision refuses — one this tool has actually seen, from
+    /// a previous `auth status` or `auth login`. Anything unknown proceeds:
+    /// blocking on a guess would make the common case worse to protect against
+    /// a situation most people never have.
+    fn refuse_if_ambiguous(&self, key: &str) -> Result<(), ExitCode> {
+        let Some(queue) = crate::config::cache::queue_of(key) else {
+            return Ok(());
+        };
+
+        let configured: Vec<String> = self.config.profiles.keys().cloned().collect();
+        let cache =
+            crate::config::cache::Cache::load(&crate::config::cache::path_for(&self.config_file));
+        let owners = cache.profiles_for(queue, &configured);
+
+        if owners.len() < 2 {
+            return Ok(());
+        }
+
+        let qualified = owners
+            .iter()
+            .map(|profile| format!("{profile}/{key}"))
+            .collect::<Vec<_>>()
+            .join(" or ");
+
+        Err(report(
+            &format!(
+                "`{key}` is ambiguous: queue {queue} is visible in {} — write {qualified}",
+                owners.join(" and "),
+            ),
+            ExitCode::ConfirmationRequired,
+        ))
     }
 
     /// Build an API client for the active profile.

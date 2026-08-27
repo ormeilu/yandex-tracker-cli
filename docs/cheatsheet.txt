@@ -27,8 +27,9 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
 
 ## issue
   ytcli issue get PROJ-1                summary, fields, links, first 10 description lines
-  ytcli issue get work/PROJ-1           same, against the `work` profile — queue keys are only
-                                        unique inside one organisation
+  ytcli issue get work/PROJ-1           same, against the `work` profile. Always accepted;
+                                        required only when two profiles share the queue key,
+                                        in which case the bare form is refused, not guessed
   ytcli issue get PROJ-1 --fields status,assignee,storyPoints
   ytcli issue links PROJ-1              links with their type
   ytcli issue comments PROJ-1

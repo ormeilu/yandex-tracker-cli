@@ -71,6 +71,33 @@ impl Harness {
         command
     }
 
+    /// Add a second profile, for the cases about telling two of them apart.
+    pub fn add_profile(&self, name: &str, org_id: &str) {
+        use std::fmt::Write as _;
+
+        let mut config = std::fs::read_to_string(&self.config).expect("read config");
+        let _ = write!(
+            config,
+            "\n[profiles.{name}]\naccount = \"test\"\norg_id = \"{org_id}\"\norg_kind = \"cloud\"\n"
+        );
+        std::fs::write(&self.config, config).expect("write config");
+    }
+
+    /// Pretend a previous `auth status` learned which profiles see which queues.
+    pub fn write_queue_cache(&self, entries: &[(&str, &[&str])]) {
+        let queues: serde_json::Map<String, serde_json::Value> = entries
+            .iter()
+            .map(|(queue, profiles)| ((*queue).to_owned(), serde_json::json!(profiles)))
+            .collect();
+
+        let path = self.config.with_file_name("queues.json");
+        std::fs::write(
+            path,
+            serde_json::json!({"version": 1, "queues": queues}).to_string(),
+        )
+        .expect("write queue cache");
+    }
+
     /// The binary with no profile flag of ours.
     pub fn run_raw(&self, args: &[&str]) -> Command {
         let mut command = Command::cargo_bin("ytcli").expect("binary built");

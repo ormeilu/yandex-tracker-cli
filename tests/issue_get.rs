@@ -223,3 +223,59 @@ async fn a_stray_slash_is_rejected_rather_than_guessed_at() {
             "write it as PROJ-1 or profile/PROJ-1",
         ));
 }
+
+/// A bare key is refused only when this tool has *seen* the collision — from a
+/// previous `auth status` or login. Guessing would make the common case worse
+/// to guard against a situation most people never have.
+#[tokio::test]
+async fn a_bare_key_is_refused_when_two_profiles_share_the_queue() {
+    let harness = Harness::new().await;
+    harness.add_profile("other", "99999");
+    harness.write_queue_cache(&[("PROJ", &["test", "other"])]);
+
+    harness
+        .run_raw(&["issue", "get", "PROJ-1"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("`PROJ-1` is ambiguous"))
+        .stderr(predicate::str::contains(
+            "write other/PROJ-1 or test/PROJ-1",
+        ));
+}
+
+/// Qualified always works, collision or not — scripts written before the
+/// collision existed keep working, and so do scripts written after.
+#[tokio::test]
+async fn a_qualified_key_works_even_when_the_queue_is_shared() {
+    let harness = Harness::new().await;
+    harness.add_profile("other", "99999");
+    harness.write_queue_cache(&[("PROJ", &["test", "other"])]);
+    issue_available(&harness).await;
+
+    harness
+        .run_raw(&["issue", "get", "test/PROJ-1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("PROJ-1  Attachments are lost"));
+}
+
+/// One profile seeing the queue is not a collision.
+#[tokio::test]
+async fn a_bare_key_is_fine_when_only_one_profile_sees_the_queue() {
+    let harness = Harness::new().await;
+    harness.write_queue_cache(&[("PROJ", &["test"])]);
+    issue_available(&harness).await;
+
+    harness.run(&["issue", "get", "PROJ-1"]).assert().success();
+}
+
+/// A collision recorded for a profile that has since been removed from the
+/// config must stop blocking.
+#[tokio::test]
+async fn a_collision_with_a_deleted_profile_stops_mattering() {
+    let harness = Harness::new().await;
+    harness.write_queue_cache(&[("PROJ", &["test", "deleted-long-ago"])]);
+    issue_available(&harness).await;
+
+    harness.run(&["issue", "get", "PROJ-1"]).assert().success();
+}

@@ -189,25 +189,8 @@ async fn status(session: &Session, brief: bool, active_only: bool) -> ExitCode {
         }
     }
 
-    // A queue key is unique inside an organisation, not across them, so the same
-    // key in two profiles means a bare `LMS-12` is ambiguous. Better to hear that
-    // here than to discover it by commenting on the wrong issue.
-    let shared: Vec<(&String, &Vec<String>)> = queues_seen
-        .iter()
-        .filter(|(_, profiles)| profiles.len() > 1)
-        .collect();
-    if !shared.is_empty() {
-        let _ = writeln!(err);
-        for (key, profiles) in shared {
-            let _ = writeln!(
-                err,
-                "{} queue {key} is visible in {} — write {}/{key}-1 to say which",
-                paint.paint("warning:", Palette::warn()),
-                profiles.join(" and "),
-                profiles.first().map_or("profile", String::as_str),
-            );
-        }
-    }
+    remember_queues(session, brief, active_only, active.as_deref(), &queues_seen);
+    warn_about_collisions(paint, &queues_seen);
 
     // The active profile decides the outcome — a broken profile nobody is using
     // should not make a script think the tool is unusable. But if *nothing*
@@ -215,6 +198,67 @@ async fn status(session: &Session, brief: bool, active_only: bool) -> ExitCode {
     active_failure
         .or_else(|| (!any_success).then_some(last_failure).flatten())
         .unwrap_or(ExitCode::Success)
+}
+
+/// Persist the queue map, so a later bare key can be judged without a request.
+fn remember_queues(
+    session: &Session,
+    brief: bool,
+    active_only: bool,
+    active: Option<&str>,
+    queues_seen: &std::collections::BTreeMap<String, Vec<String>>,
+) {
+    if brief {
+        return;
+    }
+
+    let cache_path = crate::config::cache::path_for(&session.config_file);
+    let mut cache = crate::config::cache::Cache::load(&cache_path);
+
+    for name in session
+        .config
+        .profiles
+        .keys()
+        .filter(|name| !active_only || active == Some(name.as_str()))
+    {
+        let keys: Vec<String> = queues_seen
+            .iter()
+            .filter(|(_, profiles)| profiles.iter().any(|profile| profile == name))
+            .map(|(key, _)| key.clone())
+            .collect();
+        cache.record(name, &keys);
+    }
+
+    cache.save(&cache_path);
+}
+
+/// Say which queue keys mean two different things.
+///
+/// Better heard here than discovered by commenting on the wrong issue.
+fn warn_about_collisions(
+    paint: Painter,
+    queues_seen: &std::collections::BTreeMap<String, Vec<String>>,
+) {
+    let mut err = anstream::stderr();
+
+    let shared: Vec<(&String, &Vec<String>)> = queues_seen
+        .iter()
+        .filter(|(_, profiles)| profiles.len() > 1)
+        .collect();
+    if shared.is_empty() {
+        return;
+    }
+
+    let _ = writeln!(err);
+    for (key, profiles) in shared {
+        let _ = writeln!(
+            err,
+            "{} queue {key} is visible in {} — a bare {key}-1 will be refused; write {}/{key}-1",
+            paint.paint("warning:", Palette::warn()),
+            profiles.join(" and "),
+            profiles.first().map_or("profile", String::as_str),
+        );
+    }
 }
 
 /// Everything that needs the network, for one profile.
@@ -576,6 +620,17 @@ async fn shape_profile(
         Some(queue) => Some(queue),
         None if shape.interactive => {
             let available = queue_keys(shape.token, shape.org_id, shape.org_kind).await;
+
+            // Listing them anyway makes recording them free, and a collision
+            // with an existing profile can then be caught on the next command
+            // rather than after acting on the wrong issue.
+            if !session.global.dry_run {
+                let cache_path = crate::config::cache::path_for(&session.config_file);
+                let mut cache = crate::config::cache::Cache::load(&cache_path);
+                cache.record(&profile_name, &available);
+                cache.save(&cache_path);
+            }
+
             wizard::queue(&available).map_err(|error| report(&error, error.exit_code()))?
         }
         None => None,

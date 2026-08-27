@@ -9,6 +9,7 @@
 //! organisation can be reached through several accounts (admin and read-only).
 //! That is why the token is keyed by account and never by profile.
 
+pub mod cache;
 pub mod paths;
 pub mod store;
 
