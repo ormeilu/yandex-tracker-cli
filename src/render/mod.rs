@@ -14,6 +14,7 @@
 
 pub mod entity;
 pub mod markdown;
+pub mod progress;
 pub mod queue;
 pub mod style;
 pub mod table;

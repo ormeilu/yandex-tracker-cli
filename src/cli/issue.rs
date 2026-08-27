@@ -266,11 +266,13 @@ async fn find_all(
     let mut collected: Vec<crate::api::models::Issue> = Vec::new();
     let mut page_number = 1;
     let mut total = None;
+    let walk = crate::render::progress::Walk::start("searching");
 
     loop {
         let page = match client.search(query, page_number, per_page).await {
             Ok(page) => page,
             Err(error) => {
+                walk.finish();
                 let code = error.exit_code();
                 return report(&error, code);
             }
@@ -278,6 +280,7 @@ async fn find_all(
         total = page.total.or(total);
 
         if collected.len() + page.items.len() > max {
+            walk.finish();
             return report(
                 &format!(
                     "more than --max {max} issues match ({}); narrow the filter or raise --max",
@@ -289,11 +292,13 @@ async fn find_all(
 
         let more = page.has_more();
         collected.extend(page.items);
+        walk.page(page_number, collected.len(), total);
         if !more {
             break;
         }
         page_number += 1;
     }
+    walk.finish();
 
     let Ok(count) = u32::try_from(collected.len()) else {
         return report(&"too many results to render", ExitCode::Failure);
