@@ -48,6 +48,28 @@ perform.
 An empty result is a success, and so is a truncated one. Pagination state lives in
 the output text, never in the exit code.
 
+## Installing the skill
+
+The skill lives in `skills/ytcli/` and is shipped as a plugin for both hosts from
+the same directory — there is one copy of it, not one per vendor.
+
+Claude Code:
+
+```bash
+claude plugin marketplace add ormeilu/yandex-tracker-cli
+claude plugin install ytcli@ytcli
+```
+
+Codex reads `~/.codex/skills/`; copy or link the directory there:
+
+```bash
+ln -s "$PWD/skills/ytcli" ~/.codex/skills/ytcli
+```
+
+Neither host lets a plugin grant itself permissions, which is correct. The
+allowlist is a block of JSON in `skills/ytcli/setup.md` that you install
+yourself.
+
 ## Learning the surface
 
 The same ladder as the output. The shipped skill is small: what the tool is, when

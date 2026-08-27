@@ -1,0 +1,96 @@
+# Profiles, several organisations, CI, permissions
+
+## Two words that are not the same thing
+
+An **account** holds one credential. A **profile** is one organisation seen
+through one account. A person with an admin login and a personal login in the
+same organisation has two accounts; the same account seeing a work and a
+personal organisation gives two profiles. Log in once per account; every profile
+naming it works from then on.
+
+```bash
+ytcli auth status        # every profile: identity, org, queues, projects, your open issues
+ytcli auth status --brief --active-only
+ytcli auth list          # accounts and profiles, and whether a token is stored
+```
+
+## Which profile is in play
+
+Highest wins:
+
+1. `--profile NAME`
+2. `YTCLI_PROFILE`
+3. `.tracker.toml` in the working directory or above it
+4. the configured default
+
+`auth status` reports which of these the answer came from, so "it used the wrong
+organisation" is a question with an answer rather than a guess.
+
+**In a repository**, commit a `.tracker.toml` naming the profile. An agent handed
+that directory and nothing else then reaches the right organisation with no
+setup.
+
+## Logging in
+
+`ytcli auth login` is interactive: it asks for each value in turn and takes the
+token the way a password prompt does, so it never lands in shell history.
+
+**Do not attempt this on the user's behalf, and never ask for a token in the
+conversation.** If credentials are missing, say so and let the user run it.
+Outside a terminal the command takes flags only and reads the token from stdin,
+which is what CI uses.
+
+## CI and containers
+
+```bash
+export YTCLI_TOKEN=…      # checked before the keychain is opened at all
+export YTCLI_ORG_ID=…
+```
+
+With `YTCLI_TOKEN` set, no keychain is touched, so a runner with no Secret
+Service and no Keychain is not a problem. Without it, there is no plaintext
+fallback: tokens live in the OS keychain or the command fails and says so.
+
+There is no command that prints a stored token.
+
+## Permission allowlists
+
+The verb is the risk class, and no verb both reads and writes, so a static
+allowlist is worth having. For Claude Code, in `.claude/settings.json`:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(ytcli issue get:*)",
+      "Bash(ytcli issue find:*)",
+      "Bash(ytcli issue count:*)",
+      "Bash(ytcli issue links:*)",
+      "Bash(ytcli issue comments:*)",
+      "Bash(ytcli queue list:*)",
+      "Bash(ytcli queue fields:*)",
+      "Bash(ytcli project list:*)",
+      "Bash(ytcli project get:*)",
+      "Bash(ytcli goal list:*)",
+      "Bash(ytcli goal get:*)",
+      "Bash(ytcli attachment list:*)",
+      "Bash(ytcli auth status:*)",
+      "Bash(ytcli auth list:*)",
+      "Bash(ytcli cheatsheet:*)"
+    ],
+    "ask": [
+      "Bash(ytcli issue create:*)",
+      "Bash(ytcli issue update:*)",
+      "Bash(ytcli issue comment:*)",
+      "Bash(ytcli issue transition:*)",
+      "Bash(ytcli attachment upload:*)",
+      "Bash(ytcli auth login:*)",
+      "Bash(ytcli auth logout:*)"
+    ]
+  }
+}
+```
+
+Reading then stops prompting, and anything that changes someone else's Tracker
+still asks. This is data you install, not something the plugin does to you: a
+plugin cannot grant itself permissions, and one that could should not.

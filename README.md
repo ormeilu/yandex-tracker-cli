@@ -146,6 +146,19 @@ ask:   ytcli issue update:*, ytcli issue comment:*, ytcli issue transition:*
 Writes that touch more than one issue need `--yes`; every write accepts
 `--dry-run`. `ytcli cheatsheet` prints the whole surface in one call.
 
+A skill ships with the tool, as a plugin for Claude Code and for Codex from the
+same directory:
+
+```bash
+claude plugin marketplace add ormeilu/yandex-tracker-cli
+claude plugin install ytcli@ytcli
+```
+
+It is deliberately small — what the tool is, the handful of commands that cover
+most work, and topic files read only when they are relevant. The full allowlist
+is in [`skills/ytcli/setup.md`](skills/ytcli/setup.md); no plugin can install it
+for you, and one that could should not.
+
 Exit codes: `0` ok, `1` error, `2` confirmation required, `3` auth, `4` not found,
 `5` rejected by Tracker, `64` not implemented yet.
 

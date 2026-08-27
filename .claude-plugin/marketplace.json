@@ -1,0 +1,16 @@
+{
+  "name": "ytcli",
+  "description": "Yandex Tracker CLI for humans and agents.",
+  "owner": {
+    "name": "Ilya Lubenets",
+    "url": "https://github.com/ormeilu"
+  },
+  "plugins": [
+    {
+      "name": "ytcli",
+      "description": "Read and change Yandex Tracker issues from the command line. Compact output by default; read verbs cannot write.",
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}

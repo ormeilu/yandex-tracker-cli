@@ -12,7 +12,7 @@ homepage = "https://ormeilu.github.io/yandex-tracker-cli/"
 documentation = "https://ormeilu.github.io/yandex-tracker-cli/"
 keywords = ["yandex", "tracker", "cli", "llm", "agent"]
 categories = ["command-line-utilities"]
-exclude = ["/.github", "/docs", "/tests/fixtures"]
+exclude = ["/.github", "/docs", "/skills", "/tests/fixtures"]
 
 [dependencies]
 anstream = "1.0.0"
