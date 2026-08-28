@@ -320,6 +320,43 @@ ytcli issue worklog add PROJ-1 45m --start 2026-08-27T09:00:00+0300
 Durations are `1h30m`, `45m`, `2d`, `1w`, or ISO 8601. `--start` defaults to
 now, which is what somebody logging time at the end of the work means.";
 
+pub const WORKLOG_EDIT: &str = "\
+Correct a worklog entry that is already recorded.
+
+```
+ytcli issue worklog edit PROJ-1 12345 -d 2h
+ytcli issue worklog edit PROJ-1 12345 -m \"pairing, not review\"
+```
+
+The id comes from `ytcli issue worklogs`. Pass whichever of the two is wrong;
+passing neither is refused before anything is sent, like an update that sets no
+field.";
+
+pub const COMMENT_EDIT: &str = "\
+Replace the text of a comment.
+
+```
+ytcli issue comment edit PROJ-1 987654 \"the corrected text\"
+ytcli issue comment edit PROJ-1 987654 -
+```
+
+The id comes from `ytcli issue comments`. This is a replacement, not an
+addition: the whole body is what you pass, and the previous wording is gone —
+Tracker keeps no history of it and shows the comment as edited.
+
+`-` reads the body from stdin, which is how a body with newlines in it gets
+there.";
+
+pub const COMMENT_DELETE: &str = "\
+Remove a comment.
+
+```
+ytcli issue comment delete PROJ-1 987654
+```
+
+The id comes from `ytcli issue comments`, and is the comment's own — not the
+key of the issue it is on.";
+
 pub const WORKLOG_DELETE: &str = "\
 Remove one worklog entry.
 

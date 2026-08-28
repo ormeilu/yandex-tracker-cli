@@ -236,6 +236,58 @@ impl Client {
         parse::comment(&value).ok_or_else(|| ApiError::NotFound("created comment".to_owned()))
     }
 
+    /// Rewrite a comment that is already there.
+    ///
+    /// Tracker keeps no history of the previous text and shows the comment as
+    /// edited, so this replaces rather than appends: the old wording is gone.
+    pub async fn update_comment(
+        &self,
+        key: &str,
+        id: &str,
+        text: &str,
+    ) -> Result<Comment, ApiError> {
+        let body = serde_json::json!({ "text": text });
+        let (value, _) = self
+            .send_value(
+                reqwest::Method::PATCH,
+                &format!("/v3/issues/{key}/comments/{id}"),
+                Some(&body),
+                &format!("comment {id} of issue {key}"),
+            )
+            .await?;
+        parse::comment(&value).ok_or_else(|| ApiError::NotFound(format!("comment {id}")))
+    }
+
+    /// Remove a comment.
+    pub async fn delete_comment(&self, key: &str, id: &str) -> Result<(), ApiError> {
+        self.send_value(
+            reqwest::Method::DELETE,
+            &format!("/v3/issues/{key}/comments/{id}"),
+            None,
+            &format!("comment {id} of issue {key}"),
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Correct a worklog entry that is already recorded.
+    pub async fn update_worklog(
+        &self,
+        key: &str,
+        id: &str,
+        body: &Value,
+    ) -> Result<Worklog, ApiError> {
+        let (value, _) = self
+            .send_value(
+                reqwest::Method::PATCH,
+                &format!("/v3/issues/{key}/worklog/{id}"),
+                Some(body),
+                &format!("worklog {id} of issue {key}"),
+            )
+            .await?;
+        parse::worklog(&value).ok_or_else(|| ApiError::NotFound(format!("worklog {id}")))
+    }
+
     /// `GET /v3/issues/{key}/worklog` — every entry, oldest first.
     pub async fn worklogs(&self, key: &str) -> Result<Vec<Worklog>, ApiError> {
         let raw = self

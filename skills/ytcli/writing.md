@@ -27,9 +27,11 @@ name or the value type is a guess.
 ytcli issue create -q PROJ -s "Attachments are lost on move" -d "body text"
 ytcli issue update PROJ-1 --set storyPoints=3 --assignee login
 ytcli issue comment PROJ-1 "text"          # or `-` to read the body from stdin
+ytcli issue comment edit PROJ-1 ID "text"  # replaces the body; delete also exists
 ytcli issue transition PROJ-1              # no id: lists what is available
 ytcli issue transition PROJ-1 close
 ytcli issue worklog add PROJ-1 1h30m -m "pairing"
+ytcli issue worklog edit PROJ-1 ID -d 2h   # pass whichever of -d/-m is wrong
 ytcli issue check add PROJ-1 "write the migration"   # tick|untick|delete by id
 ytcli issue link add PROJ-1 relates PROJ-7
 ytcli attachment upload PROJ-1 ./file.png
@@ -39,21 +41,24 @@ Reads and writes never share a prefix: `worklogs` reads, `worklog` writes;
 `checklist` reads, `check` writes; `links` reads, `link` writes. That is what
 makes the read half safe to allowlist.
 
+`comment edit` replaces the body rather than adding to it: pass the whole text,
+and expect the previous wording to be gone — Tracker keeps no history of it.
+
+```bash
+ytcli issue move PROJ-1 --to OPS --yes     # --keep-fields to carry the rest
+```
+
+`issue move` needs `--yes` even for one issue, because the key changes.
+`PROJ-1` becomes `OPS-N`, every reference to the old key becomes a redirect,
+and no request moves it back. Say the new key back to the user — nothing they
+were holding still addresses the issue.
+
 Two writes reach past issues, and both are rarer than they look:
 
 ```bash
 ytcli project place 655… --into 644…       # or --out
 ytcli queue create -k OPS -n Operations --like PROJ --yes
 ```
-
-```bash
-ytcli issue move PROJ-1 --to OPS --yes     # --keep-fields to carry the rest
-```
-
-`issue move` needs `--yes` for the same reason `queue create` does, not because
-it touches several issues: the key changes. `PROJ-1` becomes `OPS-N`, every
-reference to the old key becomes a redirect, and no request moves it back. Say
-the new key back to the user — nothing they were holding still addresses it.
 
 `queue create` needs `--yes` even for one queue: a key is claimed once, Tracker
 deletes a queue by hiding it, and the key stays spent. `--like` copies the issue

@@ -78,12 +78,21 @@ pub enum IssueCommand {
         #[arg(long = "set", value_name = "KEY=VALUE")]
         set: Vec<String>,
     },
-    /// Add a comment.
-    #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_COMMENT))]
+    /// Add a comment, or edit and remove one. Every verb here writes.
+    ///
+    /// A group with a bare form: `issue comment PROJ-1 "text"` is how this was
+    /// spelled before there was anything to edit, it is in every allowlist
+    /// people wrote, and breaking it to gain two subcommands would be a poor
+    /// trade. `add` is the same thing said explicitly.
+    #[command(args_conflicts_with_subcommands = true,
+              long_about = crate::cli::help::md(crate::cli::help::ISSUE_COMMENT))]
     Comment {
-        key: String,
+        #[command(subcommand)]
+        command: Option<CommentCommand>,
+        /// Issue to comment on.
+        key: Option<String>,
         /// Comment body; `-` reads from stdin.
-        text: String,
+        text: Option<String>,
     },
     /// Show the worklog of an issue.
     #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_WORKLOGS))]
@@ -145,8 +154,45 @@ pub enum WorklogCommand {
         #[arg(long)]
         start: Option<String>,
     },
+    /// Correct an entry that is already recorded.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WORKLOG_EDIT))]
+    Edit {
+        key: String,
+        /// Worklog id, from `issue worklogs`.
+        id: String,
+        /// The corrected duration.
+        #[arg(long, short = 'd')]
+        duration: Option<String>,
+        /// The corrected comment.
+        #[arg(long, short = 'm')]
+        comment: Option<String>,
+    },
     /// Remove one worklog entry.
     #[command(long_about = crate::cli::help::md(crate::cli::help::WORKLOG_DELETE))]
+    Delete { key: String, id: String },
+}
+
+/// Editing comments. Reading them is `issue comments`.
+#[derive(Debug, Subcommand)]
+pub enum CommentCommand {
+    /// Add a comment.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_COMMENT))]
+    Add {
+        key: String,
+        /// Comment body; `-` reads from stdin.
+        text: String,
+    },
+    /// Replace the text of a comment.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::COMMENT_EDIT))]
+    Edit {
+        key: String,
+        /// Comment id, from `issue comments`.
+        id: String,
+        /// The new body in full; `-` reads from stdin.
+        text: String,
+    },
+    /// Remove a comment.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::COMMENT_DELETE))]
     Delete { key: String, id: String },
 }
 
@@ -264,7 +310,16 @@ pub async fn run(command: &IssueCommand, session: &Session) -> ExitCode {
             assignee,
             set,
         } => update(keys, summary.as_deref(), assignee.as_deref(), set, session).await,
-        IssueCommand::Comment { key, text } => comment(key, text, session).await,
+        IssueCommand::Comment { command, key, text } => match (command, key, text) {
+            (Some(command), _, _) => comment_write(command, session).await,
+            (None, Some(key), Some(text)) => comment(key, text, session).await,
+            // clap cannot require two positionals that a subcommand replaces,
+            // so the bare form is checked here rather than in the parser.
+            (None, ..) => report(
+                &"usage: ytcli issue comment <KEY> <TEXT>, or `issue comment --help`",
+                ExitCode::ConfirmationRequired,
+            ),
+        },
         IssueCommand::Transition { key, transition } => {
             transition_cmd(key, transition.as_deref(), session).await
         }
@@ -377,9 +432,124 @@ async fn worklog_write(command: &WorklogCommand, session: &Session) -> ExitCode 
                 }
             }
         }
+        WorklogCommand::Edit {
+            key,
+            id,
+            duration,
+            comment,
+        } => worklog_edit(key, id, duration.as_deref(), comment.as_deref(), session).await,
         WorklogCommand::Delete { key, id } => {
             delete_with_gate(key, id, session, "worklog", |client, key, id| {
                 Box::pin(async move { client.delete_worklog(key, id).await })
+            })
+            .await
+        }
+    }
+}
+
+/// Correct an entry that is already recorded.
+async fn worklog_edit(
+    key: &str,
+    id: &str,
+    duration: Option<&str>,
+    comment: Option<&str>,
+    session: &Session,
+) -> ExitCode {
+    // Nothing to change is a mistake worth catching before a request,
+    // like an update that sets no field.
+    if duration.is_none() && comment.is_none() {
+        return report(
+            &"nothing to change: pass --duration, --comment, or both",
+            ExitCode::ConfirmationRequired,
+        );
+    }
+
+    let (client, key) = match session.client_for(key).await {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    let mut body = serde_json::Map::new();
+    if let Some(duration) = duration {
+        let iso = match crate::api::duration::to_iso8601(duration) {
+            Ok(iso) => iso,
+            Err(error) => return report(&error, ExitCode::ConfirmationRequired),
+        };
+        body.insert("duration".to_owned(), serde_json::json!(iso));
+    }
+    if let Some(comment) = comment {
+        body.insert("comment".to_owned(), serde_json::json!(comment));
+    }
+    let body = serde_json::Value::Object(body);
+
+    let targets = [key.clone()];
+    let intent = Intent {
+        action: &format!("correct worklog {id} of {key}"),
+        targets: &targets,
+        body: &body,
+        always_confirm: false,
+    };
+    if let Gate::Stop(code) = check(&intent, session) {
+        return code;
+    }
+
+    match client.update_worklog(&key, id, &body).await {
+        Ok(entry) => {
+            emit(&format!(
+                "{key} worklog {} {}\n",
+                entry.id,
+                crate::api::duration::human(&entry.duration)
+            ));
+            ExitCode::Success
+        }
+        Err(error) => {
+            let code = error.exit_code();
+            report(&error, code)
+        }
+    }
+}
+
+/// Adding, rewriting and removing comments.
+async fn comment_write(command: &CommentCommand, session: &Session) -> ExitCode {
+    match command {
+        CommentCommand::Add { key, text } => comment(key, text, session).await,
+        CommentCommand::Edit { key, id, text } => {
+            let (client, key) = match session.client_for(key).await {
+                Ok(pair) => pair,
+                Err(code) => return code,
+            };
+
+            let text_body = match body_text(text) {
+                Ok(text) => text,
+                Err(code) => return code,
+            };
+
+            let body = serde_json::json!({ "text": text_body });
+            let targets = [key.clone()];
+            let intent = Intent {
+                action: &format!("replace the text of comment {id} on {key}"),
+                targets: &targets,
+                body: &body,
+                always_confirm: false,
+            };
+            if let Gate::Stop(code) = check(&intent, session) {
+                return code;
+            }
+
+            match client.update_comment(&key, id, &text_body).await {
+                Ok(comment) => {
+                    emit(&format!("{key} comment {} edited\n", comment.id));
+                    ExitCode::Success
+                }
+                Err(error) => {
+                    let code = error.exit_code();
+                    report(&error, code)
+                }
+            }
+        }
+        CommentCommand::Delete { key, id } => {
+            delete_with_gate(key, id, session, "comment", |client, key, id| {
+                Box::pin(async move { client.delete_comment(key, id).await })
             })
             .await
         }

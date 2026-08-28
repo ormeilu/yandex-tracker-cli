@@ -198,6 +198,7 @@ async fn every_deletion_is_gated_and_sends_nothing_under_dry_run() {
         vec!["issue", "worklog", "delete", "PROJ-1", "12345"],
         vec!["issue", "check", "delete", "PROJ-1", "42"],
         vec!["issue", "link", "delete", "PROJ-1", "987"],
+        vec!["issue", "comment", "delete", "PROJ-1", "987654"],
     ] {
         let harness = Harness::new().await;
         let mut dry = args.clone();
@@ -236,4 +237,103 @@ async fn the_read_and_the_write_are_different_words() {
     ] {
         harness.run(&write).assert().failure();
     }
+}
+
+/// The old spelling is in every allowlist anyone wrote, so gaining `edit` and
+/// `delete` must not cost it.
+#[tokio::test]
+async fn the_bare_comment_form_still_works_beside_the_subcommands() {
+    for args in [
+        vec!["issue", "comment", "PROJ-1", "text"],
+        vec!["issue", "comment", "add", "PROJ-1", "text"],
+    ] {
+        let harness = Harness::new().await;
+        Mock::given(method("POST"))
+            .and(path("/v3/issues/PROJ-1/comments"))
+            .and(body_json(serde_json::json!({"text": "text"})))
+            .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({
+                "id": 987_654, "text": "text"
+            })))
+            .mount(&harness.server)
+            .await;
+
+        harness
+            .run(&args)
+            .assert()
+            .success()
+            .stdout("PROJ-1 comment 987654\n");
+    }
+}
+
+/// Editing replaces the body rather than appending to it: what is sent is the
+/// whole text, and Tracker keeps no copy of what was there.
+#[tokio::test]
+async fn editing_a_comment_sends_the_whole_new_body() {
+    let harness = Harness::new().await;
+    Mock::given(method("PATCH"))
+        .and(path("/v3/issues/PROJ-1/comments/987654"))
+        .and(body_json(serde_json::json!({"text": "corrected"})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "id": 987_654, "text": "corrected"
+        })))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&["issue", "comment", "edit", "PROJ-1", "987654", "corrected"])
+        .assert()
+        .success()
+        .stdout("PROJ-1 comment 987654 edited\n");
+}
+
+#[tokio::test]
+async fn a_comment_can_be_removed_by_its_own_id() {
+    let harness = Harness::new().await;
+    Mock::given(method("DELETE"))
+        .and(path("/v3/issues/PROJ-1/comments/987654"))
+        .respond_with(ResponseTemplate::new(204))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&["issue", "comment", "delete", "PROJ-1", "987654"])
+        .assert()
+        .success()
+        .stdout("PROJ-1 comment 987654 deleted\n");
+}
+
+/// A correction sends only what was corrected: sending the whole entry back
+/// would overwrite the half the caller did not mention.
+#[tokio::test]
+async fn correcting_a_worklog_sends_only_what_changed() {
+    let harness = Harness::new().await;
+    Mock::given(method("PATCH"))
+        .and(path("/v3/issues/PROJ-1/worklog/12345"))
+        .and(body_json(serde_json::json!({"duration": "PT2H"})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "id": 12345, "duration": "PT2H"
+        })))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&["issue", "worklog", "edit", "PROJ-1", "12345", "-d", "2h"])
+        .assert()
+        .success()
+        .stdout("PROJ-1 worklog 12345 2h\n");
+}
+
+/// Changing nothing is a mistake, and it is caught before a request the way an
+/// update that sets no field is.
+#[tokio::test]
+async fn a_worklog_edit_that_changes_nothing_is_refused() {
+    let harness = Harness::new().await;
+
+    harness
+        .run(&["issue", "worklog", "edit", "PROJ-1", "12345"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("nothing to change"));
+
+    assert!(harness.server.received_requests().await.unwrap().is_empty());
 }
