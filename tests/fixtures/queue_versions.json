@@ -1,0 +1,4 @@
+[
+  {"id": 1, "name": "1.0", "description": "First release", "released": true, "archived": false, "dueDate": "2026-06-01"},
+  {"id": 2, "name": "1.1", "released": false, "archived": false}
+]

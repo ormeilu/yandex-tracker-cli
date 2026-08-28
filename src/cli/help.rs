@@ -871,3 +871,26 @@ hours, a week is five days, and neither is turned into the other here.
 
 There is no total to page against, so a result that fills `--limit` says so on
 stderr rather than looking like the whole answer.";
+
+pub const QUEUE_VERSIONS: &str = "\
+List the versions a queue defines.
+
+```
+ytcli queue versions PROJ
+```
+
+These are what an issue's `fixVersions` points at; without them that field is
+an id with no meaning.
+
+`STATE` is `open`, `released` or `archived`. Archived wins over released: an
+archived version is out of use whether or not it ever shipped.";
+
+pub const QUEUE_TAGS: &str = "\
+List the tags in use in a queue.
+
+```
+ytcli queue tags PROJ
+```
+
+Tags are per queue, not organisation-wide, which is why this takes a queue key
+and `field list` does not answer it.";

@@ -85,6 +85,62 @@ pub fn fields(fields: &[QueueField], ctx: &Context) -> String {
     out
 }
 
+/// The versions a queue defines.
+#[must_use]
+pub fn versions(queue: &str, versions: &[crate::api::Version], ctx: &Context) -> String {
+    let columns = [
+        Column::whole("ID", 10, Palette::key()),
+        Column::new("NAME", 28, anstyle::Style::new()),
+        // A released version and an archived one are both "not open", and
+        // which of the two decides whether new work may still point at it.
+        Column::by_value("STATE", 10, |state| match state {
+            "open" => Palette::ok(),
+            _ => Palette::label(),
+        }),
+        Column::whole("DUE", 12, anstyle::Style::new()),
+    ];
+
+    let rows: Vec<Vec<String>> = versions
+        .iter()
+        .map(|version| {
+            vec![
+                version.id.clone(),
+                version.name.clone(),
+                version.state.to_owned(),
+                version.due.clone().unwrap_or_else(|| "-".to_owned()),
+            ]
+        })
+        .collect();
+
+    let mut out = render(&columns, &rows, ctx);
+    out.push_str(&counted(queue, versions.len(), ctx));
+    out
+}
+
+/// The tags in use in a queue.
+#[must_use]
+pub fn tags(queue: &str, tags: &[String], ctx: &Context) -> String {
+    let columns = [Column::whole("TAG", 30, Palette::key())];
+    let rows: Vec<Vec<String>> = tags.iter().map(|tag| vec![tag.clone()]).collect();
+
+    let mut out = render(&columns, &rows, ctx);
+    out.push_str(&counted(queue, tags.len(), ctx));
+    out
+}
+
+/// `shown N of N for QUEUE` — neither endpoint pages, so both numbers are the
+/// same one, and saying so is still better than leaving the reader to wonder.
+fn counted(queue: &str, count: usize, ctx: &Context) -> String {
+    let paint = ctx.painter();
+    format!(
+        "{}\n",
+        paint.paint(
+            &format!("shown {count} of {count} for {queue}"),
+            Palette::label()
+        )
+    )
+}
+
 /// One queue and the defaults an issue created in it starts with.
 #[must_use]
 pub fn settings(queue: &QueueSettings, ctx: &Context) -> String {

@@ -265,3 +265,21 @@ PROJ-1         2026-08-24   1h 30m     ilubenets        pairing
 shown 1 of 1 — 1h 30m total
 
 ```
+
+```console
+$ ytcli queue versions PROJ
+→ profile=test org=12345 (from YTCLI_PROFILE)
+1          1.0                          released   2026-06-01
+2          1.1                          open       -
+shown 2 of 2 for PROJ
+
+```
+
+```console
+$ ytcli queue tags PROJ
+→ profile=test org=12345 (from YTCLI_PROFILE)
+backend
+urgent
+shown 2 of 2 for PROJ
+
+```

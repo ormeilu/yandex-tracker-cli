@@ -33,6 +33,18 @@ pub enum QueueCommand {
         #[arg(long)]
         lead: Option<String>,
     },
+    /// List the versions a queue defines.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::QUEUE_VERSIONS))]
+    Versions {
+        /// Queue key, e.g. PROJ.
+        key: String,
+    },
+    /// List the tags in use in a queue.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::QUEUE_TAGS))]
+    Tags {
+        /// Queue key, e.g. PROJ.
+        key: String,
+    },
     /// Show a queue's fields, including custom ones and their keys.
     #[command(long_about = crate::cli::help::md(crate::cli::help::QUEUE_FIELDS))]
     Fields {
@@ -83,6 +95,24 @@ pub async fn run(command: &QueueCommand, session: &Session) -> ExitCode {
             like,
             lead,
         } => create(&client, key, name, like, lead.as_deref(), session).await,
+        QueueCommand::Versions { key } => match client.queue_versions(key).await {
+            Ok(versions) => render(&versions, session, |versions| {
+                queue::versions(key, versions, &session.render)
+            }),
+            Err(error) => {
+                let code = error.exit_code();
+                report(&error, code)
+            }
+        },
+        QueueCommand::Tags { key } => match client.queue_tags(key).await {
+            Ok(tags) => render(&tags, session, |tags| {
+                queue::tags(key, tags, &session.render)
+            }),
+            Err(error) => {
+                let code = error.exit_code();
+                report(&error, code)
+            }
+        },
         QueueCommand::Fields { key } => match client.queue_fields(key).await {
             Ok(fields) => render(&fields, session, |fields| {
                 queue::fields(fields, &session.render)

@@ -306,3 +306,60 @@ async fn a_model_queue_without_issue_types_is_refused_before_the_write() {
         .code(4)
         .stderr(predicate::str::contains("issue types of queue PROJ"));
 }
+
+/// Versions are what an issue's `fixVersions` points at, and the state is the
+/// column that decides whether new work may still point at one.
+#[tokio::test]
+async fn versions_carry_the_state_that_says_whether_they_are_still_open() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v3/queues/PROJ/versions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+            {"id": 1, "name": "1.0", "released": true, "archived": false, "dueDate": "2026-06-01"},
+            {"id": 2, "name": "1.1", "released": false, "archived": false},
+            {"id": 3, "name": "0.9", "released": true, "archived": true}
+        ])))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness
+        .run(&["queue", "versions", "PROJ"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert!(stdout.contains("released"), "{stdout}");
+    assert!(stdout.contains("open"), "{stdout}");
+    // Archived wins over released: it was both, and only one of the two says
+    // that nothing new should point at it.
+    let archived = stdout
+        .lines()
+        .find(|line| line.starts_with("3 "))
+        .expect("the archived version");
+    assert!(archived.contains("archived"), "{archived}");
+    assert!(stdout.ends_with("shown 3 of 3 for PROJ\n"), "{stdout}");
+}
+
+/// Tracker has answered tags as bare strings and as named objects depending on
+/// where you read; a listing that silently drops every row would be worse than
+/// reading a member it did not need.
+#[tokio::test]
+async fn tags_are_read_whichever_shape_they_arrive_in() {
+    for body in [
+        serde_json::json!(["backend", "urgent"]),
+        serde_json::json!([{"name": "backend"}, {"name": "urgent"}]),
+    ] {
+        let harness = Harness::new().await;
+        Mock::given(method("GET"))
+            .and(path("/v3/queues/PROJ/tags"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(body))
+            .mount(&harness.server)
+            .await;
+
+        let output = harness.run(&["queue", "tags", "PROJ"]).assert().success();
+        let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+        assert!(stdout.contains("backend"), "{stdout}");
+        assert!(stdout.contains("urgent"), "{stdout}");
+    }
+}

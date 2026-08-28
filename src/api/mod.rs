@@ -713,6 +713,53 @@ impl Client {
             .unwrap_or_default())
     }
 
+    /// The versions a queue defines.
+    ///
+    /// This is what an issue's `fixVersions` refers to; without it that field
+    /// is an id with no meaning.
+    pub async fn queue_versions(&self, key: &str) -> Result<Vec<Version>, ApiError> {
+        let raw = self
+            .get_value(
+                &format!("/v3/queues/{key}/versions"),
+                &format!("versions of queue {key}"),
+            )
+            .await?;
+
+        Ok(raw
+            .as_array()
+            .map(|entries| entries.iter().filter_map(Version::parse).collect())
+            .unwrap_or_default())
+    }
+
+    /// The tags in use in a queue.
+    pub async fn queue_tags(&self, key: &str) -> Result<Vec<String>, ApiError> {
+        let raw = self
+            .get_value(
+                &format!("/v3/queues/{key}/tags?perPage=1000"),
+                &format!("tags of queue {key}"),
+            )
+            .await?;
+
+        // Both shapes are accepted because the organisation this was written
+        // against has no tags to answer with, and a listing that silently drops
+        // every row is worse than one that reads a member it did not need.
+        Ok(raw
+            .as_array()
+            .map(|entries| {
+                entries
+                    .iter()
+                    .filter_map(|entry| match entry {
+                        Value::String(name) => Some(name.clone()),
+                        other => other
+                            .get("name")
+                            .and_then(Value::as_str)
+                            .map(ToOwned::to_owned),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default())
+    }
+
     /// One of the four organisation-wide dictionaries.
     ///
     /// Small and unpaged — the largest of the four is statuses, in the dozens —
@@ -1181,6 +1228,53 @@ impl Queue {
                         .or_else(|| lead.get("display"))
                         .or_else(|| lead.get("id"))
                 })
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned),
+        })
+    }
+}
+
+/// A release a queue tracks work against.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Version {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    /// `released`, `archived`, or `open` when it is neither.
+    pub state: &'static str,
+    pub due: Option<String>,
+}
+
+impl Version {
+    fn parse(value: &Value) -> Option<Self> {
+        let flag = |member: &str| value.get(member).and_then(Value::as_bool).unwrap_or(false);
+
+        Some(Self {
+            id: match value.get("id")? {
+                Value::String(id) => id.clone(),
+                other => other.to_string(),
+            },
+            name: value
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            description: value
+                .get("description")
+                .and_then(Value::as_str)
+                .filter(|text| !text.is_empty())
+                .map(ToOwned::to_owned),
+            // Archived wins over released: an archived version is out of use
+            // whether or not it ever shipped.
+            state: if flag("archived") {
+                "archived"
+            } else if flag("released") {
+                "released"
+            } else {
+                "open"
+            },
+            due: value
+                .get("dueDate")
                 .and_then(Value::as_str)
                 .map(ToOwned::to_owned),
         })

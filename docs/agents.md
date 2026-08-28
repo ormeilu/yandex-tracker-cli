@@ -11,6 +11,7 @@ That property is what makes a static allowlist worth having:
 allow: ytcli issue get:*, ytcli issue find:*, ytcli issue list:*, ytcli issue count:*,
        ytcli issue worklogs:*, ytcli issue checklist:*, ytcli issue changelog:*,
        ytcli queue list, ytcli queue get:*, ytcli queue fields:*,
+       ytcli queue versions:*, ytcli queue tags:*,
        ytcli board list, ytcli board get:*, ytcli board sprints:*,
        ytcli field list, ytcli template list:*,
        ytcli dict list:*, ytcli user list:*, ytcli user get:*, ytcli user find:*,

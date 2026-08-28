@@ -87,6 +87,7 @@ Same ladder, same tallies:
 ```bash
 ytcli queue list                     # keys and leads
 ytcli queue get PROJ                 # the type and priority a new issue starts with
+ytcli queue versions PROJ            # what an issue's fixVersions points at
 ytcli board list                     # id, name, column count
 ytcli board sprints 6                # a kanban board is refused, in Tracker's words
 ytcli field list                     # every field the organisation defines
