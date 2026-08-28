@@ -38,6 +38,8 @@ async fn run(cli: Cli) -> ExitCode {
         Command::Auth(ref command) => ytcli::cli::auth::run(command, &session).await,
         Command::Issue(ref command) => ytcli::cli::issue::run(command, &session).await,
         Command::Queue(ref command) => ytcli::cli::queue::run(command, &session).await,
+        Command::Field(ref command) => ytcli::cli::field::run(command, &session).await,
+        Command::Template(ref command) => ytcli::cli::field::run_templates(command, &session).await,
         Command::Project(ref command) => ytcli::cli::project::run(command, &session).await,
         Command::Board(ref command) => ytcli::cli::board::run(command, &session).await,
         Command::Portfolio(ref command) => ytcli::cli::portfolio::run(command, &session).await,

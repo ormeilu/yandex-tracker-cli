@@ -154,3 +154,19 @@ $ ytcli board sprints 6
 error: Tracker rejected the request (400 Bad Request): A board of this type cannot have sprints.
 
 ```
+
+```console
+$ ytcli field list
+summary                      string       system   Summary
+assignee                     user         system   Assignee
+storyPoints                  integer      custom   Story points
+shown 3 of 3 (1 custom)
+
+```
+
+```console
+$ ytcli template list
+7            Incident                             PROJ         ilubenets
+shown 1 of 1
+
+```

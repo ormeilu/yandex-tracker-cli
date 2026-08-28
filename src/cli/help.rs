@@ -333,6 +333,24 @@ Show one project.
 
 Takes the long id from `project list`, not an issue key and not the short id.";
 
+pub const FIELD_LIST: &str = "\
+List every field defined in the organisation.
+
+  ytcli field list
+
+`queue fields PROJ` answers what one queue accepts, which is what `--fields` and
+`--set` take. This answers what exists at all, which is the question behind a
+field a queue does not show.";
+
+pub const TEMPLATE_LIST: &str = "\
+List templates.
+
+  ytcli template list
+  ytcli template list --kind comment
+
+Issue templates by default. A template that belongs to a queue only applies
+there, so the queue is printed beside it.";
+
 pub const BOARD_LIST: &str = "\
 List boards.
 

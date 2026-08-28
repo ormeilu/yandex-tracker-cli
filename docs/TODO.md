@@ -40,6 +40,9 @@ Labels split the work by area: `area:issues`, `area:entities`,
 
 - Worklogs, checklists and link editing, with reads and writes under separate
   command prefixes so an allowlist cannot be stretched from one into the other.
+- Organisation-wide field and template listings, read-only. The template paths
+  are `issueTemplates` and `commentTemplates`; there is no `_templates`
+  collection, and every plausible guess at one answers 400 or 404.
 - Boards, read-only: listing, columns in board order, and sprints. A board that
   cannot have sprints is refused in Tracker's own words rather than answered
   with an empty list.

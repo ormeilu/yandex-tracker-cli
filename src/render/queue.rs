@@ -2,7 +2,7 @@
 
 use std::fmt::Write as _;
 
-use crate::api::{Queue, QueueField};
+use crate::api::{Queue, QueueField, Template};
 use crate::render::Context;
 use crate::render::style::Palette;
 use crate::render::table::{Column, render, tally};
@@ -82,6 +82,40 @@ pub fn fields(fields: &[QueueField], ctx: &Context) -> String {
             Palette::label()
         )
     );
+    out
+}
+
+/// Issue or comment templates.
+///
+/// The id leads because it is what a caller passes on; the queue follows,
+/// because a template that belongs to a queue only applies there.
+#[must_use]
+pub fn templates(templates: &[Template], ctx: &Context) -> String {
+    let columns = [
+        Column::whole("ID", 12, Palette::key()),
+        Column::new("NAME", 36, anstyle::Style::new()),
+        Column::whole("QUEUE", 12, anstyle::Style::new()),
+        Column::new("AUTHOR", 18, Palette::label()),
+    ];
+    let rows: Vec<Vec<String>> = templates
+        .iter()
+        .map(|template| {
+            vec![
+                template.id.clone(),
+                template.name.clone(),
+                template.queue.as_deref().unwrap_or("-").to_owned(),
+                template.author.as_deref().unwrap_or("-").to_owned(),
+            ]
+        })
+        .collect();
+
+    let mut out = render(&columns, &rows, ctx);
+    out.push_str(&tally(
+        templates.len(),
+        Some(templates.len() as u64),
+        None,
+        ctx,
+    ));
     out
 }
 

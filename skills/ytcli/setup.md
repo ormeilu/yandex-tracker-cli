@@ -88,6 +88,8 @@ allowlist is worth having. For Claude Code, in `.claude/settings.json`:
       "Bash(ytcli issue comments:*)",
       "Bash(ytcli queue list:*)",
       "Bash(ytcli queue fields:*)",
+      "Bash(ytcli field list:*)",
+      "Bash(ytcli template list:*)",
       "Bash(ytcli board list:*)",
       "Bash(ytcli board get:*)",
       "Bash(ytcli board sprints:*)",

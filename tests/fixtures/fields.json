@@ -1,0 +1,36 @@
+[
+  {
+    "self": "https://api.tracker.yandex.net/v3/fields/summary",
+    "id": "summary",
+    "name": "Summary",
+    "key": "summary",
+    "version": 0,
+    "schema": {
+      "type": "string",
+      "required": true
+    },
+    "readonly": false
+  },
+  {
+    "self": "https://api.tracker.yandex.net/v3/fields/assignee",
+    "id": "assignee",
+    "name": "Assignee",
+    "key": "assignee",
+    "version": 0,
+    "schema": {
+      "type": "user"
+    },
+    "readonly": false
+  },
+  {
+    "self": "https://api.tracker.yandex.net/v3/fields/60fa2c1e--storyPoints",
+    "id": "60fa2c1e--storyPoints",
+    "name": "Story points",
+    "key": "storyPoints",
+    "version": 2,
+    "schema": {
+      "type": "integer"
+    },
+    "readonly": false
+  }
+]

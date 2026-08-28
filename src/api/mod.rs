@@ -612,6 +612,36 @@ impl Client {
             .unwrap_or_default())
     }
 
+    /// Every field defined in the organisation, not just one queue's.
+    ///
+    /// `queue fields` answers "what can I set on an issue here"; this answers
+    /// "what exists at all", which is the question behind a field that a queue
+    /// does not show.
+    pub async fn fields(&self) -> Result<Vec<QueueField>, ApiError> {
+        let raw = self.get_value("/v3/fields", "fields").await?;
+
+        Ok(raw
+            .as_array()
+            .map(|entries| entries.iter().filter_map(QueueField::parse).collect())
+            .unwrap_or_default())
+    }
+
+    /// Issue or comment templates.
+    ///
+    /// The path is `issueTemplates` and `commentTemplates`; there is no
+    /// `_templates` collection, which is worth writing down because every
+    /// plausible guess at one answers 400 or 404.
+    pub async fn templates(&self, kind: TemplateKind) -> Result<Vec<Template>, ApiError> {
+        let raw = self
+            .get_value(&format!("/v3/{}", kind.path()), kind.path())
+            .await?;
+
+        Ok(raw
+            .as_array()
+            .map(|entries| entries.iter().filter_map(Template::parse).collect())
+            .unwrap_or_default())
+    }
+
     /// The comments of an issue.
     ///
     /// Fetched in one generous page: an issue with more than a hundred comments
@@ -860,6 +890,65 @@ impl Sprint {
                 .map(ToOwned::to_owned),
             end: value
                 .get("endDate")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned),
+        })
+    }
+}
+
+/// Which templates are being asked for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TemplateKind {
+    Issue,
+    Comment,
+}
+
+impl TemplateKind {
+    #[must_use]
+    pub const fn path(self) -> &'static str {
+        match self {
+            Self::Issue => "issueTemplates",
+            Self::Comment => "commentTemplates",
+        }
+    }
+}
+
+/// One template, reduced to what a listing shows.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Template {
+    pub id: String,
+    pub name: String,
+    /// The queue a template belongs to, when it belongs to one.
+    pub queue: Option<String>,
+    pub author: Option<String>,
+}
+
+impl Template {
+    fn parse(value: &Value) -> Option<Self> {
+        Some(Self {
+            id: match value.get("id")? {
+                Value::String(id) => id.clone(),
+                other => other.to_string(),
+            },
+            name: value
+                .get("name")
+                .or_else(|| value.get("summary"))
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            queue: value
+                .get("queue")
+                .and_then(|queue| queue.get("key").or_else(|| queue.get("id")).or(Some(queue)))
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned),
+            author: value
+                .get("createdBy")
+                .or_else(|| value.get("author"))
+                .and_then(|user| {
+                    user.get("login")
+                        .or_else(|| user.get("display"))
+                        .or_else(|| user.get("id"))
+                })
                 .and_then(Value::as_str)
                 .map(ToOwned::to_owned),
         })

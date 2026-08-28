@@ -298,6 +298,36 @@ async fn asking_a_board_for_its_sprints_either_answers_or_is_refused() {
     }
 }
 
+/// The organisation-wide listings, through our parsers.
+///
+/// Templates are the half fixtures cannot vouch for: the organisation this runs
+/// against has none, so the shape of a template is believed rather than known.
+/// If one ever exists, a nameless template fails here rather than printing a
+/// dash and looking like an empty template.
+#[tokio::test]
+#[ignore = "needs real credentials"]
+async fn fields_and_templates_parse() {
+    let client = client();
+
+    let fields = client.fields().await.expect("fields");
+    assert!(!fields.is_empty(), "an organisation with no fields");
+    for field in &fields {
+        assert!(!field.key.is_empty(), "a field with no key: {field:?}");
+    }
+
+    for kind in [
+        ytcli::api::TemplateKind::Issue,
+        ytcli::api::TemplateKind::Comment,
+    ] {
+        for template in &client.templates(kind).await.expect("templates") {
+            assert!(
+                !template.name.is_empty(),
+                "{kind:?}: a template with no name — the payload does not call it `name`"
+            );
+        }
+    }
+}
+
 /// Writing, only into a queue somebody named on purpose.
 ///
 /// Tracker has no delete. Whatever this creates stays, so it is opt-in twice

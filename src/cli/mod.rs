@@ -10,6 +10,7 @@ pub mod auth;
 pub mod board;
 pub mod cheatsheet;
 pub mod entity;
+pub mod field;
 pub mod goal;
 pub mod guidance;
 pub mod help;
@@ -102,6 +103,12 @@ pub enum Command {
     /// Boards and their sprints.
     #[command(subcommand)]
     Board(board::BoardCommand),
+    /// Fields defined across the organisation.
+    #[command(subcommand)]
+    Field(field::FieldCommand),
+    /// Issue and comment templates.
+    #[command(subcommand)]
+    Template(field::TemplateCommand),
     /// Projects.
     #[command(subcommand)]
     Project(project::ProjectCommand),
