@@ -133,12 +133,31 @@ This is not a quirk of ytcli. `gh` is ad-hoc signed too, and asks again after a
 `brew upgrade` for the same reason; you just do not rebuild it several times an
 hour.
 
+**Expect one prompt per account, not one per run.** Tokens are stored one
+keychain item per account, and each item is approved separately — two accounts
+means two dialogs the first time a given binary asks. Press *Always Allow* on
+each; both then stay silent for every later run of that same binary.
+
+*Always Allow* is recorded against the binary's code identity, so it survives
+rebuilds only if that identity is stable. A copy installed from crates.io or
+Homebrew is a different identity from one you built and signed yourself: keeping
+both around means approving each of them once.
+
 If you build ytcli yourself, give it a stable signature once:
 
 ```sh
 just signing-identity   # once per machine: a self-signed code-signing cert
 just local-install      # builds, installs, and signs with it
 ```
+
+`just local-install` prints the designated requirement it signed with. One that
+names a certificate — `identifier ytcli and certificate leaf = H"…"` — survives
+rebuilds; one built with a bare `cargo install` names a hash of the bytes
+instead, and every rebuild is then a new application to the Keychain.
+
+`ytcli auth status --active-only` reads one profile, and so touches one item,
+which is the cheaper question when you only want to know about the profile in
+play.
 
 The certificate is trusted for code signing and nothing else, and the private
 key is usable by `codesign` alone. Remove it with

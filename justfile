@@ -69,6 +69,10 @@ local-install:
     if [ "$(uname)" != "Darwin" ]; then exit 0; fi
     if security find-identity -v -p codesigning | grep -q ytcli-dev; then
         codesign --force --sign ytcli-dev "$(command -v ytcli)"
+        # The requirement is what the Keychain records an approval against, so
+        # printing it is how you tell a stable identity from an ad-hoc one that
+        # will ask again tomorrow.
+        codesign -d -r- "$(command -v ytcli)" 2>&1 | grep '^designated' || true
         echo "signed with ytcli-dev; the Keychain approval survives the next build"
     else
         echo "unsigned: macOS will ask for your password again after each build"
