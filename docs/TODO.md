@@ -10,6 +10,11 @@ so there is one list rather than two that disagree.
 - [Milestone v2](https://github.com/ormeilu/yandex-tracker-cli/milestone/2) —
   worklogs, checklists, portfolios, administration. Everything v1.x leaves out,
   rather than a next point release: v1 stays open for the whole 1.x line.
+- [Milestone v3](https://github.com/ormeilu/yandex-tracker-cli/milestone/3) — what
+  the API offers and the tool does not: the dictionaries and people that make a
+  write guessable rather than a guess, issue history, moving an issue between
+  queues, editing what was already written, and writes for the
+  project-management entities.
 - [`kind:question`](https://github.com/ormeilu/yandex-tracker-cli/labels/kind%3Aquestion)
   — open design questions, filed so they are not re-litigated from scratch.
 
@@ -33,6 +38,8 @@ Labels split the work by area: `area:issues`, `area:entities`,
   command a future build adds, and nothing in this one returns it.
 - `ytcli auth status` end to end.
 - `ytcli cheatsheet`, compiled into the binary.
+- `ytcli issue list` as an alias of `issue find`: every other group lists with
+  that word, and the group used most was the one exception.
 - Profile routing: a bare key goes to the profile that can see its queue, and
   every command says on stderr which profile and organisation answered.
   `ytcli auth use` switches the stored default without reading a token.
