@@ -242,7 +242,7 @@ pub async fn run(command: &IssueCommand, session: &Session) -> ExitCode {
 
 /// Read an issue's worklog.
 async fn worklogs(target: &str, session: &Session) -> ExitCode {
-    let (client, key) = match session.client_for(target) {
+    let (client, key) = match session.client_for(target).await {
         Ok(pair) => pair,
         Err(code) => return code,
     };
@@ -264,7 +264,7 @@ async fn worklogs(target: &str, session: &Session) -> ExitCode {
 
 /// Read an issue's checklist.
 async fn checklist(target: &str, session: &Session) -> ExitCode {
-    let (client, key) = match session.client_for(target) {
+    let (client, key) = match session.client_for(target).await {
         Ok(pair) => pair,
         Err(code) => return code,
     };
@@ -292,7 +292,7 @@ async fn worklog_write(command: &WorklogCommand, session: &Session) -> ExitCode 
             comment,
             start,
         } => {
-            let (client, key) = match session.client_for(key) {
+            let (client, key) = match session.client_for(key).await {
                 Ok(pair) => pair,
                 Err(code) => return code,
             };
@@ -358,7 +358,7 @@ async fn check_write(command: &CheckCommand, session: &Session) -> ExitCode {
             assignee,
             deadline,
         } => {
-            let (client, key) = match session.client_for(key) {
+            let (client, key) = match session.client_for(key).await {
                 Ok(pair) => pair,
                 Err(code) => return code,
             };
@@ -410,7 +410,7 @@ async fn check_write(command: &CheckCommand, session: &Session) -> ExitCode {
 }
 
 async fn set_checked(target: &str, id: &str, checked: bool, session: &Session) -> ExitCode {
-    let (client, key) = match session.client_for(target) {
+    let (client, key) = match session.client_for(target).await {
         Ok(pair) => pair,
         Err(code) => return code,
     };
@@ -447,7 +447,7 @@ async fn link_write(command: &LinkCommand, session: &Session) -> ExitCode {
             relation,
             other,
         } => {
-            let (client, key) = match session.client_for(key) {
+            let (client, key) = match session.client_for(key).await {
                 Ok(pair) => pair,
                 Err(code) => return code,
             };
@@ -505,7 +505,7 @@ where
         Box<dyn std::future::Future<Output = Result<(), crate::api::error::ApiError>> + 'a>,
     >,
 {
-    let (client, key) = match session.client_for(target) {
+    let (client, key) = match session.client_for(target).await {
         Ok(pair) => pair,
         Err(code) => return code,
     };
@@ -543,7 +543,7 @@ fn now_for_tracker() -> String {
 
 /// Fetch one issue and render it at whichever rung of the ladder was asked for.
 async fn get(target: &str, fields: &[String], session: &Session) -> ExitCode {
-    let (client, key) = match session.client_for(target) {
+    let (client, key) = match session.client_for(target).await {
         Ok(pair) => pair,
         Err(code) => return code,
     };
@@ -945,7 +945,7 @@ async fn count(args: &FindArgs, session: &Session) -> ExitCode {
 }
 
 async fn links(target: &str, session: &Session) -> ExitCode {
-    let (client, key) = match session.client_for(target) {
+    let (client, key) = match session.client_for(target).await {
         Ok(pair) => pair,
         Err(code) => return code,
     };
@@ -968,7 +968,7 @@ async fn links(target: &str, session: &Session) -> ExitCode {
 }
 
 async fn comments(target: &str, session: &Session) -> ExitCode {
-    let (client, key) = match session.client_for(target) {
+    let (client, key) = match session.client_for(target).await {
         Ok(pair) => pair,
         Err(code) => return code,
     };
@@ -1092,7 +1092,7 @@ async fn update(
 ) -> ExitCode {
     let mut resolved = Vec::with_capacity(targets.len());
     for target in targets {
-        match session.client_for(target) {
+        match session.client_for(target).await {
             Ok(pair) => resolved.push(pair),
             Err(code) => return code,
         }
@@ -1153,7 +1153,7 @@ async fn update(
 }
 
 async fn comment(target: &str, raw: &str, session: &Session) -> ExitCode {
-    let (client, key) = match session.client_for(target) {
+    let (client, key) = match session.client_for(target).await {
         Ok(pair) => pair,
         Err(code) => return code,
     };
@@ -1193,7 +1193,7 @@ async fn comment(target: &str, raw: &str, session: &Session) -> ExitCode {
 /// That is the common case for a caller who does not know the workflow, and it
 /// is a read: listing must not require the write gate.
 async fn transition_cmd(target: &str, transition: Option<&str>, session: &Session) -> ExitCode {
-    let (client, key) = match session.client_for(target) {
+    let (client, key) = match session.client_for(target).await {
         Ok(pair) => pair,
         Err(code) => return code,
     };

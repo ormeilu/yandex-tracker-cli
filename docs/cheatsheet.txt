@@ -9,6 +9,10 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
       --dry-run                         show what would change, send nothing
       --no-images                       never draw image attachments inline
   -v, -vv                               logs to stderr; stdout stays pipeable
+  Every command prints `→ profile=… org=… (from …)` on stderr, once. stdout is
+  the data channel and never carries it. A bare KEY-1 is routed to the profile
+  that can see that queue, whichever one is default; two profiles in *different*
+  organisations sharing a queue key is refused, not guessed at.
   Exit codes: 0 ok, 1 error, 2 confirmation required, 3 auth, 4 not found, 5 rejected.
   Read verbs (get/find/count/list/status/show) never write. There is no pass-through verb.
 

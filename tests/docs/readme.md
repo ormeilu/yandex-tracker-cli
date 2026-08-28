@@ -5,6 +5,7 @@ file has to change with it — that is the point.
 
 ```console
 $ ytcli issue get PROJ-1
+→ profile=test org=12345 (from YTCLI_PROFILE)
 PROJ-1  Attachments are lost when an issue moves between queues
 status: In Progress   type: Bug   prio: Critical
 assignee: ilubenets   author: reporter   queue: PROJ
@@ -27,6 +28,7 @@ Steps:
 
 ```console
 $ ytcli issue find -q PROJ -a me -s open
+→ profile=test org=12345 (from YTCLI_PROFILE)
 PROJ-1       In Progress    ilubenets      Attachments are lost when an issue moves between queues
 PROJ-4       Open           -              Retry uploads on 5xx
 shown 2 of 2
@@ -35,6 +37,7 @@ shown 2 of 2
 
 ```console
 $ ytcli issue count -q PROJ -s open
+→ profile=test org=12345 (from YTCLI_PROFILE)
 2
 
 ```

@@ -47,12 +47,10 @@ pub enum Gate {
 pub fn check(intent: &Intent<'_>, session: &Session) -> Gate {
     let mut err = anstream::stderr();
 
+    // The same line every command prints, and only once: by the time a write
+    // reaches the gate the client has usually already said which profile it is.
     if let Some(resolved) = &session.resolved {
-        let _ = writeln!(
-            err,
-            "→ profile={} org={} (from {})",
-            resolved.name, resolved.profile.org_id, resolved.source,
-        );
+        session.announce(resolved);
     }
 
     if session.global.dry_run {

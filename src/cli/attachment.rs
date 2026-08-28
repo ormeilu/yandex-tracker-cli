@@ -53,7 +53,7 @@ pub async fn run(command: &AttachmentCommand, session: &Session) -> ExitCode {
 }
 
 async fn list(target: &str, session: &Session) -> ExitCode {
-    let (client, key) = match session.client_for(target) {
+    let (client, key) = match session.client_for(target).await {
         Ok(pair) => pair,
         Err(code) => return code,
     };
@@ -113,7 +113,7 @@ async fn download(
     force: bool,
     session: &Session,
 ) -> ExitCode {
-    let (client, key) = match session.client_for(target) {
+    let (client, key) = match session.client_for(target).await {
         Ok(pair) => pair,
         Err(code) => return code,
     };
@@ -181,7 +181,7 @@ async fn download(
 /// leave a caller — an agent especially — with nothing to act on, and a
 /// screenful of escape codes would be worse than either.
 async fn show(target: &str, attachment: &str, session: &Session) -> ExitCode {
-    let (client, key) = match session.client_for(target) {
+    let (client, key) = match session.client_for(target).await {
         Ok(pair) => pair,
         Err(code) => return code,
     };
@@ -290,7 +290,7 @@ async fn find_attachment(
 }
 
 async fn upload(target: &str, file: &Path, session: &Session) -> ExitCode {
-    let (client, key) = match session.client_for(target) {
+    let (client, key) = match session.client_for(target).await {
         Ok(pair) => pair,
         Err(code) => return code,
     };

@@ -141,6 +141,10 @@ pub enum ProfileSource {
     Env,
     ProjectFile(PathBuf),
     DefaultProfile,
+    /// Chosen because it is the profile that can see the queue in the key.
+    QueueOwner(String),
+    /// Named in the key itself, as `profile/PROJ-1`.
+    Qualified(String),
 }
 
 impl std::fmt::Display for ProfileSource {
@@ -150,6 +154,8 @@ impl std::fmt::Display for ProfileSource {
             Self::Env => f.write_str("YTCLI_PROFILE"),
             Self::ProjectFile(path) => write!(f, "{}", path.display()),
             Self::DefaultProfile => f.write_str("config default_profile"),
+            Self::QueueOwner(queue) => write!(f, "the only profile that sees {queue}"),
+            Self::Qualified(target) => write!(f, "the key `{target}`"),
         }
     }
 }

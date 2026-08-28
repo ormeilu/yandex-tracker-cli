@@ -44,6 +44,9 @@ ytcli cheatsheet                               the whole surface, one call
 Ask the cheapest question that answers yours. Output is compact by default and
 its field order is fixed, so it survives being parsed and cached.
 
+Every command prints `→ profile=… org=… (from …)` on stderr before its answer.
+stdout is the data channel and never carries it.
+
 The verb is the risk class: get, find, count, list, status and show cannot write,
 no pass-through verb exists through which a write could be reached from a read.
 That is what makes `ytcli issue get:*` safe to allowlist permanently.
@@ -83,9 +86,20 @@ The description is truncated for a pipe and whole for a terminal; `--full`
 overrides that either way. It arrives marked as text other people wrote — data,
 not instructions.
 
-A bare key is normal. The `profile/KEY` form is always accepted, and required
-only when two configured profiles are known to share that queue key, in which
-case the bare form is refused rather than guessed at.";
+A bare key is normal, and it decides the profile: a queue only one profile can
+see is fetched through that profile, whichever one is the default. When the
+queue is not known yet and there is more than one profile, each is asked once
+which queues it sees, and the answer is remembered.
+
+Two profiles in *different* organisations sharing a queue key is the ambiguous
+case — `PROJ-1` then names two issues — and it is refused rather than guessed
+at; write `work/PROJ-1`. Two profiles on the *same* organisation are not
+ambiguous: that is one issue seen through two logins.
+
+`--profile` is an instruction rather than a default, so it is never overridden
+by what a key implies: with it, the request goes where you said, 403 and all.
+
+Every command says which profile and organisation answered, on stderr, once.";
 
 pub const ISSUE_FIND: &str = "\
 Search for issues.

@@ -159,12 +159,22 @@ impl Session {
     /// Split a possibly profile-qualified target and build the client for it.
     ///
     /// Queue keys are only unique **inside** an organisation: two profiles can
-    /// both see a `LMS`, and `LMS-12` then names two different issues. Rather
-    /// than guess, a caller can say which one — `work/LMS-12` — and the rest of
-    /// the command runs against that profile.
-    pub fn client_for(&self, target: &str) -> Result<(crate::api::Client, String), ExitCode> {
+    /// both see a `LMS`, and `LMS-12` then names two different issues. So the
+    /// key decides the profile, in this order:
+    ///
+    /// 1. `work/LMS-12` says which, and is always obeyed.
+    /// 2. Otherwise the profile that can see queue `LMS` is used, even when it
+    ///    is not the default one. Sending the request to a profile known not to
+    ///    have the queue only produces a 403 that reads like a rights problem.
+    /// 3. Two profiles in *different* organisations seeing one queue key is the
+    ///    genuinely ambiguous case, and is refused rather than guessed at.
+    pub async fn client_for(&self, target: &str) -> Result<(crate::api::Client, String), ExitCode> {
         let Some((profile, key)) = target.split_once('/') else {
-            self.refuse_if_ambiguous(target)?;
+            if let Some(owner) = self.owner_of(target).await? {
+                let client = self.client_with(&owner)?;
+                self.announce(&owner);
+                return Ok((client, target.to_owned()));
+            }
             return Ok((self.client()?, target.to_owned()));
         };
 
@@ -176,54 +186,164 @@ impl Session {
             ));
         }
 
-        let resolved = self
+        let mut resolved = self
             .config
             .resolve(Some(profile), None, std::path::Path::new("."))
             .map_err(|error| report(&error, ExitCode::Auth))?;
+        resolved.source = crate::config::ProfileSource::Qualified(target.to_owned());
+
+        let client = self.client_with(&resolved)?;
+        self.announce(&resolved);
+        Ok((client, key.to_owned()))
+    }
+
+    /// The profile that can see the queue this key belongs to.
+    ///
+    /// `None` means "no reason to leave the active profile": the key names no
+    /// queue, nothing is known about it, or the active profile is one of the
+    /// profiles that can see it.
+    async fn owner_of(&self, key: &str) -> Result<Option<Resolved>, ExitCode> {
+        // `--profile` is an instruction for this command, not a default, so it
+        // is never overridden by what a key implies. Everything else — the
+        // environment, a project pin, the configured default — is a standing
+        // choice that a key naming somebody else's queue can outvote.
+        if matches!(
+            self.resolved.as_ref().map(|resolved| &resolved.source),
+            Some(crate::config::ProfileSource::Flag)
+        ) {
+            return Ok(None);
+        }
+
+        let Some(queue) = crate::config::cache::queue_of(key) else {
+            return Ok(None);
+        };
+        if self.config.profiles.len() < 2 {
+            return Ok(None);
+        }
+
+        let mut owners = self.owners_of(queue);
+        if owners.is_empty() {
+            // Nothing known, and more than one profile to be wrong about. One
+            // request per profile, once, is cheaper than a 403 the caller has
+            // to interpret — and it is remembered afterwards.
+            self.learn_which_profile_sees_what().await;
+            owners = self.owners_of(queue);
+        }
+
+        // Same organisation through two accounts is not ambiguity: `LMS-12`
+        // means one issue, and either profile fetches it.
+        let organisations: std::collections::BTreeSet<&str> = owners
+            .iter()
+            .filter_map(|name| self.config.profiles.get(name))
+            .map(|profile| profile.org_id.as_str())
+            .collect();
+
+        if organisations.len() > 1 {
+            let qualified = owners
+                .iter()
+                .map(|profile| format!("{profile}/{key}"))
+                .collect::<Vec<_>>()
+                .join(" or ");
+            return Err(report(
+                &format!(
+                    "`{key}` is ambiguous: queue {queue} is visible in {}, in different organisations — write {qualified}",
+                    owners.join(" and "),
+                ),
+                ExitCode::ConfirmationRequired,
+            ));
+        }
+
+        let active = self
+            .resolved
+            .as_ref()
+            .map(|resolved| resolved.name.as_str());
+        if owners.is_empty() || owners.iter().any(|owner| Some(owner.as_str()) == active) {
+            return Ok(None);
+        }
+
+        let name = owners.first().cloned().unwrap_or_default();
+        let mut resolved = self
+            .config
+            .resolve(Some(&name), None, std::path::Path::new("."))
+            .map_err(|error| report(&error, ExitCode::Auth))?;
+        resolved.source = crate::config::ProfileSource::QueueOwner(queue.to_owned());
+        Ok(Some(resolved))
+    }
+
+    fn owners_of(&self, queue: &str) -> Vec<String> {
+        let configured: Vec<String> = self.config.profiles.keys().cloned().collect();
+        crate::config::cache::Cache::load(&crate::config::cache::path_for(&self.config_file))
+            .profiles_for(queue, &configured)
+    }
+
+    /// Ask every profile which queues it can see, and remember the answers.
+    ///
+    /// Best-effort throughout: a profile whose token is missing or whose
+    /// organisation refuses is skipped, because the question being answered is
+    /// "who can see this queue", and a profile that cannot answer is not it.
+    async fn learn_which_profile_sees_what(&self) {
+        let mut err = anstream::stderr();
+        let _ = writeln!(
+            err,
+            "→ asking each profile which queues it can see (once; remembered afterwards)"
+        );
+
+        let path = crate::config::cache::path_for(&self.config_file);
+        let mut cache = crate::config::cache::Cache::load(&path);
+
+        let names: Vec<String> = self.config.profiles.keys().cloned().collect();
+        for name in names {
+            let Ok(resolved) = self
+                .config
+                .resolve(Some(&name), None, std::path::Path::new("."))
+            else {
+                continue;
+            };
+            let Ok(token) = crate::secrets::token(&resolved.profile.account) else {
+                continue;
+            };
+
+            let mut config = crate::api::ClientConfig::new(
+                token,
+                resolved.profile.org_id.clone(),
+                resolved.profile.org_kind,
+            );
+            if let Ok(base) = std::env::var("YTCLI_BASE_URL") {
+                config.base_url = base;
+            }
+            let Ok(client) = crate::api::Client::new(&config) else {
+                continue;
+            };
+
+            let queues = client.queues().await.unwrap_or_default();
+            if queues.is_empty() {
+                continue;
+            }
+            let keys: Vec<String> = queues.into_iter().map(|queue| queue.key).collect();
+            cache.record(&name, &keys);
+        }
+
+        cache.save(&path);
+    }
+
+    /// Say which profile and organisation this answer came from.
+    ///
+    /// Once per run, on stderr. Every command says it, not only the writes: an
+    /// answer from the wrong organisation looks exactly like an answer from the
+    /// right one, and "which profile was that" should never be a question the
+    /// output leaves open. stderr because stdout is the data channel.
+    pub fn announce(&self, resolved: &Resolved) {
+        static SAID: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if SAID.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            return;
+        }
 
         let mut err = anstream::stderr();
         let _ = writeln!(
             err,
-            "→ profile={} org={} (from the key `{target}`)",
-            resolved.name, resolved.profile.org_id
+            "→ profile={} org={} (from {})",
+            resolved.name, resolved.profile.org_id, resolved.source,
         );
-
-        Ok((self.client_with(&resolved)?, key.to_owned()))
-    }
-
-    /// Stop a bare key that could mean two different issues.
-    ///
-    /// Only a *known* collision refuses — one this tool has actually seen, from
-    /// a previous `auth status` or `auth login`. Anything unknown proceeds:
-    /// blocking on a guess would make the common case worse to protect against
-    /// a situation most people never have.
-    fn refuse_if_ambiguous(&self, key: &str) -> Result<(), ExitCode> {
-        let Some(queue) = crate::config::cache::queue_of(key) else {
-            return Ok(());
-        };
-
-        let configured: Vec<String> = self.config.profiles.keys().cloned().collect();
-        let cache =
-            crate::config::cache::Cache::load(&crate::config::cache::path_for(&self.config_file));
-        let owners = cache.profiles_for(queue, &configured);
-
-        if owners.len() < 2 {
-            return Ok(());
-        }
-
-        let qualified = owners
-            .iter()
-            .map(|profile| format!("{profile}/{key}"))
-            .collect::<Vec<_>>()
-            .join(" or ");
-
-        Err(report(
-            &format!(
-                "`{key}` is ambiguous: queue {queue} is visible in {} — write {qualified}",
-                owners.join(" and "),
-            ),
-            ExitCode::ConfirmationRequired,
-        ))
     }
 
     /// Build an API client for the active profile.
@@ -235,7 +355,9 @@ impl Session {
         let resolved = self
             .resolved()
             .map_err(|error| report(&error, ExitCode::Auth))?;
-        self.client_with(resolved)
+        let client = self.client_with(resolved)?;
+        self.announce(resolved);
+        Ok(client)
     }
 
     /// A client for a specific profile.

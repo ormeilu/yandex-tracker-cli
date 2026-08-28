@@ -344,3 +344,166 @@ async fn toon_is_in_the_build() {
     // TOON is key: value without the quoting and bracing of JSON.
     assert!(!stdout.contains("\"key\":"), "that is JSON, not TOON");
 }
+
+/// The key decides the profile.
+///
+/// A queue only one profile can see is not a hard question, and sending the
+/// request to the default profile anyway produces a 403 that reads like a
+/// rights problem rather than a routing mistake.
+#[tokio::test]
+async fn a_bare_key_goes_to_the_profile_that_can_see_its_queue() {
+    let harness = Harness::new().await;
+    harness.add_profile("other", "99999");
+    harness.write_queue_cache(&[("PROJ", &["other"])]);
+
+    Mock::given(method("GET"))
+        .and(path("/v3/issues/PROJ-1"))
+        .and(header("x-cloud-org-id", "99999"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("issue.json")))
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v3/issues/PROJ-1/links"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("issue_links.json")))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run_raw(&["issue", "get", "PROJ-1"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "profile=other org=99999 (from the only profile that sees PROJ)",
+        ));
+}
+
+/// Two accounts on one organisation are not two issues.
+///
+/// The collision that matters is two *organisations* using the same queue key.
+/// Sharing an organisation through two logins means `PROJ-1` is one issue, and
+/// refusing to fetch it would be pedantry with an exit code.
+#[tokio::test]
+async fn two_profiles_in_one_organisation_are_not_ambiguous() {
+    let harness = Harness::new().await;
+    harness.add_profile("other", "12345");
+    harness.write_queue_cache(&[("PROJ", &["other", "test"])]);
+    issue_available(&harness).await;
+
+    harness
+        .run_raw(&["issue", "get", "PROJ-1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("PROJ-1  Attachments are lost"));
+}
+
+/// When nothing is known about the queue, ask — once — rather than guess.
+///
+/// One request per profile buys a routing decision that is then remembered.
+/// The alternative is a 403 from the wrong organisation, which costs a request
+/// too and answers nothing.
+#[tokio::test]
+async fn an_unknown_queue_is_looked_up_once_and_remembered() {
+    let harness = Harness::new().await;
+    harness.add_profile("other", "99999");
+
+    Mock::given(method("GET"))
+        .and(path("/v3/queues"))
+        .and(header("x-cloud-org-id", "12345"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v3/queues"))
+        .and(header("x-cloud-org-id", "99999"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+            {"key": "PROJ", "name": "Product"}
+        ])))
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v3/issues/PROJ-1"))
+        .and(header("x-cloud-org-id", "99999"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("issue.json")))
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v3/issues/PROJ-1/links"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("issue_links.json")))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run_raw(&["issue", "get", "PROJ-1"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("asking each profile"))
+        .stderr(predicate::str::contains("profile=other"));
+
+    // Remembered: the second run routes without asking anybody.
+    harness
+        .run_raw(&["issue", "get", "PROJ-1"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("asking each profile").not())
+        .stderr(predicate::str::contains("profile=other"));
+}
+
+/// Every command says which profile answered, and says it on stderr.
+///
+/// An answer from the wrong organisation looks exactly like an answer from the
+/// right one. stdout stays the data channel: the line is not in it.
+#[tokio::test]
+async fn every_command_says_which_profile_answered() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v3/queues"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("queues.json")))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness.run(&["queue", "list"]).assert().success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+    let stderr = String::from_utf8(output.get_output().stderr.clone()).expect("utf-8");
+
+    assert!(stderr.contains("profile=test org=12345"), "{stderr}");
+    assert!(!stdout.contains("profile="), "{stdout}");
+}
+
+/// Said once, however many requests the command makes.
+#[tokio::test]
+async fn the_profile_is_named_once_not_per_request() {
+    let harness = Harness::new().await;
+    issue_available(&harness).await;
+
+    let output = harness.run(&["issue", "get", "PROJ-1"]).assert().success();
+    let stderr = String::from_utf8(output.get_output().stderr.clone()).expect("utf-8");
+
+    assert_eq!(stderr.matches("profile=test").count(), 1, "{stderr}");
+}
+
+/// `--profile` is an instruction, not a default.
+///
+/// Routing by queue is for when nobody said which profile to use. Somebody who
+/// did say means it, and would rather see the failure than have the request
+/// quietly sent somewhere else.
+#[tokio::test]
+async fn an_explicit_profile_is_not_re_routed_by_the_key() {
+    let harness = Harness::new().await;
+    harness.add_profile("other", "99999");
+    harness.write_queue_cache(&[("PROJ", &["other"])]);
+
+    Mock::given(method("GET"))
+        .and(path("/v3/issues/PROJ-1"))
+        .and(header("x-cloud-org-id", "12345"))
+        .respond_with(ResponseTemplate::new(403))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&["issue", "get", "PROJ-1"])
+        .assert()
+        .code(5)
+        .stderr(predicate::str::contains(
+            "profile=test org=12345 (from --profile)",
+        ));
+}

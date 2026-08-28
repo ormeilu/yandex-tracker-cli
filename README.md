@@ -209,6 +209,18 @@ line two
 (+2 more lines: --full)
 ```
 
+Alongside it, on stderr, one line says where the answer came from:
+
+```
+→ profile=work org=1234567 (from the only profile that sees PROJ)
+```
+
+Every command prints it, and stdout never carries it, so piping is unaffected.
+With more than one profile configured, a bare `PROJ-1` is routed to the profile
+that can actually see that queue rather than to the default one — the default
+profile answering 403 for a queue it was never going to have is a routing
+mistake dressed up as a rights problem.
+
 Three things in that output are deliberate:
 
 - **Links carry their type.** "What blocks this" is the next question after
