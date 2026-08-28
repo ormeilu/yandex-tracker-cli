@@ -145,9 +145,25 @@ Highest wins:
 3. the nearest `.tracker.toml`, walking up from the working directory
 4. `default_profile`
 
-There is no `use-context`-style switch, and no command mutates which profile is
-active. Ambient state you set an hour ago is exactly how a change ends up in the
-wrong organisation.
+One command changes the stored default, and nothing else does:
+
+```bash
+ytcli auth use work
+```
+
+It reads no token and sends no request — switching profiles is a local edit —
+and it refuses a profile that does not exist, because a default pointing at
+nothing breaks every later command with a worse message.
+
+**Every command says which profile answered**, once, on stderr:
+
+```
+→ profile=work org=1234567 (from config default_profile)
+```
+
+stdout never carries it, so pipes and parsers are unaffected. It is there
+because an answer from the wrong organisation looks exactly like an answer from
+the right one.
 
 ## Pinning a repository
 
@@ -189,29 +205,40 @@ something anyone guesses.
 
 ## When two profiles share a queue key
 
-Queue keys are unique inside an organisation, not across them: two profiles can
-each see an `LMS`, and `LMS-12` then names two different issues. Whichever
-profile is active decides — which is fine in a repository with a `.tracker.toml`,
-and a trap when you are switching between organisations by hand.
+Queue keys are unique inside an organisation, not across them. Two cases hide
+behind one symptom, and they are not the same:
 
-A bare `LMS-12` keeps working — the prefix is only *required* when a collision
-actually exists, and only once this tool has seen it:
+**Two accounts, one organisation.** `LMS-12` is one issue seen through two
+logins. Either profile fetches it, and nothing is ambiguous.
+
+**Two organisations.** `LMS-12` names two different issues, and no default can
+be right. This is refused rather than guessed at, and the message names both
+candidates:
 
 ```bash
-ytcli issue get LMS-12          # fine, when only one profile sees LMS
-ytcli issue get work/LMS-12     # always accepted, collision or not
+ytcli issue get LMS-12          # refused: which LMS?
+ytcli issue get work/LMS-12     # always accepted
 ```
 
-When two profiles do share a queue key, the bare form is refused rather than
-guessed at, and the message names both candidates. The prefix overrides
-everything else for that command, and the command reports the profile it used.
+Short of that collision, **the key picks the profile**. A queue only one profile
+can see is fetched through that profile, whatever the default is:
 
-The collision is known from what `ytcli auth status` and `ytcli auth login`
-already had to look up — the queue lists they fetch are recorded next to the
-config, so nothing extra is requested on a normal command. That means the
-knowledge is only as current as the last `auth status`: an unknown collision
-does not block anything, which is deliberate. Refusing on a guess would make the
-common case worse to guard against a situation most people never have.
+```
+$ ytcli issue get LMS-11
+→ profile=work org=1234567 (from the only profile that sees LMS)
+```
+
+The alternative was a 403 from the default profile, which reads like a rights
+problem and is a routing mistake.
+
+Which profile sees which queue is remembered beside the config, from what
+`auth status` and `auth login` already had to fetch. When a queue is unknown and
+more than one profile is configured, each is asked once — one request per
+profile — and the answer is kept. The keychain may ask for each account the
+first time that happens.
+
+`--profile` is exempt from all of it. It is an instruction for one command
+rather than a standing default, so it is obeyed as given, 403 and all.
 
 ## Display defaults
 

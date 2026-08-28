@@ -29,10 +29,16 @@ Labels split the work by area: `area:issues`, `area:entities`,
 - Compact text renderer for issues and issue pages: fixed field order, links with
   their type, fenced untrusted text, pagination tally — pinned by snapshots
   (ADR 1, ADR 3).
-- The full v1 command tree, so help and completions are honest; unbuilt verbs
-  exit with code 64.
+- The whole command tree, built rather than declared: exit code 64 exists for a
+  command a future build adds, and nothing in this one returns it.
 - `ytcli auth status` end to end.
 - `ytcli cheatsheet`, compiled into the binary.
+- Profile routing: a bare key goes to the profile that can see its queue, and
+  every command says on stderr which profile and organisation answered.
+  `ytcli auth use` switches the stored default without reading a token.
+- Help written in markdown and rendered with termimad for a terminal; the source
+  goes to a pipe, where an agent reads it natively and escape codes would be
+  noise.
 - The agent surface (ADR 6): `skills/ytcli/`, loaded as a plugin by Claude Code
   and Codex from one directory, and `--help` written as documentation rather
   than as clap's defaults. Both are checked against the binary by tests, since a

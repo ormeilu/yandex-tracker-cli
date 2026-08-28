@@ -9,10 +9,20 @@ That property is what makes a static allowlist worth having:
 
 ```
 allow: ytcli issue get:*, ytcli issue find:*, ytcli issue count:*,
-       ytcli queue list, ytcli queue fields:*, ytcli auth status
+       ytcli issue worklogs:*, ytcli issue checklist:*,
+       ytcli queue list, ytcli queue get:*, ytcli queue fields:*,
+       ytcli board list, ytcli board get:*, ytcli board sprints:*,
+       ytcli field list, ytcli template list:*,
+       ytcli portfolio contents:*, ytcli auth status
 ask:   ytcli issue create:*, ytcli issue update:*, ytcli issue comment:*,
-       ytcli issue transition:*, ytcli attachment upload:*
+       ytcli issue transition:*, ytcli issue worklog:*, ytcli issue check:*,
+       ytcli issue link:*, ytcli queue create:*, ytcli project place:*,
+       ytcli attachment upload:*
 ```
+
+Reads and writes never share a command prefix — `worklogs` and `worklog`,
+`checklist` and `check`, `links` and `link` — so allowing a read can never allow
+the write beside it.
 
 Configure it once and reading stops prompting, while anything that changes
 someone else's Tracker still asks.
@@ -20,6 +30,18 @@ someone else's Tracker still asks.
 Writes that fan out across a filter additionally require `--yes`. Single-issue
 writes do not: this is a tool for changing issues, and confirming every one of
 them would be theatre. Every write accepts `--dry-run`.
+
+## Every answer names the profile it came from
+
+Each command prints one line to stderr before its output:
+
+```
+→ profile=work org=1234567 (from config default_profile)
+```
+
+stdout is the data channel and never carries it. An agent working across two
+organisations can therefore check what it just read against what it meant to
+read, rather than inferring it from the content.
 
 ## The injection surface is the output, not the query
 

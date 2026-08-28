@@ -11,9 +11,11 @@ That single goal explains most of what follows: why the default view is terse an
 its field order fixed, why lists always say how much they did not show, and why
 `--json` is a schema of our own rather than whatever the API happened to return.
 
-> **Status: early.** Configuration, credentials, rendering and the command tree
-> are in place, and `auth status` works end to end. Most commands are declared and
-> exit with code 64. See [TODO](TODO.md).
+> **Status: 0.3.0.** Everything in the command tree is built: issues, worklogs,
+> checklists, links, queues, boards and sprints, organisation-wide fields and
+> templates, projects, portfolios, goals and attachments — reads and writes.
+> Published on crates.io, PyPI, Homebrew and GitHub Releases. What was
+> deliberately ruled out is in [TODO](TODO.md).
 
 ## Two audiences, one tool
 
@@ -31,3 +33,8 @@ The data itself is the same either way.
 - [Output](output.md) — the detail ladder, and what the fences around text mean
 - [Using it from an agent](agents.md) — allowlists, exit codes, the skill
 - [Decisions](adr/index.md) — why the awkward parts are the way they are
+
+Two things worth knowing before the rest: every command prints one stderr line
+saying which profile and organisation answered, and an issue key whose queue
+only one profile can see is fetched through that profile, whatever the default
+is.

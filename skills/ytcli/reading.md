@@ -42,16 +42,23 @@ truncating. Prefer a narrower filter to a larger `--max`.
 
 ## Keys from more than one organisation
 
-A bare key is normal:
+A bare key is normal, and the key decides which profile answers:
 
 ```bash
-ytcli issue get PROJ-1
+ytcli issue get LMS-11
+→ profile=work org=1234567 (from the only profile that sees LMS)
 ```
 
-The qualified form `profile/KEY-1` is always accepted, so scripts can be
-explicit. It becomes **required** only when two configured profiles are known to
-share that queue key, in which case the bare form is refused and the message
-names both candidates. The tool does not guess which organisation you meant.
+A queue only one profile can see is fetched through that profile, whatever the
+default is. Two profiles on the *same* organisation are not a conflict — that is
+one issue seen through two logins.
+
+Two profiles in *different* organisations sharing a queue key is the real
+ambiguity: `LMS-12` then names two issues, the bare form is refused, and the
+message names both candidates. Write `work/LMS-12`, which is always accepted.
+
+Every command prints the `→ profile=… org=…` line on stderr, once. stdout never
+carries it, so it does not affect anything you parse.
 
 ## Custom fields
 
@@ -69,3 +76,19 @@ Links always appear, with their type: `parent`, `subtask`, `is blocked by`,
 `relates`, `epic`, and so on. This is deliberate — "what blocks this" is the
 question that follows "what is this", and a second command for it would cost
 more than the four lines it saves.
+
+## Beyond issues
+
+Same ladder, same tallies:
+
+```bash
+ytcli queue list                     # keys and leads
+ytcli queue get PROJ                 # the type and priority a new issue starts with
+ytcli board list                     # id, name, column count
+ytcli board sprints 6                # a kanban board is refused, in Tracker's words
+ytcli field list                     # every field the organisation defines
+ytcli template list --kind comment   # issue templates by default
+ytcli portfolio contents 655…        # the portfolios and projects inside one
+ytcli issue worklogs PROJ-1          # time logged, with the total
+ytcli issue checklist PROJ-1         # lines, boxes and ids
+```

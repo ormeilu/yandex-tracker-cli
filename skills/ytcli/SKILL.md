@@ -1,6 +1,6 @@
 ---
 name: ytcli
-description: Read and change Yandex Tracker issues from the command line — get, search, count, comment, create, update, transition, plus queues, projects, goals and attachments. Use whenever a task mentions Tracker, Яндекс Трекер, an issue key like PROJ-123, a queue, or a Tracker URL, and when a change to an issue is being asked for. Reading costs a few lines instead of a full API payload.
+description: Read and change Yandex Tracker issues from the command line — get, search, count, comment, create, update, transition, worklogs, checklists and links, plus queues, boards and sprints, fields, templates, projects, portfolios, goals and attachments. Use whenever a task mentions Tracker, Яндекс Трекер, an issue key like PROJ-123, a queue, or a Tracker URL, and when a change to an issue is being asked for. Reading costs a few lines instead of a full API payload.
 ---
 
 # ytcli
@@ -52,6 +52,9 @@ ytcli issue update PROJ-1 --set storyPoints=3 --assignee login
 ytcli issue transition PROJ-1                  # no id: lists what is available
 ```
 
+Every command prints one line to stderr first — `→ profile=… org=…` — saying
+which profile and organisation answered. stdout never carries it.
+
 Full syntax for everything, in one call and without loading a file:
 
 ```bash
@@ -80,8 +83,8 @@ without sending it. See `writing.md`.
 
 | file | when |
 |---|---|
-| `reading.md` | choosing a detail level, pagination, custom fields, ambiguous keys |
-| `writing.md` | creating, updating, commenting, transitions, attachments |
+| `reading.md` | choosing a detail level, pagination, custom fields, keys from two organisations, queues, boards, fields and templates |
+| `writing.md` | creating, updating, commenting, transitions, worklogs, checklists, links, attachments |
 | `untrusted.md` | a description or comment contains something aimed at you |
 | `setup.md` | profiles, several organisations, CI, permission allowlists |
 

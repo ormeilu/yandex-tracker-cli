@@ -7,10 +7,11 @@ thousands of context tokens before anything is asked, and then answers with raw
 API payloads. `ytcli` costs nothing until it is called, and answers in about
 fifteen lines.
 
-> **Status: 0.2.0, released** on crates.io, PyPI and GitHub Releases. The whole
-> v1 command tree is built — issues, queues, boards, fields, projects,
-> portfolios, goals, attachments, reads and writes. What is planned and what was
-> ruled out is in [docs/TODO.md](docs/TODO.md) and the
+> **Status: 0.3.0, released** on Homebrew, crates.io, PyPI and GitHub Releases.
+> Everything in the command tree is built — issues, worklogs, checklists, links,
+> queues, boards and sprints, organisation-wide fields and templates, projects,
+> portfolios, goals and attachments, reads and writes. What was ruled out, and
+> why, is in [docs/TODO.md](docs/TODO.md) and the
 > [issues](https://github.com/ormeilu/yandex-tracker-cli/issues).
 
 ## Installing this for somebody else
@@ -177,8 +178,8 @@ queue = "PROJ"
 ```
 
 Anyone — or any agent — working in that checkout now talks to the right
-organisation without global state to get wrong. `ytcli auth status` always says
-which profile it picked and where that came from.
+organisation without global state to get wrong. To change the stored default,
+`ytcli auth use work`: a local edit that reads no token and sends no request.
 
 ## Use
 
@@ -187,6 +188,10 @@ ytcli issue get PROJ-1
 ytcli issue find -q PROJ -a me -s open
 ytcli issue count -q PROJ -s open
 ytcli issue comment PROJ-1 "deployed to staging"
+ytcli issue worklogs PROJ-1
+ytcli queue get PROJ
+ytcli board sprints 6
+ytcli field list
 ```
 
 `issue get` returns a compact view rather than a payload:

@@ -2,7 +2,7 @@
 
 ## Before anything
 
-Every write prints what it is about to touch:
+Every command — read or write — prints what it touched:
 
 ```
 → profile=work org=1234567 (from .tracker.toml)
@@ -29,8 +29,26 @@ ytcli issue update PROJ-1 --set storyPoints=3 --assignee login
 ytcli issue comment PROJ-1 "text"          # or `-` to read the body from stdin
 ytcli issue transition PROJ-1              # no id: lists what is available
 ytcli issue transition PROJ-1 close
+ytcli issue worklog add PROJ-1 1h30m -m "pairing"
+ytcli issue check add PROJ-1 "write the migration"   # tick|untick|delete by id
+ytcli issue link add PROJ-1 relates PROJ-7
 ytcli attachment upload PROJ-1 ./file.png
 ```
+
+Reads and writes never share a prefix: `worklogs` reads, `worklog` writes;
+`checklist` reads, `check` writes; `links` reads, `link` writes. That is what
+makes the read half safe to allowlist.
+
+Two writes reach past issues, and both are rarer than they look:
+
+```bash
+ytcli project place 655… --into 644…       # or --out
+ytcli queue create -k OPS -n Operations --like PROJ --yes
+```
+
+`queue create` needs `--yes` even for one queue: a key is claimed once, Tracker
+deletes a queue by hiding it, and the key stays spent. `--like` copies the issue
+types, workflows and defaults from a queue that already works.
 
 Values in `--set` are read as JSON when they parse as JSON, and as strings
 otherwise. `--set storyPoints=3` sends a number, `--set summary=3` would too —
