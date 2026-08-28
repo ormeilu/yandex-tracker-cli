@@ -325,3 +325,22 @@ async fn no_images_changes_nothing_else_about_the_output() {
         "--no-images altered output that has no images in it"
     );
 }
+
+/// TOON used to be a build feature, so `--format toon` could fail on a binary
+/// that looked identical to one where it worked. It is in every build now, and
+/// this is the test that says so.
+#[tokio::test]
+async fn toon_is_in_the_build() {
+    let harness = Harness::new().await;
+    issue_available(&harness).await;
+
+    let output = harness
+        .run(&["issue", "get", "PROJ-1", "--format", "toon"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert!(stdout.contains("PROJ-1"));
+    // TOON is key: value without the quoting and bracing of JSON.
+    assert!(!stdout.contains("\"key\":"), "that is JSON, not TOON");
+}

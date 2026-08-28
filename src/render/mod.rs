@@ -37,8 +37,8 @@ pub enum Format {
     Json,
     /// The upstream payload, verbatim. Escape hatch, never the default.
     JsonRaw,
-    /// Token-Oriented Object Notation. Experimental, behind the `toon` feature;
-    /// only pays off on uniform lists.
+    /// Token-Oriented Object Notation. Always available; it only pays off on
+    /// uniform lists, which is why it is not the default.
     Toon,
 }
 
@@ -125,10 +125,7 @@ pub fn machine<T: serde::Serialize>(value: &T, format: Format) -> Result<String,
         Format::Json | Format::JsonRaw => {
             Ok(serde_json::to_string_pretty(value).map(|json| json + "\n")?)
         }
-        #[cfg(feature = "toon")]
         Format::Toon => Ok(toon_format::encode_default(value)? + "\n"),
-        #[cfg(not(feature = "toon"))]
-        Format::Toon => Err(RenderError::ToonUnavailable),
         Format::Text => Err(RenderError::NotMachineReadable),
     }
 }
@@ -137,11 +134,8 @@ pub fn machine<T: serde::Serialize>(value: &T, format: Format) -> Result<String,
 pub enum RenderError {
     #[error("could not serialise the result")]
     Serialise(#[from] serde_json::Error),
-    #[error("this build has no TOON support; rebuild with `--features toon`")]
-    ToonUnavailable,
     #[error("text output is rendered per entity, not generically")]
     NotMachineReadable,
-    #[cfg(feature = "toon")]
     #[error("could not encode as TOON")]
     Toon(#[from] toon_format::ToonError),
 }

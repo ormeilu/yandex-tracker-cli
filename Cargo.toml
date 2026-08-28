@@ -61,7 +61,7 @@ base64 = "0.22.1"
 thiserror = "2.0.20"
 tokio = { version = "1.53.1", features = ["rt", "macros", "fs", "time"] }
 toml_edit = "0.25.13"
-toon-format = { version = "0.5.0", optional = true }
+toon-format = "0.5.0"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
 
@@ -76,9 +76,6 @@ wiremock = "0.6.5"
 
 [features]
 default = []
-# TOON output format (https://toonformat.dev). Experimental: the format is young
-# and only pays off on uniform lists, so it stays behind a flag until measured.
-toon = ["dep:toon-format"]
 # Tests against a real organisation. Off by default and `#[ignore]`d on top of
 # that: they need credentials, they cost API calls, and one of them creates an
 # issue Tracker will not let anyone delete.

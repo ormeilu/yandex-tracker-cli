@@ -52,7 +52,12 @@ that genuinely need the original.
 ## Consequences
 
 Every renderer needs a snapshot test, and adding a field to the compact view is a
-deliberate act rather than a side effect. TOON stays experimental: its own
-documentation puts the win at 30–55% on uniform arrays and a loss on nested or
-non-uniform data, so it is worth having for lists and worth measuring before it
-becomes any kind of default.
+deliberate act rather than a side effect.
+
+**Amendment, 2026-08-28.** TOON was behind a build feature while its value was
+unknown. Measured, it saves 7% against `json` on a page of issues and 13% on one
+issue — its documented 30–55% needs a uniform array of flat objects, and an
+issue is not that shape. That is not a reason to hide it: 33 KB on a 4 MB binary
+is not a cost worth a feature flag, and a format that only exists in some builds
+is one no caller can rely on. It ships in every build and stays off the default,
+where the compact text renderer is 97% smaller than either.

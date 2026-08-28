@@ -146,8 +146,8 @@ ytcli attachment show PROJ-1 29 -v
 
 ## TOON, measured
 
-`--format toon` exists behind the `toon` feature. It was worth trying and it is
-not worth promoting, and the numbers are here so the question does not get
+`--format toon` is in every build. It was worth trying and it is not worth
+promoting to the default, and the numbers are here so the question does not get
 re-opened from intuition.
 
 One page of 25 issues from a real queue, and one issue, counted with
@@ -198,7 +198,5 @@ success/failure channel so scripts can branch on it.
 - **`text`** — the default; the only format tuned for tokens.
 - **`json`** — our schema, so upstream field changes do not leak into your scripts.
 - **`json-raw`** — the original payload, for when you genuinely need it.
-- **`toon`** — [TOON](https://toonformat.dev), experimental, behind the `toon`
-  build feature. Its own documentation puts the saving at 30–55% on uniform
-  arrays and a loss on nested or non-uniform data, which makes it interesting for
-  issue lists and pointless for a single issue. It stays a flag until measured.
+- **`toon`** — [TOON](https://toonformat.dev). Always compiled in; see the
+  measurements above for what it does and does not save.
