@@ -96,6 +96,9 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
 
 ## field, template
   ytcli field list                      every field the organisation defines, not one queue's
+  ytcli field get storyPoints [--all]   what it holds and what values it accepts; a fixed
+                                        list is printed, anything else names the command
+                                        that answers it
   ytcli template list [--kind comment]  issue templates by default; queue-bound ones say which
 
 ## board

@@ -93,6 +93,7 @@ ytcli queue versions PROJ            # what an issue's fixVersions points at
 ytcli board list                     # id, name, column count
 ytcli board sprints 6                # a kanban board is refused, in Tracker's words
 ytcli field list                     # every field the organisation defines
+ytcli field get storyPoints          # what one field accepts, before --set guesses
 ytcli template list --kind comment   # issue templates by default
 ytcli portfolio contents 655…        # the portfolios and projects inside one
 ytcli issue worklogs PROJ-1          # time logged, with the total

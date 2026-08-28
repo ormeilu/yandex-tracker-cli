@@ -1,0 +1,24 @@
+{
+  "self": "https://api.tracker.yandex.net/v3/fields/storyPoints",
+  "id": "storyPoints",
+  "name": "Story Points",
+  "key": "storyPoints",
+  "version": 0,
+  "schema": {
+    "type": "float",
+    "required": false
+  },
+  "readonly": false,
+  "options": false,
+  "suggest": false,
+  "queryProvider": {
+    "type": "NumberOptionalQueryProvider"
+  },
+  "order": 42,
+  "category": {
+    "self": "https://api.tracker.yandex.net/v3/fields/categories/000000000000000000000003",
+    "id": "000000000000000000000003",
+    "display": "Agile"
+  },
+  "type": "standard"
+}

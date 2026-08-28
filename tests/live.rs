@@ -482,6 +482,40 @@ async fn every_dictionary_answers_with_keys() {
     );
 }
 
+/// A field key from the listing can be fetched back on its own, and says what
+/// it accepts.
+///
+/// The claim under test is that `optionsProvider` is real and is the thing that
+/// decides values: a fixture we wrote proves only that we can read our own
+/// invention. A live organisation is where `assignee` genuinely answers with a
+/// provider and `storyPoints` genuinely answers with none.
+#[tokio::test]
+#[ignore = "needs real credentials"]
+async fn a_field_says_what_it_accepts() {
+    let client = client();
+    let fields = client.fields().await.expect("fields");
+    assert!(!fields.is_empty(), "an organisation with no fields");
+
+    for field in fields.iter().take(5) {
+        let spec = client
+            .field(&field.key)
+            .await
+            .unwrap_or_else(|error| panic!("field {}: {error}", field.key));
+        assert_eq!(spec.key, field.key);
+        assert!(
+            !spec.field_type.is_empty() && spec.field_type != "unknown",
+            "{} has no schema type",
+            field.key
+        );
+    }
+
+    let constrained = client.field("assignee").await.expect("assignee");
+    assert!(
+        constrained.options.is_some(),
+        "assignee accepts anybody? {constrained:?}"
+    );
+}
+
 /// The directory pages, and reports how many people it has.
 #[tokio::test]
 #[ignore = "needs real credentials"]

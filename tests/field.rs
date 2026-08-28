@@ -94,3 +94,104 @@ async fn nothing_to_list_still_ends_with_a_tally() {
 
     assert_eq!(stdout, "shown 0 of 0\n");
 }
+
+/// The point of the command: a field with a fixed list of values says what they
+/// are, so `--set` is not written blind.
+#[tokio::test]
+async fn a_fixed_list_of_values_is_printed_and_capped() {
+    let harness = Harness::new().await;
+    let values: Vec<String> = (1..=25).map(|n| format!("option-{n}")).collect();
+    answer(
+        &harness,
+        "/v3/fields/component",
+        serde_json::json!({
+            "id": "60fa2c1e--component",
+            "name": "Component",
+            "schema": {"type": "string", "required": false},
+            "readonly": false,
+            "category": {"display": "Custom"},
+            "optionsProvider": {"type": "FixedListOptionsProvider", "values": values}
+        }),
+    )
+    .await;
+
+    let output = harness
+        .run(&["field", "get", "component"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert!(stdout.contains("option-1,"), "{stdout}");
+    assert!(!stdout.contains("option-25"), "{stdout}");
+    assert!(
+        stdout.ends_with("shown 20 of 25 values; --all for the rest\n"),
+        "{stdout}"
+    );
+
+    let all = harness
+        .run(&["field", "get", "component", "--all"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(all.get_output().stdout.clone()).expect("utf-8");
+    assert!(stdout.contains("option-25"), "{stdout}");
+    assert!(stdout.ends_with("shown 25 of 25 values\n"), "{stdout}");
+}
+
+/// A provider that keeps its values elsewhere is the common case, and the only
+/// useful thing to say about it is which command fetches them.
+#[tokio::test]
+async fn a_provider_without_values_names_the_command_that_has_them() {
+    let harness = Harness::new().await;
+    answer(
+        &harness,
+        "/v3/fields/followers",
+        serde_json::json!({
+            "id": "followers",
+            "name": "Наблюдатели",
+            "schema": {"type": "array", "items": "user"},
+            "readonly": false,
+            "optionsProvider": {"type": "TeamOptionsProvider"}
+        }),
+    )
+    .await;
+
+    let output = harness
+        .run(&["field", "get", "followers"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    // `array` alone does not say what one element is, which is what decides
+    // whether a write takes a value or a list.
+    assert!(stdout.contains("type: array of user"), "{stdout}");
+    assert!(stdout.contains("ytcli user list"), "{stdout}");
+}
+
+/// An unrecognised provider is passed through by name. Guessing at a command
+/// for it would cost a request and read like a bug.
+#[tokio::test]
+async fn an_unknown_provider_is_named_rather_than_guessed_at() {
+    let harness = Harness::new().await;
+    answer(
+        &harness,
+        "/v3/fields/sla",
+        serde_json::json!({
+            "id": "sla",
+            "name": "SLA",
+            "schema": {"type": "sla"},
+            "readonly": true,
+            "optionsProvider": {"type": "OptionsProviderProto$SlaSettingsOptionsProviderProto"}
+        }),
+    )
+    .await;
+
+    let output = harness.run(&["field", "get", "sla"]).assert().success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert!(stdout.contains("readonly: yes"), "{stdout}");
+    assert!(
+        stdout.contains("SlaSettingsOptionsProviderProto"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("not listed by this endpoint"), "{stdout}");
+}

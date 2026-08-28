@@ -16,6 +16,15 @@ pub enum FieldCommand {
     /// List every field defined in the organisation.
     #[command(long_about = crate::cli::help::md(crate::cli::help::FIELD_LIST))]
     List,
+    /// Show one field: what it holds and what values it accepts.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::FIELD_GET))]
+    Get {
+        /// Field key, as printed by `queue fields` or `field list`.
+        key: String,
+        /// List every accepted value, however many there are.
+        #[arg(long)]
+        all: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -50,15 +59,36 @@ pub async fn run(command: &FieldCommand, session: &Session) -> ExitCode {
         Err(code) => return code,
     };
 
-    let FieldCommand::List = command;
-    match client.fields().await {
-        Ok(fields) => finish(&fields, session, |fields| {
-            render::fields(fields, &session.render)
-        }),
-        Err(error) => {
-            let code = error.exit_code();
-            report(&error, code)
-        }
+    match command {
+        FieldCommand::List => match client.fields().await {
+            Ok(fields) => finish(&fields, session, |fields| {
+                render::fields(fields, &session.render)
+            }),
+            Err(error) => {
+                let code = error.exit_code();
+                report(&error, code)
+            }
+        },
+        FieldCommand::Get { key, all } => match client.field(key).await {
+            Ok(field) => {
+                let rendered = match session.render.format {
+                    Format::Text => Ok(render::field_spec(&field, *all, &session.render)),
+                    Format::JsonRaw => machine(&field, Format::Json),
+                    other => machine(&field, other),
+                };
+                match rendered {
+                    Ok(text) => {
+                        emit(&text);
+                        ExitCode::Success
+                    }
+                    Err(error) => report(&error, ExitCode::Failure),
+                }
+            }
+            Err(error) => {
+                let code = error.exit_code();
+                report(&error, code)
+            }
+        },
     }
 }
 

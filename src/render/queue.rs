@@ -2,7 +2,7 @@
 
 use std::fmt::Write as _;
 
-use crate::api::{Queue, QueueField, QueueSettings, Template};
+use crate::api::{FieldSpec, Queue, QueueField, QueueSettings, Template};
 use crate::render::Context;
 use crate::render::style::Palette;
 use crate::render::table::{Column, render, tally};
@@ -83,6 +83,134 @@ pub fn fields(fields: &[QueueField], ctx: &Context) -> String {
         )
     );
     out
+}
+
+/// How many values a constrained field lists before the rest are counted
+/// rather than printed.
+///
+/// A field with two hundred options is a real thing, and printing all of them
+/// by default makes a command nobody runs twice.
+const VALUES_SHOWN: usize = 20;
+
+/// One field: what it holds, whether it can be written, and what it accepts.
+///
+/// The last of those is the reason the command exists. `--set` is otherwise
+/// written blind and judged by Tracker, which answers with the field's name in
+/// the organisation's language and no hint of what it wanted instead.
+#[must_use]
+pub fn field_spec(field: &FieldSpec, all: bool, ctx: &Context) -> String {
+    let mut out = String::with_capacity(240);
+    let paint = ctx.painter();
+    let label = |text: &str| paint.paint(text, Palette::label());
+    let yes_no = |flag: bool| if flag { "yes" } else { "no" };
+
+    let _ = writeln!(
+        out,
+        "{}  {}",
+        paint.paint(&field.key, Palette::key()),
+        field.name
+    );
+
+    // `type: array` on its own says nothing a caller can act on; what the
+    // elements are is the part that decides whether `--set` takes one value or
+    // a list.
+    let kind = match &field.items {
+        Some(items) => format!("{} of {items}", field.field_type),
+        None => field.field_type.clone(),
+    };
+    let _ = writeln!(
+        out,
+        "{} {kind}   {} {}   {} {}",
+        label("type:"),
+        label("required:"),
+        yes_no(field.required),
+        label("readonly:"),
+        yes_no(field.readonly),
+    );
+    if let Some(category) = &field.category {
+        let _ = writeln!(out, "{} {category}", label("category:"));
+    }
+
+    out.push_str(&values(field, all, ctx));
+    out
+}
+
+/// The values half of `field get`.
+fn values(field: &FieldSpec, all: bool, ctx: &Context) -> String {
+    let paint = ctx.painter();
+    let label = |text: &str| paint.paint(text, Palette::label());
+
+    let Some(options) = &field.options else {
+        return format!("{} anything of that type\n", label("values:"));
+    };
+
+    if options.values.is_empty() {
+        // A provider with no list is not an empty field: the values exist, they
+        // are just kept somewhere this endpoint does not reach. Naming the
+        // command that does reach them is the whole use of knowing the
+        // provider's name.
+        return match provider_hint(&options.provider) {
+            Some(hint) => format!("{} {hint}\n", label("values:")),
+            None => format!(
+                "{} decided by {} — not listed by this endpoint\n",
+                label("values:"),
+                options.provider
+            ),
+        };
+    }
+
+    let mut out = String::with_capacity(64 + options.values.len() * 12);
+    let shown = if all {
+        options.values.len()
+    } else {
+        options.values.len().min(VALUES_SHOWN)
+    };
+    let _ = writeln!(
+        out,
+        "{} {}",
+        label("values:"),
+        options.values[..shown].join(", ")
+    );
+    let _ = writeln!(
+        out,
+        "{}",
+        paint.paint(
+            &if shown < options.values.len() {
+                format!(
+                    "shown {shown} of {} values; --all for the rest",
+                    options.values.len()
+                )
+            } else {
+                format!("shown {shown} of {shown} values")
+            },
+            Palette::label()
+        )
+    );
+    out
+}
+
+/// Which command answers what a provider will accept.
+///
+/// Tracker names a class; a caller wants a command. Only the providers whose
+/// answer this tool can actually fetch are mapped — an unrecognised one is
+/// passed through by name rather than guessed at, because a wrong command here
+/// costs a request and reads like a bug.
+fn provider_hint(provider: &str) -> Option<&'static str> {
+    Some(match provider {
+        "TeamOptionsProvider" => "people in the organisation — ytcli user list",
+        "QueueOptionsProvider" => "queue keys — ytcli queue list",
+        "IssueTypeOptionsProvider" => "issue types — ytcli dict list --kind types",
+        "PriorityOptionsProvider" => "priorities — ytcli dict list --kind priorities",
+        "StatusOptionsProvider" => "statuses — ytcli dict list --kind statuses",
+        "ResolutionOptionsProvider" => "resolutions — ytcli dict list --kind resolutions",
+        "VersionOptionsProvider" => "versions of the queue — ytcli queue versions PROJ",
+        "TagOptionsProvider" => "tags in use in the queue — ytcli queue tags PROJ",
+        "SprintOptionsProvider" => "sprints — ytcli sprint list",
+        "BoardOptionsProvider" => "boards — ytcli board list",
+        "ProjectOptionsProvider" => "projects — ytcli project list",
+        "MetaEntityOptionsProvider" => "goals — ytcli goal list",
+        _ => return None,
+    })
 }
 
 /// The versions a queue defines.

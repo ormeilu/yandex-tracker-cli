@@ -550,6 +550,26 @@ ytcli field list
 `--set` take. This answers what exists at all, which is the question behind a
 field a queue does not show.";
 
+pub const FIELD_GET: &str = "\
+Show one field: what it holds and what values it accepts.
+
+```
+ytcli field get storyPoints
+ytcli field get assignee
+ytcli field get someEnum --all
+```
+
+`queue fields PROJ` lists the keys. This answers the question that follows, and
+that `--set` is otherwise guessing at: the type, whether it takes one value or
+several, whether it can be written at all, and what it will accept.
+
+A fixed list of values is printed, capped at twenty unless `--all` says
+otherwise. Everything else — people, queues, sprints, versions — is decided
+elsewhere in the organisation, so the command that answers it is named instead.
+
+Local fields live inside a queue and are not reachable here; `queue local-fields
+PROJ` is where those are.";
+
 pub const TEMPLATE_LIST: &str = "\
 List templates.
 

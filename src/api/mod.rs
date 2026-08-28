@@ -1050,6 +1050,19 @@ impl Client {
             .unwrap_or_default())
     }
 
+    /// One field's definition, by the key `queue fields` prints.
+    ///
+    /// A local field defined inside one queue is not reachable here — it lives
+    /// under the queue — and Tracker answers 404 for it, which is the honest
+    /// answer rather than one worth papering over.
+    pub async fn field(&self, key: &str) -> Result<FieldSpec, ApiError> {
+        let raw = self
+            .get_value(&format!("/v3/fields/{key}"), &format!("field {key}"))
+            .await?;
+
+        FieldSpec::parse(&raw).ok_or_else(|| ApiError::NotFound(format!("field {key}")))
+    }
+
     /// Issue or comment templates.
     ///
     /// The path is `issueTemplates` and `commentTemplates`; there is no
@@ -1570,6 +1583,102 @@ impl QueueField {
                 .unwrap_or("unknown")
                 .to_owned(),
             system: !id.contains("--"),
+        })
+    }
+}
+
+/// One field's definition: what it holds, whether it can be written, and what
+/// values it accepts.
+///
+/// `queue fields` lists the keys; this answers the question that follows, which
+/// is the one `--set` is otherwise guessing at.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct FieldSpec {
+    pub key: String,
+    pub name: String,
+    /// `string`, `float`, `user`, `datetime` — Tracker's own vocabulary, which
+    /// is what its error messages quote back.
+    pub field_type: String,
+    /// What one element is, when the field holds several of them. `None` means
+    /// the field takes a single value.
+    pub items: Option<String>,
+    pub required: bool,
+    pub readonly: bool,
+    /// Where Tracker files the field: `Системные`, `Agile`, and whatever the
+    /// organisation added. In the organisation's own language.
+    pub category: Option<String>,
+    /// How the accepted values are decided, when they are decided at all.
+    pub options: Option<FieldOptions>,
+}
+
+/// What a constrained field will accept.
+///
+/// Two cases, and telling them apart is the point: a fixed list carries its
+/// values here, and everything else names a provider that answers from
+/// somewhere else in the organisation — the directory, the queue, the board.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct FieldOptions {
+    /// Tracker's class name for the provider, passed through unchanged: an
+    /// unrecognised one still says something, and inventing a friendlier word
+    /// for it would only be a word we would have to keep in step.
+    pub provider: String,
+    pub values: Vec<String>,
+}
+
+impl FieldSpec {
+    fn parse(value: &Value) -> Option<Self> {
+        let id = value.get("id").and_then(Value::as_str)?;
+        let schema = value.get("schema");
+        let string_at = |parent: Option<&Value>, member: &str| {
+            parent
+                .and_then(|parent| parent.get(member))
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned)
+        };
+
+        let options = value.get("optionsProvider").map(|provider| FieldOptions {
+            provider: provider
+                .get("type")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown")
+                .to_owned(),
+            // Values arrive as whatever the field holds — the numbers 0 and 1
+            // for a flag, strings for a list — and a caller has to type them
+            // back either way.
+            values: provider
+                .get("values")
+                .and_then(Value::as_array)
+                .map(|values| {
+                    values
+                        .iter()
+                        .map(|value| match value {
+                            Value::String(text) => text.clone(),
+                            other => other.to_string(),
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+        });
+
+        Some(Self {
+            key: id.rsplit("--").next().unwrap_or(id).to_owned(),
+            name: value
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or(id)
+                .to_owned(),
+            field_type: string_at(schema, "type").unwrap_or_else(|| "unknown".to_owned()),
+            items: string_at(schema, "items"),
+            required: schema
+                .and_then(|schema| schema.get("required"))
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            readonly: value
+                .get("readonly")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            category: string_at(value.get("category"), "display"),
+            options,
         })
     }
 }

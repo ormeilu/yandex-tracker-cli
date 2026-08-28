@@ -183,6 +183,16 @@ shown 3 of 3 (1 custom)
 ```
 
 ```console
+$ ytcli field get storyPoints
+→ profile=test org=12345 (from YTCLI_PROFILE)
+storyPoints  Story Points
+type: float   required: no   readonly: no
+category: Agile
+values: anything of that type
+
+```
+
+```console
 $ ytcli template list
 → profile=test org=12345 (from YTCLI_PROFILE)
 7            Incident                             PROJ         ilubenets
