@@ -667,6 +667,22 @@ ytcli auth list
 Whether a token is stored is shown; the token never is. An account holds one
 credential; a profile is one organisation seen through one account.";
 
+pub const AUTH_USE: &str = "\
+Make a profile the default one.
+
+```
+ytcli auth use work
+```
+
+A local edit to the config file: no token is read and no request is made.
+Everything that took the old default now takes this one — including which
+organisation a bare command touches, which is why it is a command of its own
+rather than a side effect of `auth login`.
+
+For one command, `--profile` is cheaper than switching; for one shell,
+`YTCLI_PROFILE`; for one directory, `.tracker.toml`. And a key whose queue only
+one profile can see is routed there whatever the default says.";
+
 pub const AUTH_LOGOUT: &str = "\
 Remove a stored token.
 

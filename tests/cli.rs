@@ -179,5 +179,8 @@ fn there_is_no_subcommand_that_prints_a_stored_token() {
         .filter_map(|line| line.split_whitespace().next())
         .collect();
 
-    assert_eq!(subcommands, ["login", "logout", "list", "status", "help"]);
+    assert_eq!(
+        subcommands,
+        ["login", "logout", "list", "use", "status", "help"]
+    );
 }

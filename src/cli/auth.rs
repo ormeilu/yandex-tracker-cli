@@ -31,6 +31,12 @@ pub enum AuthCommand {
     /// List configured accounts and profiles.
     #[command(long_about = crate::cli::help::md(crate::cli::help::AUTH_LIST))]
     List,
+    /// Make a profile the default one.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::AUTH_USE))]
+    Use {
+        /// Profile name, as `auth list` prints it.
+        profile: String,
+    },
     /// Check every profile: who the token belongs to, and what it can see.
     #[command(long_about = crate::cli::help::md(crate::cli::help::AUTH_STATUS))]
     Status {
@@ -86,6 +92,7 @@ pub async fn run(command: &AuthCommand, session: &Session) -> ExitCode {
         AuthCommand::Login(args) => login(args, session).await,
         AuthCommand::Logout { account } => logout(account),
         AuthCommand::List => list(session),
+        AuthCommand::Use { profile } => use_profile(session, profile),
     }
 }
 
@@ -185,6 +192,19 @@ async fn status(session: &Session, brief: bool, active_only: bool) -> ExitCode {
 
     remember_queues(session, brief, active_only, active.as_deref(), &queues_seen);
     warn_about_collisions(paint, &queues_seen);
+
+    // The command someone runs to find out which profile is in play is the
+    // command that should say how to change it.
+    if session.config.profiles.len() > 1 {
+        let _ = writeln!(
+            err,
+            "{}",
+            paint.paint(
+                "change the default with: ytcli auth use <profile>",
+                Palette::label()
+            )
+        );
+    }
 
     // The active profile decides the outcome — a broken profile nobody is using
     // should not make a script think the tool is unusable. But if *nothing*
@@ -754,6 +774,57 @@ async fn verify(
     let mut err = anstream::stderr();
     let _ = writeln!(err, "\n{}", guidance::block(guidance::ORG));
     Err(reported)
+}
+
+/// Point `default_profile` at another profile.
+///
+/// A local edit and nothing else: no token is read, no request is made. The
+/// profile has to exist, because a default naming a profile that does not is a
+/// config every later command fails on with a worse message than this one.
+fn use_profile(session: &Session, profile: &str) -> ExitCode {
+    let mut err = anstream::stderr();
+
+    if !session.config.profiles.contains_key(profile) {
+        let known: Vec<&str> = session.config.profiles.keys().map(String::as_str).collect();
+        return report(
+            &format!(
+                "no profile called `{profile}`; configured: {}",
+                if known.is_empty() {
+                    "none — run `ytcli auth login`".to_owned()
+                } else {
+                    known.join(", ")
+                }
+            ),
+            ExitCode::NotFound,
+        );
+    }
+
+    let previous = session.config.default_profile.clone();
+    if previous.as_deref() == Some(profile) {
+        let _ = writeln!(err, "`{profile}` is already the default profile");
+        return ExitCode::Success;
+    }
+
+    if session.global.dry_run {
+        let _ = writeln!(
+            err,
+            "dry run: would make `{profile}` the default profile in {}",
+            session.config_file.display()
+        );
+        return ExitCode::Success;
+    }
+
+    match store::set_default(&session.config_file, profile) {
+        Ok(_) => {
+            let _ = writeln!(
+                err,
+                "default profile: {} → {profile}",
+                previous.as_deref().unwrap_or("none"),
+            );
+            ExitCode::Success
+        }
+        Err(error) => report(&error, ExitCode::Failure),
+    }
 }
 
 fn logout(account: &str) -> ExitCode {

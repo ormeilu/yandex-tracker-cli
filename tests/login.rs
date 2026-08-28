@@ -387,3 +387,58 @@ async fn without_a_terminal_a_missing_account_is_an_error_not_a_prompt() {
             "--account is required when not running in a terminal",
         ));
 }
+
+/// Switching the default profile is a local edit, and nothing more.
+///
+/// No token is read and no request is made: asking the keychain for a
+/// credential in order to change a line in a config file would be theatre.
+#[tokio::test]
+async fn use_switches_the_default_profile_without_touching_the_network() {
+    let harness = Harness::new().await;
+    harness.add_profile("other", "99999");
+
+    harness
+        .run_raw(&["auth", "use", "other"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("default profile:"))
+        .stderr(predicate::str::contains("other"));
+
+    let config = std::fs::read_to_string(harness.config_path()).expect("read config");
+    assert!(config.contains(r#"default_profile = "other""#), "{config}");
+
+    let requests = harness.server.received_requests().await.unwrap_or_default();
+    assert!(requests.is_empty(), "{requests:?}");
+}
+
+/// A default naming a profile that does not exist is a config every later
+/// command fails on, with a worse message than this one.
+#[tokio::test]
+async fn use_refuses_a_profile_that_does_not_exist() {
+    let harness = Harness::new().await;
+
+    harness
+        .run_raw(&["auth", "use", "nope"])
+        .assert()
+        .code(4)
+        .stderr(predicate::str::contains("no profile called `nope`"))
+        .stderr(predicate::str::contains("configured: test"));
+}
+
+/// `--dry-run` says what it would do and leaves the file alone, like every
+/// other write here.
+#[tokio::test]
+async fn use_under_dry_run_changes_nothing() {
+    let harness = Harness::new().await;
+    harness.add_profile("other", "99999");
+    let before = std::fs::read_to_string(harness.config_path()).expect("read config");
+
+    harness
+        .run_raw(&["auth", "use", "other", "--dry-run"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("dry run: would make `other`"));
+
+    let after = std::fs::read_to_string(harness.config_path()).expect("read config");
+    assert_eq!(before, after);
+}

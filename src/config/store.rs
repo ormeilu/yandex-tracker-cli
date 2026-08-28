@@ -87,6 +87,31 @@ pub fn upsert(
     Ok(rendered)
 }
 
+/// Point `default_profile` at an existing profile.
+///
+/// Separate from [`upsert`] because changing which organisation a bare command
+/// touches is its own decision, not a side effect of writing a profile — and
+/// because it must not require a token: switching profiles is a local edit, and
+/// asking the keychain for a credential to make one would be theatre.
+pub fn set_default(path: &Path, name: &str) -> Result<String, StoreError> {
+    let existing = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(error) => return Err(StoreError::Read(error)),
+    };
+
+    let mut document: DocumentMut = existing.parse()?;
+    document["default_profile"] = value(name);
+    let rendered = document.to_string();
+
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(StoreError::Write)?;
+    }
+    write_private(path, &rendered).map_err(StoreError::Write)?;
+
+    Ok(rendered)
+}
+
 /// Write with owner-only permissions.
 ///
 /// The file holds no secrets by design, but it does name organisations and
@@ -132,6 +157,25 @@ mod tests {
             default_queue: Some("PROJ".to_owned()),
             display: Display::default(),
         }
+    }
+
+    /// The config is a file people write by hand, and the docs tell them to.
+    /// Switching the default must not cost them their comments.
+    #[test]
+    fn setting_the_default_keeps_what_was_written_around_it() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            "# my notes\ndefault_profile = \"work\"\n\n[profiles.home]\naccount = \"me\"\n",
+        )
+        .expect("write");
+
+        let written = set_default(&path, "home").expect("set default");
+
+        assert!(written.contains("# my notes"));
+        assert!(written.contains(r#"default_profile = "home""#));
+        assert!(written.contains("[profiles.home]"));
     }
 
     #[test]
