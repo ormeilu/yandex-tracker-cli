@@ -97,6 +97,184 @@ fn finish(rendered: Result<String, crate::render::RenderError>) -> ExitCode {
     }
 }
 
+/// Fields a project, portfolio or goal can be given on the command line.
+///
+/// Deliberately few. Everything else an entity has is either a reference to
+/// something the caller would have to look up first, or prose that belongs in
+/// the web interface rather than in shell quoting.
+#[derive(Debug, Default, clap::Args)]
+pub struct Fields {
+    /// Name.
+    #[arg(long, short = 's')]
+    pub summary: Option<String>,
+    /// Description.
+    #[arg(long, short = 'd')]
+    pub description: Option<String>,
+    /// Login of whoever owns it.
+    #[arg(long)]
+    pub lead: Option<String>,
+    /// Start date, as 2026-09-01.
+    #[arg(long)]
+    pub start: Option<String>,
+    /// End date, as 2026-12-31.
+    #[arg(long)]
+    pub end: Option<String>,
+}
+
+impl Fields {
+    /// What was actually given, as Tracker's field names.
+    fn body(&self) -> serde_json::Map<String, serde_json::Value> {
+        let mut fields = serde_json::Map::new();
+        for (name, value) in [
+            ("summary", &self.summary),
+            ("description", &self.description),
+            ("lead", &self.lead),
+            ("start", &self.start),
+            ("end", &self.end),
+        ] {
+            if let Some(value) = value {
+                fields.insert(name.to_owned(), serde_json::json!(value));
+            }
+        }
+        fields
+    }
+}
+
+/// Create a project, portfolio or goal.
+pub async fn create(kind: &str, fields: &Fields, session: &Session) -> ExitCode {
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+
+    let Some(summary) = fields.summary.clone() else {
+        return report(
+            &format!("a {kind} needs a name: --summary"),
+            ExitCode::ConfirmationRequired,
+        );
+    };
+
+    let body = serde_json::Value::Object(fields.body());
+    let targets = [summary];
+    let intent = Intent {
+        action: &format!("create a {kind}"),
+        targets: &targets,
+        body: &body,
+        always_confirm: false,
+    };
+    if let Gate::Stop(code) = check(&intent, session) {
+        return code;
+    }
+
+    match client.create_entity(kind, &body).await {
+        Ok(created) => show(&created, session),
+        Err(error) => {
+            let code = error.exit_code();
+            report(&error, code)
+        }
+    }
+}
+
+/// Change the fields of one.
+///
+/// Two requests, like `place`: the entity is read first for its version, so a
+/// change somebody else made in between is refused rather than overwritten.
+pub async fn update(kind: &str, id: &str, fields: &Fields, session: &Session) -> ExitCode {
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+
+    let body = fields.body();
+    if body.is_empty() {
+        return report(
+            &"nothing to change: pass --summary, --description, --lead, --start or --end",
+            ExitCode::ConfirmationRequired,
+        );
+    }
+    let body = serde_json::Value::Object(body);
+
+    let current = match client.entity(kind, id).await {
+        Ok(entity) => entity,
+        Err(error) => {
+            let code = error.exit_code();
+            return report(&error, code);
+        }
+    };
+
+    let intent = Intent {
+        action: &format!("change {kind} {id}"),
+        targets: std::slice::from_ref(&current.id),
+        body: &body,
+        always_confirm: false,
+    };
+    if let Gate::Stop(code) = check(&intent, session) {
+        return code;
+    }
+
+    match client.update_entity(kind, id, &body, current.version).await {
+        Ok(updated) => show(&updated, session),
+        Err(error) => {
+            let code = error.exit_code();
+            report(&error, code)
+        }
+    }
+}
+
+/// Delete one.
+///
+/// `always_confirm`, like `queue create`: this is irreversible in kind rather
+/// than at scale. Everything the entity grouped survives — a project holds no
+/// issues of its own — but the grouping itself does not come back.
+pub async fn remove(kind: &str, id: &str, session: &Session) -> ExitCode {
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+
+    // Read first, so the confirmation names what is about to go rather than an
+    // id, and so a mistyped one fails before the gate rather than after it.
+    let current = match client.entity(kind, id).await {
+        Ok(entity) => entity,
+        Err(error) => {
+            let code = error.exit_code();
+            return report(&error, code);
+        }
+    };
+
+    let body = serde_json::json!({ "delete": id });
+    let intent = Intent {
+        action: &format!("delete {kind} `{}`", current.summary),
+        targets: std::slice::from_ref(&current.id),
+        body: &body,
+        always_confirm: true,
+    };
+    if let Gate::Stop(code) = check(&intent, session) {
+        return code;
+    }
+
+    match client.delete_entity(kind, id).await {
+        Ok(()) => {
+            emit(&format!("{kind} {id} deleted\n"));
+            ExitCode::Success
+        }
+        Err(error) => {
+            let code = error.exit_code();
+            report(&error, code)
+        }
+    }
+}
+
+/// An entity as it now stands, after a write.
+fn show(entity: &crate::api::models::Entity, session: &Session) -> ExitCode {
+    let rendered = match session.render.format {
+        Format::Text => Ok(render::entity(entity, &session.render)),
+        Format::JsonRaw => machine(entity, Format::Json),
+        other => machine(entity, other),
+    };
+    finish(rendered)
+}
+
 /// Put an entity inside a portfolio, or take it out of one.
 ///
 /// Two requests: the entity is read first for its version, so a portfolio that

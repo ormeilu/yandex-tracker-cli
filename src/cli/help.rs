@@ -894,3 +894,46 @@ ytcli queue tags PROJ
 
 Tags are per queue, not organisation-wide, which is why this takes a queue key
 and `field list` does not answer it.";
+
+pub const ENTITY_CREATE: &str = "\
+Create a project, portfolio or goal.
+
+```
+ytcli project create -s \"Storage rework\"
+ytcli portfolio create -s \"Platform\" -d \"everything below the API\"
+ytcli goal create -s \"Cut p99 latency\" --end 2026-12-31
+```
+
+`--summary` is the only one required: everything else an entity has is either
+a reference you would have to look up first or prose that belongs in the web
+interface rather than in shell quoting.
+
+The id is printed, and is what every other entity command takes — issue keys
+never address one of these.";
+
+pub const ENTITY_UPDATE: &str = "\
+Change the fields of a project, portfolio or goal.
+
+```
+ytcli project update 655… -s \"Storage rework, phase two\"
+ytcli portfolio update 655… --lead ilubenets --end 2026-12-31
+```
+
+Two requests: the entity is read first for its version, so a change somebody
+else made in between is refused by Tracker rather than overwritten. Passing no
+field is refused before anything is sent.";
+
+pub const ENTITY_DELETE: &str = "\
+Delete a project, portfolio or goal.
+
+```
+ytcli project delete 655… --yes
+```
+
+`--yes` is required for a single entity, because this is irreversible in kind
+rather than at scale: the grouping does not come back. What it grouped survives
+— a project holds no issues of its own, and deleting one leaves every issue
+where it was.
+
+The confirmation names what is about to go, not just its id, which is why this
+reads the entity before the gate.";

@@ -20,6 +20,26 @@ pub enum GoalCommand {
     /// Show one goal.
     #[command(long_about = crate::cli::help::md(crate::cli::help::GOAL_GET))]
     Get { id: String },
+    /// Create a goal.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ENTITY_CREATE))]
+    Create {
+        #[command(flatten)]
+        fields: entity::Fields,
+    },
+    /// Change the fields of one.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ENTITY_UPDATE))]
+    Update {
+        /// The id `goal list` prints.
+        id: String,
+        #[command(flatten)]
+        fields: entity::Fields,
+    },
+    /// Delete one. Needs --yes, and nothing puts it back.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ENTITY_DELETE))]
+    Delete {
+        /// The id `goal list` prints.
+        id: String,
+    },
 }
 
 pub async fn run(command: &GoalCommand, session: &Session) -> ExitCode {
@@ -28,5 +48,8 @@ pub async fn run(command: &GoalCommand, session: &Session) -> ExitCode {
             entity::list("goal", query.as_deref(), *page, session).await
         }
         GoalCommand::Get { id } => entity::get("goal", id, session).await,
+        GoalCommand::Create { fields } => entity::create("goal", fields, session).await,
+        GoalCommand::Update { id, fields } => entity::update("goal", id, fields, session).await,
+        GoalCommand::Delete { id } => entity::remove("goal", id, session).await,
     }
 }

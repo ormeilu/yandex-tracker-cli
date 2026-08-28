@@ -107,6 +107,10 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
 ## project
   ytcli project list
   ytcli project get ID                  ID comes from project list, not from an issue key
+  ytcli project create -s "name" [-d text] [--lead login] [--start/--end DATE]
+  ytcli project update ID -s "name"     reads the version first; a concurrent change is refused
+  ytcli project delete ID --yes         --yes always: the grouping does not come back.
+                                        Same three verbs on portfolio and goal
 
 ## portfolio
   ytcli portfolio list

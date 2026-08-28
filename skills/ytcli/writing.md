@@ -57,8 +57,17 @@ Two writes reach past issues, and both are rarer than they look:
 
 ```bash
 ytcli project place 655… --into 644…       # or --out
+ytcli project create -s "Storage rework"   # also on portfolio and goal
+ytcli project update 655… --lead ilubenets
+ytcli project delete 655… --yes
 ytcli queue create -k OPS -n Operations --like PROJ --yes
 ```
+
+`update` and `delete` read the entity first: `update` quotes the version it
+read, so a change somebody else made in between is refused rather than
+overwritten, and `delete` names what is about to go. Deleting needs `--yes` for
+one entity — the grouping does not come back, though everything it grouped
+does: a project holds no issues of its own.
 
 `queue create` needs `--yes` even for one queue: a key is claimed once, Tracker
 deletes a queue by hiding it, and the key stays spent. `--like` copies the issue

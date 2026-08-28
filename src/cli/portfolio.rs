@@ -45,6 +45,26 @@ pub enum PortfolioCommand {
         #[arg(long, conflicts_with = "into")]
         out: bool,
     },
+    /// Create a portfolio.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ENTITY_CREATE))]
+    Create {
+        #[command(flatten)]
+        fields: entity::Fields,
+    },
+    /// Change the fields of one.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ENTITY_UPDATE))]
+    Update {
+        /// The id `portfolio list` prints.
+        id: String,
+        #[command(flatten)]
+        fields: entity::Fields,
+    },
+    /// Delete one. Needs --yes, and nothing puts it back.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ENTITY_DELETE))]
+    Delete {
+        /// The id `portfolio list` prints.
+        id: String,
+    },
 }
 
 pub async fn run(command: &PortfolioCommand, session: &Session) -> ExitCode {
@@ -63,5 +83,10 @@ pub async fn run(command: &PortfolioCommand, session: &Session) -> ExitCode {
             }
             entity::place("portfolio", id, into.as_deref(), session).await
         }
+        PortfolioCommand::Create { fields } => entity::create("portfolio", fields, session).await,
+        PortfolioCommand::Update { id, fields } => {
+            entity::update("portfolio", id, fields, session).await
+        }
+        PortfolioCommand::Delete { id } => entity::remove("portfolio", id, session).await,
     }
 }

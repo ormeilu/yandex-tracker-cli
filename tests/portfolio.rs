@@ -7,6 +7,7 @@
 
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
+use predicates::prelude::*;
 use wiremock::matchers::{body_json, method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
@@ -307,4 +308,126 @@ async fn a_stale_version_is_reported_not_retried() {
         .assert()
         .code(5)
         .stderr(predicates::str::contains("try again"));
+}
+
+/// A name is the one thing an entity cannot be created without, and finding
+/// that out from Tracker costs a request to be told the obvious.
+#[tokio::test]
+async fn creating_without_a_name_is_refused_before_the_request() {
+    let harness = Harness::new().await;
+
+    harness
+        .run(&["project", "create"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("needs a name"));
+
+    assert!(harness.server.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn creating_sends_only_the_fields_that_were_given() {
+    let harness = Harness::new().await;
+    Mock::given(method("POST"))
+        .and(path("/v3/entities/project"))
+        .and(body_json(serde_json::json!({
+            "fields": {"summary": "Storage rework", "lead": "ilubenets"}
+        })))
+        .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({
+            "id": "655a1d0c5f1b2c0011223366",
+            "shortId": 12,
+            "entityType": "project",
+            "fields": {"summary": "Storage rework"}
+        })))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&[
+            "project",
+            "create",
+            "-s",
+            "Storage rework",
+            "--lead",
+            "ilubenets",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Storage rework"));
+}
+
+/// The version is read first and quoted, so a change somebody else made in
+/// between is refused by Tracker rather than overwritten.
+#[tokio::test]
+async fn an_update_quotes_the_version_it_read() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v3/entities/project/655a1d0c5f1b2c0011223366"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "id": "655a1d0c5f1b2c0011223366",
+            "shortId": 12,
+            "version": 7,
+            "entityType": "project",
+            "fields": {"summary": "Storage rework"}
+        })))
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("PATCH"))
+        .and(path("/v3/entities/project/655a1d0c5f1b2c0011223366"))
+        .and(query_param("version", "7"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "id": "655a1d0c5f1b2c0011223366",
+            "shortId": 12,
+            "entityType": "project",
+            "fields": {"summary": "Storage rework, phase two"}
+        })))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&[
+            "project",
+            "update",
+            "655a1d0c5f1b2c0011223366",
+            "-s",
+            "Storage rework, phase two",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("phase two"));
+}
+
+#[tokio::test]
+async fn an_update_that_changes_nothing_is_refused() {
+    let harness = Harness::new().await;
+
+    harness
+        .run(&["project", "update", "655a1d0c5f1b2c0011223366"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("nothing to change"));
+}
+
+/// Deleting is irreversible in kind, so it needs `--yes` for one entity, and
+/// the confirmation names what is about to go rather than only its id.
+#[tokio::test]
+async fn deleting_needs_yes_and_names_what_it_would_delete() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v3/entities/project/655a1d0c5f1b2c0011223366"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "id": "655a1d0c5f1b2c0011223366",
+            "shortId": 12,
+            "entityType": "project",
+            "fields": {"summary": "Storage rework"}
+        })))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&["project", "delete", "655a1d0c5f1b2c0011223366"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("delete project `Storage rework`"))
+        .stderr(predicate::str::contains("cannot be undone"));
 }

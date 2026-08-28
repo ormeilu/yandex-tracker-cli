@@ -36,6 +36,26 @@ pub enum ProjectCommand {
         #[arg(long, conflicts_with = "into")]
         out: bool,
     },
+    /// Create a project.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ENTITY_CREATE))]
+    Create {
+        #[command(flatten)]
+        fields: entity::Fields,
+    },
+    /// Change the fields of one.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ENTITY_UPDATE))]
+    Update {
+        /// The id `project list` prints.
+        id: String,
+        #[command(flatten)]
+        fields: entity::Fields,
+    },
+    /// Delete one. Needs --yes, and nothing puts it back.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ENTITY_DELETE))]
+    Delete {
+        /// The id `project list` prints.
+        id: String,
+    },
 }
 
 pub async fn run(command: &ProjectCommand, session: &Session) -> ExitCode {
@@ -53,5 +73,10 @@ pub async fn run(command: &ProjectCommand, session: &Session) -> ExitCode {
             }
             entity::place("project", id, into.as_deref(), session).await
         }
+        ProjectCommand::Create { fields } => entity::create("project", fields, session).await,
+        ProjectCommand::Update { id, fields } => {
+            entity::update("project", id, fields, session).await
+        }
+        ProjectCommand::Delete { id } => entity::remove("project", id, session).await,
     }
 }

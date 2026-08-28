@@ -344,11 +344,17 @@ async fn a_project_can_be_put_in_a_portfolio_and_taken_out() {
     let client = client();
 
     let portfolio = client
-        .create_entity("portfolio", "ytcli live test — deleted by this test")
+        .create_entity(
+            "portfolio",
+            &serde_json::json!({"summary": "ytcli live test — deleted by this test"}),
+        )
         .await
         .expect("create portfolio");
     let project = client
-        .create_entity("project", "ytcli live test — deleted by this test")
+        .create_entity(
+            "project",
+            &serde_json::json!({"summary": "ytcli live test — deleted by this test"}),
+        )
         .await
         .expect("create project");
 
@@ -535,5 +541,47 @@ async fn the_worklog_search_takes_a_login_and_not_me() {
     assert!(
         refused.is_err(),
         "Tracker accepted `me` as a login; the CLI resolves it for nothing"
+    );
+}
+
+/// The full life of an entity: created, changed, read back, deleted.
+///
+/// Safe to run for real because entities can be deleted — the asymmetry that
+/// keeps the issue writes out of this suite — and the test cleans up after
+/// itself even when the assertions in the middle fail.
+#[tokio::test]
+#[ignore = "needs real credentials"]
+async fn a_project_can_be_created_changed_and_deleted() {
+    let client = client();
+    let created = client
+        .create_entity(
+            "project",
+            &serde_json::json!({"summary": "ytcli live test — deleted by this test"}),
+        )
+        .await
+        .expect("create");
+
+    let changed = client
+        .update_entity(
+            "project",
+            &created.id,
+            &serde_json::json!({"summary": "ytcli live test — renamed"}),
+            created.version,
+        )
+        .await;
+
+    let read_back = client.entity("project", &created.id).await;
+
+    client
+        .delete_entity("project", &created.id)
+        .await
+        .expect("delete");
+
+    let changed = changed.expect("update");
+    assert_eq!(changed.summary, "ytcli live test — renamed");
+    assert_eq!(
+        read_back.expect("read back").summary,
+        "ytcli live test — renamed",
+        "the rename did not survive being read through a different endpoint"
     );
 }

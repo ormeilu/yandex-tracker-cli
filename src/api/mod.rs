@@ -861,8 +861,8 @@ impl Client {
     ///
     /// Everything else about an entity is optional, and a command line is not
     /// where a portfolio's description gets written.
-    pub async fn create_entity(&self, kind: &str, summary: &str) -> Result<Entity, ApiError> {
-        let body = serde_json::json!({ "fields": { "summary": summary } });
+    pub async fn create_entity(&self, kind: &str, fields: &Value) -> Result<Entity, ApiError> {
+        let body = serde_json::json!({ "fields": fields });
         let (value, _) = self
             .post_value(
                 &format!("/v3/entities/{kind}?fields={ENTITY_FIELDS}"),
@@ -888,6 +888,37 @@ impl Client {
         )
         .await?;
         Ok(())
+    }
+
+    /// Change the fields of a project, portfolio or goal.
+    ///
+    /// Quotes the version for the same reason [`Self::place_entity`] does: a
+    /// write without one lands on top of whatever happened in between.
+    pub async fn update_entity(
+        &self,
+        kind: &str,
+        id: &str,
+        fields: &Value,
+        version: Option<u64>,
+    ) -> Result<Entity, ApiError> {
+        let path = match version {
+            Some(version) => {
+                format!("/v3/entities/{kind}/{id}?version={version}&fields={ENTITY_FIELDS}")
+            }
+            None => format!("/v3/entities/{kind}/{id}?fields={ENTITY_FIELDS}"),
+        };
+        let body = serde_json::json!({ "fields": fields });
+
+        let (value, _) = self
+            .send_value(
+                reqwest::Method::PATCH,
+                &path,
+                Some(&body),
+                &format!("{kind} {id}"),
+            )
+            .await?;
+
+        parse::entity(&value).ok_or_else(|| ApiError::NotFound(format!("{kind} {id}")))
     }
 
     /// Put an entity inside a portfolio, or take it out of one.
