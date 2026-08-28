@@ -26,7 +26,12 @@ pub enum IssueCommand {
         fields: Vec<String>,
     },
     /// Search for issues.
-    #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_FIND))]
+    ///
+    /// Every other group here lists with `list` — queues, boards, fields,
+    /// templates, projects. An agent that has learnt that spelling reaches for
+    /// `issue list` too, and a "no such subcommand" for a verb the tool already
+    /// uses everywhere else costs a round trip to discover nothing.
+    #[command(visible_alias = "list", long_about = crate::cli::help::md(crate::cli::help::ISSUE_FIND))]
     Find(FindArgs),
     /// Count matching issues without fetching them. The cheapest question here.
     #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_COUNT))]

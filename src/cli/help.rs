@@ -111,6 +111,8 @@ ytcli issue find --yql 'Queue: PROJ AND Updated: >now()-7d'
 ytcli issue find -q PROJ --all --max 500
 ```
 
+`ytcli issue list` is the same command under the name every other group uses.
+
 Run `count` first if you only need to know whether anything matches.
 
 `--yql` is the full Yandex Query Language filter and conflicts with the flag

@@ -83,6 +83,7 @@ allowlist is worth having. For Claude Code, in `.claude/settings.json`:
     "allow": [
       "Bash(ytcli issue get:*)",
       "Bash(ytcli issue find:*)",
+      "Bash(ytcli issue list:*)",
       "Bash(ytcli issue count:*)",
       "Bash(ytcli issue links:*)",
       "Bash(ytcli issue comments:*)",

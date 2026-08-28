@@ -41,7 +41,7 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   ytcli issue get PROJ-1 --fields status,assignee,storyPoints
   ytcli issue links PROJ-1              links with their type
   ytcli issue comments PROJ-1
-  ytcli issue find -q PROJ -a me -s open
+  ytcli issue find -q PROJ -a me -s open  `issue list` is the same command
   ytcli issue find --yql 'Queue: PROJ AND Status: Open'   read-only search language
   ytcli issue count -q PROJ -s open     one number, the cheapest question here
   ytcli issue create -q PROJ -s "title" [-d text] [--assignee login]

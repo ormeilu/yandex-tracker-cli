@@ -8,7 +8,7 @@ generic pass-through verb, so no write can be reached through a read command.
 That property is what makes a static allowlist worth having:
 
 ```
-allow: ytcli issue get:*, ytcli issue find:*, ytcli issue count:*,
+allow: ytcli issue get:*, ytcli issue find:*, ytcli issue list:*, ytcli issue count:*,
        ytcli issue worklogs:*, ytcli issue checklist:*,
        ytcli queue list, ytcli queue get:*, ytcli queue fields:*,
        ytcli board list, ytcli board get:*, ytcli board sprints:*,

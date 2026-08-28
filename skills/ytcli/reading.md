@@ -28,6 +28,9 @@ ytcli issue find --tags QA --limit 50
 ytcli issue find --yql 'Queue: PROJ AND Status: Open AND Updated: >now()-7d'
 ```
 
+`ytcli issue list` is the same command, spelled the way every other group here
+lists. Both are allowlisted; neither can write.
+
 `--yql` is the full Yandex Query Language filter, and it is read-only like every
 other search — there is no write reachable through it.
 

@@ -221,3 +221,23 @@ async fn json_output_is_the_normalised_issue_list() {
     assert_eq!(parsed[0]["key"], "PROJ-1");
     assert_eq!(parsed[1]["status"], "Open");
 }
+
+/// `list` is the verb every other group uses, so `issue list` has to reach the
+/// same search — and reach it identically, not as a second implementation that
+/// can drift.
+#[tokio::test]
+async fn list_is_the_same_command_as_find() {
+    let harness = Harness::new().await;
+    search_returns(&harness, "2").await;
+
+    harness
+        .run(&["issue", "list", "-q", "PROJ", "-a", "me"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("shown"));
+
+    assert_eq!(
+        recorded_query(&harness).await,
+        r#"Queue: "PROJ" AND Assignee: me()"#
+    );
+}

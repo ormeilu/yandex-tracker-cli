@@ -248,7 +248,7 @@ Read verbs — `get`, `find`, `count`, `list`, `status`, `show` — cannot write
 pass-through verb, so an allowlist can be static:
 
 ```
-allow: ytcli issue get:*, ytcli issue find:*, ytcli issue count:*, ytcli auth status
+allow: ytcli issue get:*, ytcli issue find:*, ytcli issue list:*, ytcli issue count:*, ytcli auth status
 ask:   ytcli issue update:*, ytcli issue comment:*, ytcli issue transition:*
 ```
 
