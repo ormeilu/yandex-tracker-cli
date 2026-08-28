@@ -27,7 +27,8 @@ pub const DEFAULT_BASE_URL: &str = "https://api.tracker.yandex.net";
 
 /// Entity fields we ask for. Requesting an explicit set keeps the response small
 /// and its shape predictable; the endpoints return only identity otherwise.
-const ENTITY_FIELDS: &str = "summary,description,entityStatus,start,end,lead,author";
+const ENTITY_FIELDS: &str =
+    "summary,description,entityStatus,start,end,lead,author,parentEntity,entityType";
 
 /// The host part of a URL, for comparing two of them.
 fn host_of(url: &str) -> Option<String> {
@@ -430,6 +431,43 @@ impl Client {
             page,
             per_page,
             total: value.get("hits").and_then(Value::as_u64),
+        })
+    }
+
+    /// What a portfolio contains: the portfolios and projects under it.
+    ///
+    /// Two requests, because the entity endpoints are typed and containment is
+    /// not: a portfolio holds both. The tally sums the two totals, so `shown N
+    /// of M` is the real count even though a page is a page of each.
+    pub async fn entities_in(
+        &self,
+        parent: &str,
+        page: u32,
+        per_page: u32,
+    ) -> Result<Page<Entity>, ApiError> {
+        let mut items = Vec::new();
+        let mut total = 0;
+
+        for kind in ["portfolio", "project"] {
+            let path = format!(
+                "/v3/entities/{kind}/_search?page={page}&perPage={per_page}&fields={ENTITY_FIELDS}"
+            );
+            let body = serde_json::json!({ "filter": { "parentEntity": parent } });
+            let (value, _) = self
+                .post_value(&path, &body, &format!("{kind}s in {parent}"))
+                .await?;
+
+            if let Some(entries) = value.get("values").and_then(Value::as_array) {
+                items.extend(entries.iter().filter_map(parse::entity));
+            }
+            total += value.get("hits").and_then(Value::as_u64).unwrap_or(0);
+        }
+
+        Ok(Page {
+            items,
+            page,
+            per_page,
+            total: Some(total),
         })
     }
 

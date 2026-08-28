@@ -1,0 +1,16 @@
+{
+  "self": "https://api.tracker.yandex.net/v3/entities/goal/655a1d0c5f1b2c0011223388",
+  "id": "655a1d0c5f1b2c0011223388",
+  "version": 1,
+  "shortId": 4,
+  "entityType": "goal",
+  "createdAt": "2026-01-05T09:00:00.000+0000",
+  "fields": {
+    "summary": "Cut checkout drop-off by a fifth",
+    "entityStatus": "in_progress",
+    "start": "2026-01-01",
+    "end": "2026-12-31",
+    "lead": {"id": "1120000000000001", "login": "kim", "display": "Kim Novak"},
+    "parentEntity": null
+  }
+}

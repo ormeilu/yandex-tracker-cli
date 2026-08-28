@@ -230,7 +230,30 @@ pub fn entity(value: &Value) -> Option<Entity> {
         description: field("description")
             .and_then(Value::as_str)
             .map(ToOwned::to_owned),
+        parent: parent_entity(field("parentEntity")),
     })
+}
+
+/// The id out of `parentEntity`, in whichever shape it arrives.
+///
+/// Writes take an object (`{"primary": id, "secondary": [...]}`), and reads have
+/// been seen to answer with the bare id. Both are accepted rather than guessed
+/// at, because an entity whose parent silently reads as absent is worse than one
+/// that costs a few lines here.
+fn parent_entity(value: Option<&Value>) -> Option<String> {
+    match value? {
+        Value::String(id) => Some(id.clone()),
+        Value::Number(id) => Some(id.to_string()),
+        Value::Object(map) => map
+            .get("primary")
+            .or_else(|| map.get("id"))
+            .and_then(|value| match value {
+                Value::String(id) => Some(id.clone()),
+                Value::Number(id) => Some(id.to_string()),
+                _ => None,
+            }),
+        _ => None,
+    }
 }
 
 /// Parse one entry of `GET /v3/issues/{key}/attachments`.

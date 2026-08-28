@@ -85,6 +85,9 @@ pub fn entity(entity: &Entity, ctx: &Context) -> String {
         label("end:"),
         entity.end.as_deref().unwrap_or("-"),
     );
+    if let Some(parent) = entity.parent.as_deref() {
+        let _ = writeln!(out, "{} {}", label("in portfolio:"), parent);
+    }
 
     if let Some(description) = entity.description.as_deref().filter(|d| !d.is_empty()) {
         let (body, withheld) = crate::render::untrusted::head(description, ctx.description_lines);
@@ -97,6 +100,46 @@ pub fn entity(entity: &Entity, ctx: &Context) -> String {
         );
     }
 
+    out
+}
+
+/// What a portfolio contains.
+///
+/// The type column is the point of this listing rather than decoration: a
+/// portfolio holds portfolios as well as projects, and the id alone does not say
+/// which `get` reads it back.
+#[must_use]
+pub fn contents(page: &Page<Entity>, ctx: &Context) -> String {
+    let columns = [
+        Column::whole("SHORT", 8, Palette::key()),
+        Column::new("TYPE", 10, Palette::label()),
+        Column::new("ID", 26, Palette::label()),
+        Column::new("STATUS", 14, anstyle::Style::new()),
+        Column::new("SUMMARY", 40, anstyle::Style::new()),
+    ];
+    let rows: Vec<Vec<String>> = page
+        .items
+        .iter()
+        .map(|entity| {
+            vec![
+                entity
+                    .short_id
+                    .map_or_else(|| "-".to_owned(), |id| id.to_string()),
+                entity.entity_type.as_deref().unwrap_or("-").to_owned(),
+                entity.id.clone(),
+                entity.status.as_deref().unwrap_or("-").to_owned(),
+                entity.summary.clone(),
+            ]
+        })
+        .collect();
+
+    let mut out = render(&columns, &rows, ctx);
+    out.push_str(&tally(
+        page.items.len(),
+        page.total,
+        page.has_more().then_some(page.page + 1),
+        ctx,
+    ));
     out
 }
 

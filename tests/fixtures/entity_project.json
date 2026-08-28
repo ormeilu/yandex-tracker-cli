@@ -1,0 +1,17 @@
+{
+  "self": "https://api.tracker.yandex.net/v3/entities/project/655a1d0c5f1b2c0011223366",
+  "id": "655a1d0c5f1b2c0011223366",
+  "version": 3,
+  "shortId": 10,
+  "entityType": "project",
+  "createdAt": "2026-02-10T09:00:00.000+0000",
+  "fields": {
+    "summary": "Card capture",
+    "entityStatus": "in_progress",
+    "start": "2026-02-10",
+    "end": "2026-04-30",
+    "lead": {"id": "1120000000000001", "login": "kim", "display": "Kim Novak"},
+    "parentEntity": "655a1d0c5f1b2c0011223344",
+    "description": "Take the card details once, keep the token."
+  }
+}

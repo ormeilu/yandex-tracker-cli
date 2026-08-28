@@ -195,6 +195,9 @@ pub struct Entity {
     pub end: Option<String>,
     #[serde(default)]
     pub description: Option<String>,
+    /// The portfolio this sits in, when it sits in one.
+    #[serde(default)]
+    pub parent: Option<String>,
 }
 
 /// One attachment of an issue.

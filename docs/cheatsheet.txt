@@ -1,7 +1,7 @@
 ytcli — Yandex Tracker from the command line. Compact output by default.
 
 ## general
-  ytcli <group> <verb> [args]           groups: auth issue queue project goal attachment
+  ytcli <group> <verb> [args]           groups: auth issue queue project portfolio goal attachment
   -p, --profile NAME                    act as a profile (else YTCLI_PROFILE, .tracker.toml, default)
   -f, --format text|json|json-raw|toon  text is compact and default; json is our stable schema
       --full                            print the whole description, not the first lines
@@ -60,6 +60,12 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
 ## project
   ytcli project list
   ytcli project get ID                  ID comes from project list, not from an issue key
+
+## portfolio
+  ytcli portfolio list
+  ytcli portfolio get ID                `in portfolio:` names the one above it, when there is one
+  ytcli portfolio contents ID           the portfolios and projects inside; TYPE says which
+                                        get reads a row back. Two requests, one tally
 
 ## goal
   ytcli goal list

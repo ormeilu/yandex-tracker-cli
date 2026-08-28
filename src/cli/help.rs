@@ -333,6 +333,32 @@ Show one project.
 
 Takes the long id from `project list`, not an issue key and not the short id.";
 
+pub const PORTFOLIO_LIST: &str = "\
+List portfolios.
+
+  ytcli portfolio list
+
+Same two ids as `project list`. A portfolio holds projects and other portfolios;
+`portfolio contents` says which.";
+
+pub const PORTFOLIO_GET: &str = "\
+Show one portfolio.
+
+  ytcli portfolio get 655…
+
+Takes the long id from `portfolio list`. `in portfolio:` names the portfolio this
+one sits in, when it sits in one. What it holds is a separate request, so it is a
+separate command — `portfolio contents` — rather than a cost you pay every time.";
+
+pub const PORTFOLIO_CONTENTS: &str = "\
+List the portfolios and projects inside a portfolio.
+
+  ytcli portfolio contents 655…
+
+Containment is not typed but the endpoints are, so this asks twice and prints one
+listing with a TYPE column. `shown N of M` counts both; a page is a page of each,
+which only shows on a portfolio with more than a page of both kinds.";
+
 pub const GOAL_LIST: &str = "\
 List goals.
 

@@ -40,6 +40,9 @@ Labels split the work by area: `area:issues`, `area:entities`,
 
 - Worklogs, checklists and link editing, with reads and writes under separate
   command prefixes so an allowlist cannot be stretched from one into the other.
+- Portfolios: listing, reading, and what one contains. Containment is a separate
+  command rather than part of `get`, because it is a second request and nothing
+  should pay for an answer it did not ask for.
 - Image attachments drawn in the terminals that can draw them, and a next step
   printed everywhere else.
 - Documentation that is executed: the README and cheatsheet examples run as

@@ -7,10 +7,11 @@ thousands of context tokens before anything is asked, and then answers with raw
 API payloads. `ytcli` costs nothing until it is called, and answers in about
 fifteen lines.
 
-> **Status: 0.2.0, released.** The whole v1 command tree is built — issues,
-> queues, projects, goals, attachments, reads and writes — and published on
-> crates.io, PyPI and GitHub Releases. What is planned and what was ruled out is
-> in [docs/TODO.md](docs/TODO.md) and the [issues](https://github.com/ormeilu/yandex-tracker-cli/issues).
+> **Status: 0.2.0, released** on PyPI and GitHub Releases; crates.io still
+> carries 0.1.0. The whole v1 command tree is built — issues, queues, projects,
+> portfolios, goals, attachments, reads and writes. What is planned and what was
+> ruled out is in [docs/TODO.md](docs/TODO.md) and the
+> [issues](https://github.com/ormeilu/yandex-tracker-cli/issues).
 
 ## Installing this for somebody else
 
@@ -24,7 +25,7 @@ and say which you used:
 
 ```bash
 uv tool install yandex-tracker-cli          # no Rust toolchain needed
-cargo install yandex-tracker-cli            # with a Rust toolchain
+cargo install yandex-tracker-cli            # with a Rust toolchain; still 0.1.0
 ```
 
 Otherwise take the archive for the platform from

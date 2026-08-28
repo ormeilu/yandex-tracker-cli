@@ -20,7 +20,7 @@
 
 #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 mod harness;
@@ -55,6 +55,64 @@ async fn tracker_answers(harness: &Harness) {
         )
         .mount(&harness.server)
         .await;
+
+    // The entity endpoints are typed and POST for everything, so the searches
+    // are told apart by their body: an unfiltered listing sends `{}`, and
+    // containment sends the parent it is asking about.
+    let parent = serde_json::json!({
+        "filter": {"parentEntity": "655a1d0c5f1b2c0011223344"}
+    });
+    for (kind, listing, contained) in [
+        (
+            "portfolio",
+            "entities_portfolio.json",
+            "entities_in_portfolio.json",
+        ),
+        (
+            "project",
+            "entities_project.json",
+            "projects_in_portfolio.json",
+        ),
+    ] {
+        Mock::given(method("POST"))
+            .and(path(format!("/v3/entities/{kind}/_search")))
+            .and(body_json(parent.clone()))
+            .respond_with(json(contained))
+            .mount(&harness.server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path(format!("/v3/entities/{kind}/_search")))
+            .and(body_json(serde_json::json!({})))
+            .respond_with(json(listing))
+            .mount(&harness.server)
+            .await;
+    }
+    Mock::given(method("POST"))
+        .and(path("/v3/entities/goal/_search"))
+        .respond_with(json("entities_goal.json"))
+        .mount(&harness.server)
+        .await;
+
+    for (route, body) in [
+        (
+            "/v3/entities/portfolio/655a1d0c5f1b2c0011223355",
+            "entity_portfolio.json",
+        ),
+        (
+            "/v3/entities/project/655a1d0c5f1b2c0011223366",
+            "entity_project.json",
+        ),
+        (
+            "/v3/entities/goal/655a1d0c5f1b2c0011223388",
+            "entity_goal.json",
+        ),
+    ] {
+        Mock::given(method("GET"))
+            .and(path(route))
+            .respond_with(json(body))
+            .mount(&harness.server)
+            .await;
+    }
 
     Mock::given(method("POST"))
         .and(path("/v3/issues/_count"))
@@ -107,10 +165,6 @@ const UNRUNNABLE: &[(&str, &str)] = &[
     ),
     ("attachment download", "writes a file"),
     ("attachment upload", "a write"),
-    ("project list", "no recorded entity fixture yet"),
-    ("project get", "no recorded entity fixture yet"),
-    ("goal list", "no recorded entity fixture yet"),
-    ("goal get", "no recorded entity fixture yet"),
 ];
 
 /// Every `ytcli <group> <verb>` in README or the cheatsheet is either exercised

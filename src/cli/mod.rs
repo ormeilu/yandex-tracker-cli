@@ -13,6 +13,7 @@ pub mod goal;
 pub mod guidance;
 pub mod help;
 pub mod issue;
+pub mod portfolio;
 pub mod project;
 pub mod queue;
 pub mod wizard;
@@ -100,6 +101,9 @@ pub enum Command {
     /// Projects.
     #[command(subcommand)]
     Project(project::ProjectCommand),
+    /// Portfolios: projects and portfolios grouped together.
+    #[command(subcommand)]
+    Portfolio(portfolio::PortfolioCommand),
     /// Goals.
     #[command(subcommand)]
     Goal(goal::GoalCommand),

@@ -1,0 +1,17 @@
+{
+  "self": "https://api.tracker.yandex.net/v3/entities/portfolio/655a1d0c5f1b2c0011223355",
+  "id": "655a1d0c5f1b2c0011223355",
+  "version": 2,
+  "shortId": 2,
+  "entityType": "portfolio",
+  "createdAt": "2026-02-03T09:00:00.000+0000",
+  "fields": {
+    "summary": "Payments",
+    "entityStatus": "in_progress",
+    "start": "2026-02-01",
+    "end": "2026-06-30",
+    "lead": {"id": "1120000000000001", "login": "kim", "display": "Kim Novak"},
+    "parentEntity": "655a1d0c5f1b2c0011223344",
+    "description": "Everything that moves money."
+  }
+}

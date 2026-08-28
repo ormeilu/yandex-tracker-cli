@@ -1,0 +1,16 @@
+{
+  "hits": 1,
+  "pages": 1,
+  "values": [
+    {
+      "id": "655a1d0c5f1b2c0011223355",
+      "shortId": 2,
+      "entityType": "portfolio",
+      "fields": {
+        "summary": "Payments",
+        "entityStatus": "in_progress",
+        "parentEntity": "655a1d0c5f1b2c0011223344"
+      }
+    }
+  ]
+}

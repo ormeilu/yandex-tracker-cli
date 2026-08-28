@@ -1,0 +1,32 @@
+{
+  "hits": 2,
+  "pages": 1,
+  "values": [
+    {
+      "self": "https://api.tracker.yandex.net/v3/entities/portfolio/655a1d0c5f1b2c0011223344",
+      "id": "655a1d0c5f1b2c0011223344",
+      "version": 4,
+      "shortId": 1,
+      "entityType": "portfolio",
+      "createdAt": "2026-01-12T09:00:00.000+0000",
+      "fields": {
+        "summary": "Platform",
+        "entityStatus": "in_progress",
+        "parentEntity": null
+      }
+    },
+    {
+      "self": "https://api.tracker.yandex.net/v3/entities/portfolio/655a1d0c5f1b2c0011223355",
+      "id": "655a1d0c5f1b2c0011223355",
+      "version": 2,
+      "shortId": 2,
+      "entityType": "portfolio",
+      "createdAt": "2026-02-03T09:00:00.000+0000",
+      "fields": {
+        "summary": "Payments",
+        "entityStatus": "in_progress",
+        "parentEntity": "655a1d0c5f1b2c0011223344"
+      }
+    }
+  ]
+}
