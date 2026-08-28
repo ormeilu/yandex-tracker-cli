@@ -363,3 +363,100 @@ async fn tags_are_read_whichever_shape_they_arrive_in() {
         assert!(stdout.contains("urgent"), "{stdout}");
     }
 }
+
+/// Three endpoints, one answer. An issue changed by the Tracker robot was
+/// changed by one of these, and nothing in this tool used to say what they are.
+#[tokio::test]
+async fn automation_reports_all_three_kinds() {
+    let harness = Harness::new().await;
+    for (route, body) in [
+        ("/v3/queues/PROJ/macros", "queue_macros.json"),
+        ("/v3/queues/PROJ/autoactions", "queue_autoactions.json"),
+        ("/v3/queues/PROJ/triggers", "queue_triggers.json"),
+    ] {
+        Mock::given(method("GET"))
+            .and(path(route))
+            .respond_with(ResponseTemplate::new(200).set_body_json(fixture(body)))
+            .mount(&harness.server)
+            .await;
+    }
+
+    let output = harness
+        .run(&["queue", "automation", "PROJ"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert!(stdout.contains("Ask for logs"), "{stdout}");
+    // The key a caller could type, not the prefixed id the payload carries.
+    assert!(stdout.contains("tags, component"), "{stdout}");
+    assert!(!stdout.contains("60fa2c1e--"), "{stdout}");
+    // Milliseconds on the wire, seconds in the answer.
+    assert!(stdout.contains("3600s"), "{stdout}");
+    assert!(stdout.contains("Nudge stale issues"), "{stdout}");
+    assert!(stdout.contains("Close on merge"), "{stdout}");
+    assert!(stdout.contains("Transition"), "{stdout}");
+    assert_eq!(
+        stdout.matches("shown 1 of 1 for PROJ").count(),
+        3,
+        "{stdout}"
+    );
+}
+
+/// The case the command is shaped around: triggers need queue-owner rights, so
+/// most callers get two sections and a reason for the third. Two answers out of
+/// three beat a command that fails wholesale.
+#[tokio::test]
+async fn a_section_that_is_refused_says_so_instead_of_counting_zero() {
+    let harness = Harness::new().await;
+    for route in ["/v3/queues/PROJ/macros", "/v3/queues/PROJ/autoactions"] {
+        Mock::given(method("GET"))
+            .and(path(route))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+            .mount(&harness.server)
+            .await;
+    }
+    Mock::given(method("GET"))
+        .and(path("/v3/queues/PROJ/triggers"))
+        .respond_with(ResponseTemplate::new(403).set_body_json(serde_json::json!({"errors": {}})))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness
+        .run(&["queue", "automation", "PROJ"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    // "none" and "you may not see them" are different answers, and a tally
+    // under a refused section would state the wrong one.
+    assert!(stdout.contains("queue owner only"), "{stdout}");
+    assert_eq!(
+        stdout.matches("shown 0 of 0 for PROJ").count(),
+        2,
+        "{stdout}"
+    );
+}
+
+/// All three refused is not a partial answer; it is a queue that is not there
+/// or a token that cannot see it, and it exits like one.
+#[tokio::test]
+async fn a_queue_that_answers_nothing_is_an_error() {
+    let harness = Harness::new().await;
+    for route in [
+        "/v3/queues/NOPE/macros",
+        "/v3/queues/NOPE/autoactions",
+        "/v3/queues/NOPE/triggers",
+    ] {
+        Mock::given(method("GET"))
+            .and(path(route))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&harness.server)
+            .await;
+    }
+
+    harness
+        .run(&["queue", "automation", "NOPE"])
+        .assert()
+        .code(4);
+}

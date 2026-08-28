@@ -183,6 +183,23 @@ shown 3 of 3 (1 custom)
 ```
 
 ```console
+$ ytcli queue automation PROJ
+→ profile=test org=12345 (from YTCLI_PROFILE)
+macros
+3        Ask for logs                   tags, component          yes
+shown 1 of 1 for PROJ
+
+autoactions
+9        Nudge stale issues           on       3600s      Transition
+shown 1 of 1 for PROJ
+
+triggers
+16       Close on merge               off      2          Transition
+shown 1 of 1 for PROJ
+
+```
+
+```console
 $ ytcli field get storyPoints
 → profile=test org=12345 (from YTCLI_PROFILE)
 storyPoints  Story Points

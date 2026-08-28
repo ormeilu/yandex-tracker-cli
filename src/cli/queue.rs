@@ -45,6 +45,12 @@ pub enum QueueCommand {
         /// Queue key, e.g. PROJ.
         key: String,
     },
+    /// Show what changes issues in this queue on its own.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::QUEUE_AUTOMATION))]
+    Automation {
+        /// Queue key, e.g. PROJ.
+        key: String,
+    },
     /// Show a queue's fields, including custom ones and their keys.
     #[command(long_about = crate::cli::help::md(crate::cli::help::QUEUE_FIELDS))]
     Fields {
@@ -108,6 +114,26 @@ pub async fn run(command: &QueueCommand, session: &Session) -> ExitCode {
             Ok(tags) => render(&tags, session, |tags| {
                 queue::tags(key, tags, &session.render)
             }),
+            Err(error) => {
+                let code = error.exit_code();
+                report(&error, code)
+            }
+        },
+        QueueCommand::Automation { key } => match client.queue_automation(key).await {
+            Ok(automation) => {
+                let rendered = match session.render.format {
+                    Format::Text => Ok(queue::automation(key, &automation, &session.render)),
+                    Format::JsonRaw => machine(&automation, Format::Json),
+                    other => machine(&automation, other),
+                };
+                match rendered {
+                    Ok(text) => {
+                        emit(&text);
+                        ExitCode::Success
+                    }
+                    Err(error) => report(&error, ExitCode::Failure),
+                }
+            }
             Err(error) => {
                 let code = error.exit_code();
                 report(&error, code)

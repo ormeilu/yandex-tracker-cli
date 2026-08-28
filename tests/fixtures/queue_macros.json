@@ -1,0 +1,19 @@
+[
+  {
+    "self": "https://api.tracker.yandex.net/v3/queues/PROJ/macros/3",
+    "id": 3,
+    "queue": {"id": "1", "key": "PROJ", "display": "Storage"},
+    "name": "Ask for logs",
+    "body": "Please attach the logs.\n{{currentUser}}",
+    "issueUpdate": [
+      {
+        "field": {"id": "tags", "display": "Теги"},
+        "update": {"add": ["needs-logs"]}
+      },
+      {
+        "field": {"id": "60fa2c1e--component", "display": "Component"},
+        "update": {"set": "storage"}
+      }
+    ]
+  }
+]

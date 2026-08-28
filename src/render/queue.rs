@@ -2,7 +2,7 @@
 
 use std::fmt::Write as _;
 
-use crate::api::{FieldSpec, Queue, QueueField, QueueSettings, Template};
+use crate::api::{Automation, FieldSpec, Queue, QueueField, QueueSettings, Template};
 use crate::render::Context;
 use crate::render::style::Palette;
 use crate::render::table::{Column, render, tally};
@@ -267,6 +267,177 @@ fn counted(queue: &str, count: usize, ctx: &Context) -> String {
             Palette::label()
         )
     )
+}
+
+/// What changes issues in a queue without anybody touching them.
+///
+/// Three sections under their own headings, and the sections Tracker refused
+/// named with its reason. A queue member cannot read triggers, and printing
+/// nothing for them would say "no triggers", which is a different and wrong
+/// answer.
+#[must_use]
+pub fn automation(queue: &str, automation: &Automation, ctx: &Context) -> String {
+    let mut out = String::with_capacity(320);
+    out.push_str(&macros_section(queue, automation, ctx));
+    out.push('\n');
+    out.push_str(&autoactions_section(queue, automation, ctx));
+    out.push('\n');
+    out.push_str(&triggers_section(queue, automation, ctx));
+    out
+}
+
+fn heading(text: &str, ctx: &Context) -> String {
+    format!("{}\n", ctx.painter().paint(text, Palette::heading()))
+}
+
+/// Canned changes somebody applies by hand.
+fn macros_section(queue: &str, automation: &Automation, ctx: &Context) -> String {
+    let rows: Vec<Vec<String>> = automation
+        .macros
+        .iter()
+        .map(|entry| {
+            vec![
+                entry.id.clone(),
+                entry.name.clone(),
+                actions(&entry.updates),
+                // The body is a comment somebody else wrote, so it is counted
+                // rather than printed: this is a listing, and the text belongs
+                // in the interface that runs it.
+                if entry.body.is_some() { "yes" } else { "no" }.to_owned(),
+            ]
+        })
+        .collect();
+
+    let mut out = heading("macros", ctx);
+    out.push_str(&render(
+        &[
+            Column::whole("ID", 8, Palette::key()),
+            Column::new("NAME", 30, anstyle::Style::new()),
+            Column::new("SETS", 24, anstyle::Style::new()),
+            Column::whole("COMMENTS", 8, Palette::label()),
+        ],
+        &rows,
+        ctx,
+    ));
+    out.push_str(&closing(queue, "macros", rows.len(), automation, ctx));
+    out
+}
+
+/// Changes Tracker applies on a schedule to whatever matches a filter.
+fn autoactions_section(queue: &str, automation: &Automation, ctx: &Context) -> String {
+    let rows: Vec<Vec<String>> = automation
+        .autoactions
+        .iter()
+        .map(|entry| {
+            vec![
+                entry.id.clone(),
+                entry.name.clone(),
+                active(entry.active).to_owned(),
+                entry
+                    .interval
+                    .map_or_else(|| "-".to_owned(), |seconds| format!("{seconds}s")),
+                actions(&entry.actions),
+            ]
+        })
+        .collect();
+
+    let mut out = heading("autoactions", ctx);
+    out.push_str(&render(
+        &[
+            Column::whole("ID", 8, Palette::key()),
+            Column::new("NAME", 28, anstyle::Style::new()),
+            Column::by_value("ACTIVE", 8, state_colour),
+            Column::whole("EVERY", 10, anstyle::Style::new()),
+            Column::new("DOES", 22, anstyle::Style::new()),
+        ],
+        &rows,
+        ctx,
+    ));
+    out.push_str(&closing(queue, "autoactions", rows.len(), automation, ctx));
+    out
+}
+
+/// Changes Tracker applies the moment something happens to an issue.
+fn triggers_section(queue: &str, automation: &Automation, ctx: &Context) -> String {
+    let rows: Vec<Vec<String>> = automation
+        .triggers
+        .iter()
+        .map(|entry| {
+            vec![
+                entry.id.clone(),
+                entry.name.clone(),
+                active(entry.active).to_owned(),
+                entry.conditions.to_string(),
+                actions(&entry.actions),
+            ]
+        })
+        .collect();
+
+    let mut out = heading("triggers", ctx);
+    out.push_str(&render(
+        &[
+            Column::whole("ID", 8, Palette::key()),
+            Column::new("NAME", 28, anstyle::Style::new()),
+            Column::by_value("ACTIVE", 8, state_colour),
+            Column::whole("WHEN", 10, Palette::label()),
+            Column::new("DOES", 22, anstyle::Style::new()),
+        ],
+        &rows,
+        ctx,
+    ));
+    out.push_str(&closing(queue, "triggers", rows.len(), automation, ctx));
+    out
+}
+
+/// The last line of a section: a tally, or why there is nothing to tally.
+///
+/// A refused section must not end with `shown 0 of 0`. That reads as "there are
+/// none", which is a different answer from "you may not see them" and the one
+/// mistake this command exists to avoid.
+fn closing(
+    queue: &str,
+    section: &str,
+    count: usize,
+    automation: &Automation,
+    ctx: &Context,
+) -> String {
+    match automation
+        .unreadable
+        .iter()
+        .find(|refusal| refusal.section == section)
+    {
+        Some(refusal) => {
+            let paint = ctx.painter();
+            format!(
+                "{}\n",
+                paint.paint(
+                    &format!("not readable — {}", refusal.reason),
+                    Palette::warn()
+                )
+            )
+        }
+        None => counted(queue, count, ctx),
+    }
+}
+
+fn active(flag: bool) -> &'static str {
+    if flag { "on" } else { "off" }
+}
+
+fn state_colour(state: &str) -> anstyle::Style {
+    if state == "on" {
+        Palette::ok()
+    } else {
+        Palette::label()
+    }
+}
+
+fn actions(actions: &[String]) -> String {
+    if actions.is_empty() {
+        "-".to_owned()
+    } else {
+        actions.join(", ")
+    }
 }
 
 /// One queue and the defaults an issue created in it starts with.

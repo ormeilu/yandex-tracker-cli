@@ -540,6 +540,36 @@ async fn remote_links_answer_with_a_list() {
         .expect("remote links");
 }
 
+/// Automation, including the part most tokens may not read.
+///
+/// The 403 on triggers is the reason this command is shaped the way it is, and
+/// it is a live fact rather than one a fixture can assert: whether a queue is
+/// readable at all and whether its triggers are are two different rights, and
+/// this organisation answers differently for two of its own queues.
+#[tokio::test]
+#[ignore = "needs real credentials"]
+async fn automation_survives_a_section_it_may_not_read() {
+    let client = client();
+    let queue = a_queue(&client).await;
+
+    let automation = client
+        .queue_automation(&queue)
+        .await
+        .unwrap_or_else(|error| panic!("automation of {queue}: {error}"));
+
+    for refusal in &automation.unreadable {
+        assert!(
+            !refusal.reason.is_empty(),
+            "{} was refused with no reason",
+            refusal.section
+        );
+    }
+    assert!(
+        automation.unreadable.len() < 3,
+        "every section refused should have been an error, not an answer"
+    );
+}
+
 /// The directory pages, and reports how many people it has.
 #[tokio::test]
 #[ignore = "needs real credentials"]

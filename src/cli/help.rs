@@ -920,6 +920,26 @@ hours, a week is five days, and neither is turned into the other here.
 There is no total to page against, so a result that fills `--limit` says so on
 stderr rather than looking like the whole answer.";
 
+pub const QUEUE_AUTOMATION: &str = "\
+Show what changes issues in this queue without anybody touching them.
+
+```
+ytcli queue automation PROJ
+```
+
+Three sections. **Macros** are canned changes somebody applies by hand;
+**autoactions** run on a schedule against whatever matches a filter;
+**triggers** fire the moment something happens to an issue. An issue whose
+changelog says it was updated by the Tracker robot was changed by one of these.
+
+Triggers need queue-owner rights. Anybody else gets the other two sections and
+Tracker's own words about the third, because two answers out of three beat a
+command that fails wholesale. All three refused is a different thing — the queue
+is not there, or the token cannot see it — and is reported as the error it is.
+
+Read-only. Creating any of the three is an admin interface configured once, not
+a command line.";
+
 pub const QUEUE_VERSIONS: &str = "\
 List the versions a queue defines.
 

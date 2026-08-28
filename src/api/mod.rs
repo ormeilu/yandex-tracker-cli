@@ -779,6 +779,76 @@ impl Client {
             .unwrap_or_default())
     }
 
+    /// Everything that changes issues in a queue on its own.
+    ///
+    /// Three requests, and a refusal of one of them is an answer rather than a
+    /// failure: triggers need queue-owner rights, so a member of the queue gets
+    /// two sections and Tracker's own words about the third. All three failing
+    /// is a different thing — a queue that is not there, or a token that is not
+    /// allowed — and is reported as the error it is.
+    pub async fn queue_automation(&self, key: &str) -> Result<Automation, ApiError> {
+        let mut unreadable = Vec::new();
+        let mut refused = None;
+
+        let mut section = |name: &'static str, result: Result<Value, ApiError>| match result {
+            Ok(value) => value.as_array().cloned().unwrap_or_default(),
+            Err(error) => {
+                unreadable.push(Unreadable {
+                    // Tracker answers a 403 here with the queue owner's record
+                    // and no message at all, so there are no words of its own
+                    // to pass through. Saying which right is missing is the
+                    // useful sentence, and our generic 403 — which also blames
+                    // the organisation header — is not it.
+                    section: name,
+                    reason: match error {
+                        ApiError::Forbidden => {
+                            format!("{name} are readable by the queue owner only (403)")
+                        }
+                        ref other => other.to_string(),
+                    },
+                });
+                refused.get_or_insert(error);
+                Vec::new()
+            }
+        };
+
+        let macros = section(
+            "macros",
+            self.get_value(
+                &format!("/v3/queues/{key}/macros"),
+                &format!("macros of queue {key}"),
+            )
+            .await,
+        );
+        let autoactions = section(
+            "autoactions",
+            self.get_value(
+                &format!("/v3/queues/{key}/autoactions"),
+                &format!("autoactions of queue {key}"),
+            )
+            .await,
+        );
+        let triggers = section(
+            "triggers",
+            self.get_value(
+                &format!("/v3/queues/{key}/triggers"),
+                &format!("triggers of queue {key}"),
+            )
+            .await,
+        );
+
+        if unreadable.len() == 3 {
+            return Err(refused.unwrap_or(ApiError::NotFound(format!("queue {key}"))));
+        }
+
+        Ok(Automation {
+            macros: macros.iter().filter_map(Macro::parse).collect(),
+            autoactions: autoactions.iter().filter_map(AutoAction::parse).collect(),
+            triggers: triggers.iter().filter_map(Trigger::parse).collect(),
+            unreadable,
+        })
+    }
+
     /// One of the four organisation-wide dictionaries.
     ///
     /// Small and unpaged — the largest of the four is statuses, in the dozens —
@@ -1602,6 +1672,166 @@ impl QueueField {
                 .unwrap_or("unknown")
                 .to_owned(),
             system: !id.contains("--"),
+        })
+    }
+}
+
+/// What changes issues in a queue without anybody touching them.
+///
+/// One answer assembled from three endpoints, because they are three halves of
+/// one question: an issue whose changelog says it was updated by the Tracker
+/// robot was changed by one of these.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Automation {
+    pub macros: Vec<Macro>,
+    pub autoactions: Vec<AutoAction>,
+    pub triggers: Vec<Trigger>,
+    /// The parts Tracker would not show, in its own words.
+    ///
+    /// Triggers need queue-owner rights and answer 403 to everybody else. Two
+    /// sections out of three is a useful answer, and failing the whole command
+    /// because of the third would throw them away.
+    pub unreadable: Vec<Unreadable>,
+}
+
+/// One section that could not be read, and why.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Unreadable {
+    pub section: &'static str,
+    pub reason: String,
+}
+
+/// A canned change somebody applies by hand from the issue page.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Macro {
+    pub id: String,
+    pub name: String,
+    /// The comment it posts, when it posts one.
+    pub body: Option<String>,
+    /// Which fields it writes. The keys, not the localised names, because the
+    /// keys are what every other command here takes.
+    pub updates: Vec<String>,
+}
+
+/// A change Tracker applies on a schedule to whatever matches a filter.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct AutoAction {
+    pub id: String,
+    pub name: String,
+    pub active: bool,
+    /// The kinds of action it performs — `Transition`, `Update`, and the rest.
+    pub actions: Vec<String>,
+    /// How often it runs, in seconds.
+    pub interval: Option<u64>,
+}
+
+/// A change Tracker applies the moment something happens to an issue.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Trigger {
+    pub id: String,
+    pub name: String,
+    pub active: bool,
+    pub actions: Vec<String>,
+    /// How many conditions have to hold. The conditions themselves are a tree
+    /// of Tracker's own classes, and printing it would be longer than it is
+    /// useful.
+    pub conditions: usize,
+}
+
+/// The `id` of anything under a queue, whether Tracker sent it as a number or a
+/// string.
+fn id_of(value: &Value) -> Option<String> {
+    Some(match value.get("id")? {
+        Value::String(id) => id.clone(),
+        other => other.to_string(),
+    })
+}
+
+/// The `type` of each entry of an array, which is how Tracker names an action.
+fn types_in(value: Option<&Value>) -> Vec<String> {
+    value
+        .and_then(Value::as_array)
+        .map(|entries| {
+            entries
+                .iter()
+                .filter_map(|entry| entry.get("type").and_then(Value::as_str))
+                .map(ToOwned::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn named(value: &Value) -> String {
+    value
+        .get("name")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned()
+}
+
+impl Macro {
+    fn parse(value: &Value) -> Option<Self> {
+        Some(Self {
+            id: id_of(value)?,
+            name: named(value),
+            body: value
+                .get("body")
+                .and_then(Value::as_str)
+                .filter(|text| !text.is_empty())
+                .map(ToOwned::to_owned),
+            updates: value
+                .get("issueUpdate")
+                .and_then(Value::as_array)
+                .map(|updates| {
+                    updates
+                        .iter()
+                        .filter_map(|update| {
+                            update
+                                .get("field")
+                                .and_then(|field| field.get("id"))
+                                .and_then(Value::as_str)
+                        })
+                        .map(|id| id.rsplit("--").next().unwrap_or(id).to_owned())
+                        .collect()
+                })
+                .unwrap_or_default(),
+        })
+    }
+}
+
+impl AutoAction {
+    fn parse(value: &Value) -> Option<Self> {
+        Some(Self {
+            id: id_of(value)?,
+            name: named(value),
+            active: value
+                .get("active")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            actions: types_in(value.get("actions")),
+            // Milliseconds on the wire; seconds is what a person says out loud.
+            interval: value
+                .get("intervalMillis")
+                .and_then(Value::as_u64)
+                .map(|millis| millis / 1000),
+        })
+    }
+}
+
+impl Trigger {
+    fn parse(value: &Value) -> Option<Self> {
+        Some(Self {
+            id: id_of(value)?,
+            name: named(value),
+            active: value
+                .get("active")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            actions: types_in(value.get("actions")),
+            conditions: value
+                .get("conditions")
+                .and_then(Value::as_array)
+                .map_or(0, Vec::len),
         })
     }
 }

@@ -1,0 +1,19 @@
+[
+  {
+    "id": 9,
+    "self": "https://api.tracker.yandex.net/v3/queues/PROJ/autoactions/9",
+    "queue": {"id": "1", "key": "PROJ", "display": "Storage"},
+    "name": "Nudge stale issues",
+    "version": 1,
+    "active": true,
+    "created": "2026-01-21T17:10:22.993+0000",
+    "updated": "2026-01-21T17:10:22.993+0000",
+    "filter": {"priority": ["critical"]},
+    "actions": [
+      {"type": "Transition", "id": 1, "status": {"key": "needInfo"}}
+    ],
+    "enableNotifications": false,
+    "totalIssuesProcessed": 0,
+    "intervalMillis": 3600000
+  }
+]

@@ -12,7 +12,7 @@ allow: ytcli issue get:*, ytcli issue find:*, ytcli issue list:*, ytcli issue co
        ytcli issue worklogs:*, ytcli issue checklist:*, ytcli issue changelog:*,
        ytcli issue links:*, ytcli issue remotelinks:*,
        ytcli queue list, ytcli queue get:*, ytcli queue fields:*,
-       ytcli queue versions:*, ytcli queue tags:*,
+       ytcli queue versions:*, ytcli queue tags:*, ytcli queue automation:*,
        ytcli board list, ytcli board get:*, ytcli board sprints:*,
        ytcli field list, ytcli field get:*, ytcli template list:*,
        ytcli dict list:*, ytcli user list:*, ytcli user get:*, ytcli user find:*,
