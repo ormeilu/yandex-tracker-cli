@@ -18,8 +18,8 @@ use serde_json::Value;
 
 use crate::api::error::ApiError;
 use crate::api::models::{
-    Attachment, Change, ChecklistItem, Comment, DictEntry, Entity, Issue, Link, Page, Person, User,
-    Worklog,
+    Attachment, Change, ChecklistItem, Comment, DictEntry, Entity, Issue, Link, Page, Person,
+    RemoteLink, User, Worklog,
 };
 use crate::config::OrgKind;
 
@@ -157,6 +157,25 @@ impl Client {
         Ok(raw
             .as_array()
             .map(|entries| entries.iter().filter_map(parse::link).collect())
+            .unwrap_or_default())
+    }
+
+    /// `GET /v3/issues/{key}/remotelinks` — the links that leave Tracker.
+    ///
+    /// Its own request rather than a second section of [`Self::issue_links`]:
+    /// most issues have none, and making every `issue links` pay for a request
+    /// that usually answers `[]` is the wrong trade.
+    pub async fn issue_remote_links(&self, key: &str) -> Result<Vec<RemoteLink>, ApiError> {
+        let raw = self
+            .get_value(
+                &format!("/v3/issues/{key}/remotelinks"),
+                &format!("remote links of {key}"),
+            )
+            .await?;
+
+        Ok(raw
+            .as_array()
+            .map(|entries| entries.iter().filter_map(parse::remote_link).collect())
             .unwrap_or_default())
     }
 

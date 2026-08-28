@@ -10,7 +10,7 @@ use serde_json::{Map, Value};
 
 use crate::api::models::{
     Attachment, Change, ChecklistItem, Comment, DictEntry, Entity, FieldChange, Issue, Link,
-    LinkKind, Person, User, Worklog,
+    LinkKind, Person, RemoteLink, User, Worklog,
 };
 
 /// System fields we map explicitly. Anything outside this set is treated as a
@@ -199,6 +199,42 @@ pub fn link(value: &Value) -> Option<Link> {
         key: object.get("key").and_then(Value::as_str)?.to_owned(),
         summary: label(object.get("display")),
         status: label(object.get("status")),
+    })
+}
+
+/// One link out of Tracker.
+///
+/// Everything but the id is optional on purpose: the object at the far end is
+/// described by an application we know nothing about, and a link whose payload
+/// is thinner than the documented shape is still a link worth printing.
+#[must_use]
+pub fn remote_link(value: &Value) -> Option<RemoteLink> {
+    let object = value.get("object");
+    let inward = value.get("direction").and_then(Value::as_str) == Some("inward");
+
+    Some(RemoteLink {
+        id: match value.get("id")? {
+            Value::String(id) => id.clone(),
+            other => other.to_string(),
+        },
+        relation: value
+            .get("type")
+            .and_then(|kind| {
+                kind.get(if inward { "inward" } else { "outward" })
+                    .or_else(|| kind.get("id"))
+            })
+            .and_then(Value::as_str)
+            .map(str::to_lowercase),
+        application: object
+            .and_then(|object| object.get("application"))
+            .and_then(|app| app.get("name").or_else(|| app.get("id")))
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned),
+        key: object
+            .and_then(|object| object.get("key"))
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned),
+        title: label(object.and_then(|object| object.get("display"))),
     })
 }
 

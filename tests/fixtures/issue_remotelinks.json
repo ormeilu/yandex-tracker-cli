@@ -1,0 +1,39 @@
+[
+  {
+    "self": "https://api.tracker.yandex.net/v3/issues/PROJ-1/remotelinks/51001",
+    "id": 51001,
+    "type": {
+      "self": "https://api.tracker.yandex.net/v3/linktypes/relates",
+      "id": "relates",
+      "inward": "Связана",
+      "outward": "Связана"
+    },
+    "direction": "outward",
+    "object": {
+      "self": "https://api.tracker.yandex.net/v3/applications/ru.yandex.bitbucket/objects/13570010",
+      "id": "13570010",
+      "key": "INFRA-17",
+      "display": "Storage migration runbook",
+      "application": {
+        "self": "https://api.tracker.yandex.net/v3/applications/25811000",
+        "id": "25811000",
+        "type": "app",
+        "name": "wiki"
+      }
+    },
+    "createdBy": {"id": "1", "display": "Ilya Lubenets"},
+    "createdAt": "2026-08-01T10:00:00.000+0000",
+    "updatedAt": "2026-08-01T10:00:00.000+0000"
+  },
+  {
+    "self": "https://api.tracker.yandex.net/v3/issues/PROJ-1/remotelinks/51002",
+    "id": 51002,
+    "type": {"id": "depends", "inward": "Зависит от", "outward": "Блокирует"},
+    "direction": "inward",
+    "object": {
+      "id": "88",
+      "key": "OPS-4",
+      "application": {"id": "ru.yandex.other", "type": "app"}
+    }
+  }
+]

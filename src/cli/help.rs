@@ -161,6 +161,24 @@ does not change with the language your organisation uses.
 
 `issue get` already prints these. Use this when you want only them.";
 
+pub const ISSUE_REMOTELINKS: &str = "\
+Show the links from an issue to things outside Tracker.
+
+```
+ytcli issue remotelinks PROJ-1
+```
+
+`issue links` shows how an issue relates to other issues. This shows what it is
+attached to elsewhere — a wiki page, a repository, another tracker — which was
+invisible before, and invisible is indistinguishable from absent.
+
+A separate request from `issue links`, and so a separate command: most issues
+have none, and making every `issue links` pay for a request that usually answers
+with nothing would be the wrong trade.
+
+Titles come from the other application and are fenced as untrusted for the same
+reason comments are.";
+
 pub const ISSUE_CHANGELOG: &str = "\
 Show what changed on an issue, and who changed it.
 

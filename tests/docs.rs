@@ -35,6 +35,7 @@ async fn tracker_answers(harness: &Harness) {
         ("/v3/issues/PROJ-1/links", "issue_links.json"),
         ("/v3/issues/PROJ-1/comments", "issue_comments.json"),
         ("/v3/issues/PROJ-1/changelog", "changelog.json"),
+        ("/v3/issues/PROJ-1/remotelinks", "issue_remotelinks.json"),
         ("/v3/queues", "queues.json"),
         ("/v3/queues/PROJ", "queue.json"),
         ("/v3/queues/PROJ/fields", "queue_fields.json"),

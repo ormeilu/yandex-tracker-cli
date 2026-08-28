@@ -516,6 +516,30 @@ async fn a_field_says_what_it_accepts() {
     );
 }
 
+/// The links that leave Tracker still answer with a list.
+///
+/// The organisation this runs against has none, so what is under test is the
+/// endpoint and the envelope, not the parsing — and saying so here is cheaper
+/// than somebody later reading an empty pass as proof of more than it is.
+#[tokio::test]
+#[ignore = "needs real credentials"]
+async fn remote_links_answer_with_a_list() {
+    let client = client();
+    let queue = a_queue(&client).await;
+    let page = client
+        .search(&format!("Queue: {queue}"), 1, 1)
+        .await
+        .expect("search");
+    let Some(issue) = page.items.first() else {
+        return;
+    };
+
+    client
+        .issue_remote_links(&issue.key)
+        .await
+        .expect("remote links");
+}
+
 /// The directory pages, and reports how many people it has.
 #[tokio::test]
 #[ignore = "needs real credentials"]

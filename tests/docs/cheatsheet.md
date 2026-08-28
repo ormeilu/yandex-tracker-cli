@@ -259,6 +259,15 @@ shown 1 of 4
 ```
 
 ```console
+$ ytcli issue remotelinks PROJ-1
+→ profile=test org=12345 (from YTCLI_PROFILE)
+связана          wiki                 INFRA-17         Storage migration runbook
+зависит от       ru.yandex.other      OPS-4            -
+shown 2 of 2 for PROJ-1
+
+```
+
+```console
 $ ytcli issue changelog PROJ-1
 → profile=test org=12345 (from YTCLI_PROFILE)
 2026-08-25T03:54 ilubenets        status           -                    Открыт

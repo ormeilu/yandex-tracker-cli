@@ -40,6 +40,9 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
                                         in which case the bare form is refused, not guessed
   ytcli issue get PROJ-1 --fields status,assignee,storyPoints
   ytcli issue links PROJ-1              links with their type
+  ytcli issue remotelinks PROJ-1        links to things outside Tracker: wiki, repos,
+                                        other trackers. A separate request, so a
+                                        separate command
   ytcli issue comments PROJ-1
   ytcli issue changelog PROJ-1 [--limit 200]   who changed what, one line per field
   ytcli issue find -q PROJ -a me -s open  `issue list` is the same command

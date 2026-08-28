@@ -178,3 +178,52 @@ async fn an_issue_that_never_changed_is_not_an_error() {
         .success()
         .stdout(predicate::str::contains("shown 0 of 0"));
 }
+
+/// The links that leave Tracker. Everything but the id is optional in the
+/// payload, and a link described more thinly than the documented shape is still
+/// a link worth printing rather than a row to drop.
+#[tokio::test]
+async fn remote_links_name_the_application_at_the_other_end() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v3/issues/PROJ-1/remotelinks"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("issue_remotelinks.json")))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness
+        .run(&["issue", "remotelinks", "PROJ-1"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert!(stdout.contains("wiki"), "{stdout}");
+    assert!(stdout.contains("INFRA-17"), "{stdout}");
+    assert!(stdout.contains("Storage migration runbook"), "{stdout}");
+    // The direction decides which half of the type is our side of it.
+    assert!(stdout.contains("зависит от"), "{stdout}");
+    // No name, no title: the row survives on its key and its application id.
+    assert!(stdout.contains("OPS-4"), "{stdout}");
+    assert!(stdout.contains("ru.yandex.other"), "{stdout}");
+    assert!(stdout.ends_with("shown 2 of 2 for PROJ-1\n"), "{stdout}");
+}
+
+/// An issue with no external links is the ordinary case, and the tally is what
+/// tells it apart from a command that printed nothing by mistake.
+#[tokio::test]
+async fn no_remote_links_still_ends_with_a_tally() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v3/issues/PROJ-1/remotelinks"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness
+        .run(&["issue", "remotelinks", "PROJ-1"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert_eq!(stdout, "shown 0 of 0 for PROJ-1\n");
+}

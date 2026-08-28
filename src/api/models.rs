@@ -119,6 +119,30 @@ pub struct Link {
     pub status: Option<String>,
 }
 
+/// One edge from an issue to something outside Tracker.
+///
+/// Distinct from [`Link`], which joins two issues in the same organisation.
+/// These point at wiki pages, repositories, other trackers — whatever the
+/// organisation connected — and until now their absence from the output was
+/// indistinguishable from there being none.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoteLink {
+    pub id: String,
+    /// Tracker's own wording for our side of the relationship, in whatever
+    /// language it answered in.
+    #[serde(default)]
+    pub relation: Option<String>,
+    /// Which application holds the other end.
+    #[serde(default)]
+    pub application: Option<String>,
+    /// The other end's own key, in that application's numbering rather than
+    /// Tracker's.
+    #[serde(default)]
+    pub key: Option<String>,
+    #[serde(default)]
+    pub title: Option<String>,
+}
+
 /// An issue, normalised.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Issue {

@@ -39,6 +39,9 @@ pub enum IssueCommand {
     /// Show the links of an issue.
     #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_LINKS))]
     Links { key: String },
+    /// Show the links from an issue to things outside Tracker.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_REMOTELINKS))]
+    Remotelinks { key: String },
     /// Show what changed on an issue, and who changed it.
     #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_CHANGELOG))]
     Changelog {
@@ -279,6 +282,7 @@ pub async fn run(command: &IssueCommand, session: &Session) -> ExitCode {
         IssueCommand::Find(args) => find(args, session).await,
         IssueCommand::Count(args) => count(args, session).await,
         IssueCommand::Links { key } => links(key, session).await,
+        IssueCommand::Remotelinks { key } => remote_links(key, session).await,
         IssueCommand::Comments { key } => comments(key, session).await,
         IssueCommand::Changelog { key, limit } => changelog(key, *limit, session).await,
         IssueCommand::Move {
@@ -1161,6 +1165,29 @@ async fn links(target: &str, session: &Session) -> ExitCode {
         Ok(links) => {
             let rendered = match session.render.format {
                 Format::Text => Ok(text::links(key, &links)),
+                Format::JsonRaw => machine(&links, Format::Json),
+                other => machine(&links, other),
+            };
+            finish(rendered)
+        }
+        Err(error) => {
+            let code = error.exit_code();
+            report(&error, code)
+        }
+    }
+}
+
+async fn remote_links(target: &str, session: &Session) -> ExitCode {
+    let (client, key) = match session.client_for(target).await {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let key = key.as_str();
+
+    match client.issue_remote_links(key).await {
+        Ok(links) => {
+            let rendered = match session.render.format {
+                Format::Text => Ok(text::remote_links(key, &links, &session.render)),
                 Format::JsonRaw => machine(&links, Format::Json),
                 other => machine(&links, other),
             };

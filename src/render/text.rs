@@ -7,7 +7,9 @@
 
 use std::fmt::Write as _;
 
-use crate::api::models::{Change, ChecklistItem, Comment, Issue, Link, Page, User, Worklog};
+use crate::api::models::{
+    Change, ChecklistItem, Comment, Issue, Link, Page, RemoteLink, User, Worklog,
+};
 use crate::render::style::Palette;
 use crate::render::table::Column;
 use crate::render::{Context, untrusted};
@@ -99,6 +101,47 @@ pub fn links(key: &str, links: &[Link]) -> String {
     }
 
     let _ = writeln!(out, "shown {} of {} for {key}", links.len(), links.len());
+    out
+}
+
+/// Render the links that leave Tracker.
+///
+/// A table rather than the one-line shape `links` uses: an issue link is
+/// identified by a key the reader already understands, and one of these is
+/// identified by an application they may not, so the application needs a column
+/// of its own rather than a parenthesis.
+#[must_use]
+pub fn remote_links(key: &str, links: &[RemoteLink], ctx: &Context) -> String {
+    let columns = [
+        Column::new("RELATION", 16, Palette::label()),
+        Column::new("APPLICATION", 20, anstyle::Style::new()),
+        Column::whole("KEY", 16, Palette::key()),
+        // Written elsewhere, by somebody outside this organisation's Tracker.
+        Column::new("TITLE", 32, Palette::untrusted()),
+    ];
+
+    let rows: Vec<Vec<String>> = links
+        .iter()
+        .map(|link| {
+            vec![
+                link.relation.clone().unwrap_or_else(|| "-".to_owned()),
+                link.application.clone().unwrap_or_else(|| "-".to_owned()),
+                link.key.clone().unwrap_or_else(|| "-".to_owned()),
+                link.title.clone().unwrap_or_else(|| "-".to_owned()),
+            ]
+        })
+        .collect();
+
+    let mut out = crate::render::table::render(&columns, &rows, ctx);
+    let paint = ctx.painter();
+    let _ = writeln!(
+        out,
+        "{}",
+        paint.paint(
+            &format!("shown {} of {} for {key}", links.len(), links.len()),
+            Palette::label()
+        )
+    );
     out
 }
 
