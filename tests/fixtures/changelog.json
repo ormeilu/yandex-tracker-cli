@@ -1,0 +1,25 @@
+[
+  {
+    "id": "6a8d11ec562fe96fb7597d2c",
+    "issue": {"id": "6a8d11ec562fe96fb7597d28", "key": "PROJ-1", "display": "Attachments are lost on move"},
+    "updatedAt": "2026-08-25T03:54:20.539+0000",
+    "updatedBy": {"id": "8000000000000035", "login": "ilubenets", "display": "Ilya Lubenets"},
+    "type": "IssueCreated",
+    "transport": "front",
+    "fields": [
+      {"field": {"id": "status", "display": "Статус"}, "from": null,
+       "to": {"id": "1", "key": "open", "display": "Открыт"}}
+    ]
+  },
+  {
+    "id": "6a8d11ec562fe96fb7597d30",
+    "issue": {"id": "6a8d11ec562fe96fb7597d28", "key": "PROJ-1", "display": "Attachments are lost on move"},
+    "updatedAt": "2026-08-26T11:40:00.000+0000",
+    "updatedBy": {"id": "8000000000000036", "login": "reporter", "display": "A Reporter"},
+    "type": "IssueUpdated",
+    "fields": [
+      {"field": {"id": "60fa2c1e--storyPoints", "display": "Story points"}, "from": null, "to": 3},
+      {"field": {"id": "boards", "display": "Доски"}, "from": [{"id": 1}, {"id": 2}], "to": [{"id": 1}]}
+    ]
+  }
+]

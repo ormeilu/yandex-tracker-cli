@@ -151,6 +151,23 @@ does not change with the language your organisation uses.
 
 `issue get` already prints these. Use this when you want only them.";
 
+pub const ISSUE_CHANGELOG: &str = "\
+Show what changed on an issue, and who changed it.
+
+```
+ytcli issue changelog PROJ-1
+ytcli issue changelog PROJ-1 --limit 200
+```
+
+One line per **field**, not per event: an edit that touched three fields is
+three lines, each readable on its own. `WHEN` is minutes — two changes in the
+same minute are ordered, never told apart by that column.
+
+This is the answer to `why is this field like that`, and the only one there is:
+a value alone says nothing about who chose it or when.
+
+The last line counts both, as `shown N of M — K events`.";
+
 pub const ISSUE_COMMENTS: &str = "\
 Show the comments of an issue.
 

@@ -39,6 +39,14 @@ pub enum IssueCommand {
     /// Show the links of an issue.
     #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_LINKS))]
     Links { key: String },
+    /// Show what changed on an issue, and who changed it.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_CHANGELOG))]
+    Changelog {
+        key: String,
+        /// How many recorded events to fetch.
+        #[arg(long, default_value_t = 50)]
+        limit: u32,
+    },
     /// Show the comments of an issue.
     #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_COMMENTS))]
     Comments { key: String },
@@ -210,6 +218,7 @@ pub async fn run(command: &IssueCommand, session: &Session) -> ExitCode {
         IssueCommand::Count(args) => count(args, session).await,
         IssueCommand::Links { key } => links(key, session).await,
         IssueCommand::Comments { key } => comments(key, session).await,
+        IssueCommand::Changelog { key, limit } => changelog(key, *limit, session).await,
         IssueCommand::Create {
             queue,
             summary,
@@ -985,6 +994,30 @@ async fn comments(target: &str, session: &Session) -> ExitCode {
                 Format::Text => Ok(text::comments(key, &comments, &session.render)),
                 Format::JsonRaw => machine(&comments, Format::Json),
                 other => machine(&comments, other),
+            };
+            finish(rendered)
+        }
+        Err(error) => {
+            let code = error.exit_code();
+            report(&error, code)
+        }
+    }
+}
+
+/// What changed, and who changed it.
+async fn changelog(target: &str, limit: u32, session: &Session) -> ExitCode {
+    let (client, key) = match session.client_for(target).await {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let key = key.as_str();
+
+    match client.changelog(key, limit.max(1)).await {
+        Ok(changes) => {
+            let rendered = match session.render.format {
+                Format::Text => Ok(text::changelog(key, &changes, &session.render)),
+                Format::JsonRaw => machine(&changes, Format::Json),
+                other => machine(&changes, other),
             };
             finish(rendered)
         }

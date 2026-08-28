@@ -247,3 +247,13 @@ ilubenets                    Ilya Lubenets                  ilubenets@example.co
 shown 1 of 4
 
 ```
+
+```console
+$ ytcli issue changelog PROJ-1
+→ profile=test org=12345 (from YTCLI_PROFILE)
+2026-08-25T03:54 ilubenets        status           -                    Открыт
+2026-08-26T11:40 reporter         storyPoints      -                    3
+2026-08-26T11:40 reporter         boards           1, 2                 1
+shown 3 of 3 for PROJ-1 — from 2 events
+
+```

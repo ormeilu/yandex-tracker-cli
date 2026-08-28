@@ -18,7 +18,8 @@ use serde_json::Value;
 
 use crate::api::error::ApiError;
 use crate::api::models::{
-    Attachment, ChecklistItem, Comment, DictEntry, Entity, Issue, Link, Page, Person, User, Worklog,
+    Attachment, Change, ChecklistItem, Comment, DictEntry, Entity, Issue, Link, Page, Person, User,
+    Worklog,
 };
 use crate::config::OrgKind;
 
@@ -566,6 +567,26 @@ impl Client {
         Ok(raw
             .as_array()
             .map(|entries| entries.iter().filter_map(Queue::parse).collect())
+            .unwrap_or_default())
+    }
+
+    /// What changed on an issue, newest last.
+    ///
+    /// Tracker pages this with an opaque cursor rather than page numbers, and
+    /// the cursor is only worth spending when somebody asks for more than the
+    /// first page — which nobody has yet. So this asks for one page, and the
+    /// caller says how big.
+    pub async fn changelog(&self, key: &str, per_page: u32) -> Result<Vec<Change>, ApiError> {
+        let raw = self
+            .get_value(
+                &format!("/v3/issues/{key}/changelog?perPage={per_page}"),
+                &format!("changelog of {key}"),
+            )
+            .await?;
+
+        Ok(raw
+            .as_array()
+            .map(|entries| entries.iter().filter_map(parse::change).collect())
             .unwrap_or_default())
     }
 

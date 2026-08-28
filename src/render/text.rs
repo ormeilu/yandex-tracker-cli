@@ -7,7 +7,7 @@
 
 use std::fmt::Write as _;
 
-use crate::api::models::{ChecklistItem, Comment, Issue, Link, Page, User, Worklog};
+use crate::api::models::{Change, ChecklistItem, Comment, Issue, Link, Page, User, Worklog};
 use crate::render::style::Palette;
 use crate::render::table::Column;
 use crate::render::{Context, untrusted};
@@ -186,6 +186,80 @@ pub fn worklogs(key: &str, worklogs: &[Worklog], ctx: &Context) -> String {
                 "shown {} of {} for {key} — {total} total",
                 rows.len(),
                 rows.len()
+            ),
+            Palette::label()
+        )
+    );
+    out
+}
+
+/// What changed on an issue, one line per field.
+///
+/// The unit is a field, not an event: "who set the status to Closed" is the
+/// question, and an event that touched three fields answers it three times over
+/// only if it is split. The event columns repeat as a result, which is the
+/// price of every line being readable on its own.
+///
+/// An event that changed nothing a caller can see — a transport detail, a
+/// re-index — still gets a line, with `-` for the field. Dropping it would make
+/// the history look like it has gaps.
+#[must_use]
+pub fn changelog(key: &str, changes: &[Change], ctx: &Context) -> String {
+    let columns = [
+        Column::whole("WHEN", 16, anstyle::Style::new()),
+        Column::new("WHO", 16, anstyle::Style::new()),
+        Column::new("FIELD", 16, Palette::key()),
+        Column::new("FROM", 20, Palette::label()),
+        Column::new("TO", 20, anstyle::Style::new()),
+    ];
+
+    let mut rows: Vec<Vec<String>> = Vec::new();
+    for change in changes {
+        let when = change.at.map_or_else(
+            || "-".to_owned(),
+            // Minutes, not seconds: two changes in the same second are told
+            // apart by their order, never by this column.
+            |at| at.to_string().chars().take(16).collect(),
+        );
+        let by = who(change.by.as_ref()).to_owned();
+
+        if change.fields.is_empty() {
+            rows.push(vec![
+                when,
+                by,
+                "-".to_owned(),
+                "-".to_owned(),
+                "-".to_owned(),
+            ]);
+            continue;
+        }
+        for field in &change.fields {
+            rows.push(vec![
+                when.clone(),
+                by.clone(),
+                field.field.clone(),
+                field.from.clone().unwrap_or_else(|| "-".to_owned()),
+                field.to.clone().unwrap_or_else(|| "-".to_owned()),
+            ]);
+        }
+    }
+
+    let mut out = crate::render::table::render(&columns, &rows, ctx);
+    let paint = ctx.painter();
+    let _ = writeln!(
+        out,
+        "{}",
+        paint.paint(
+            &format!(
+                "shown {} of {} for {key} — from {} {}",
+                rows.len(),
+                rows.len(),
+                changes.len(),
+                if changes.len() == 1 {
+                    "event"
+                } else {
+                    "events"
+                }
             ),
             Palette::label()
         )

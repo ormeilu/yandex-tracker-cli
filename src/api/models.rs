@@ -205,6 +205,39 @@ pub struct Worklog {
     pub comment: Option<String>,
 }
 
+/// One recorded change to an issue.
+///
+/// Deliberately flattened from what Tracker sends: one event can touch several
+/// fields, and the useful unit to read is a field that changed, not the
+/// transaction it changed in. The event id is kept on each so the two can be
+/// put back together.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Change {
+    pub id: String,
+    #[serde(default)]
+    pub at: Option<jiff::Timestamp>,
+    #[serde(default)]
+    pub by: Option<User>,
+    /// `IssueCreated`, `IssueUpdated`, `IssueWorkflow` and the rest. Tracker's
+    /// own word, not one of ours.
+    pub kind: String,
+    pub fields: Vec<FieldChange>,
+}
+
+/// One field, before and after.
+///
+/// Both sides are `None` where Tracker sent null: on a creation there is no
+/// before, and clearing a field leaves no after. Printing `null` would be a
+/// third thing to interpret.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct FieldChange {
+    pub field: String,
+    #[serde(default)]
+    pub from: Option<String>,
+    #[serde(default)]
+    pub to: Option<String>,
+}
+
 /// One line of an issue's checklist.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ChecklistItem {

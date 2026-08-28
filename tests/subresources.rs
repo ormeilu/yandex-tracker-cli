@@ -92,3 +92,89 @@ async fn an_issue_with_no_comments_says_so() {
         .success()
         .stdout(predicate::str::contains("shown 0 of 0"));
 }
+
+/// One line per field, not per event: the second event here touched two fields
+/// and has to read as two changes.
+#[tokio::test]
+async fn the_changelog_is_one_line_per_field() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v3/issues/PROJ-1/changelog"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("changelog.json")))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness
+        .run(&["issue", "changelog", "PROJ-1"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert!(
+        stdout.ends_with("shown 3 of 3 for PROJ-1 — from 2 events\n"),
+        "{stdout}"
+    );
+}
+
+/// The field is named the way `--set` and `--fields` name it: by id, short of
+/// the queue prefix, not by the display name the organisation localised.
+#[tokio::test]
+async fn a_changed_field_is_named_the_way_a_command_takes_it() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v3/issues/PROJ-1/changelog"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("changelog.json")))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness
+        .run(&["issue", "changelog", "PROJ-1"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert!(stdout.contains("storyPoints"), "{stdout}");
+    assert!(!stdout.contains("60fa2c1e--"), "{stdout}");
+    assert!(!stdout.contains("Статус"), "{stdout}");
+}
+
+/// Values arrive as scalars, as references and as lists of either. A change
+/// rendered as `-` on both sides claims nothing happened.
+#[tokio::test]
+async fn every_shape_of_value_renders_as_something() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v3/issues/PROJ-1/changelog"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("changelog.json")))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness
+        .run(&["issue", "changelog", "PROJ-1"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    // A number, a reference object, and a list of references whose only member
+    // is a numeric id.
+    assert!(stdout.contains(" 3"), "the number: {stdout}");
+    assert!(stdout.contains("Открыт"), "the reference: {stdout}");
+    assert!(stdout.contains("1, 2"), "the list: {stdout}");
+}
+
+/// An empty history is a success, like every other empty result here.
+#[tokio::test]
+async fn an_issue_that_never_changed_is_not_an_error() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v3/issues/PROJ-1/changelog"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&["issue", "changelog", "PROJ-1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("shown 0 of 0"));
+}

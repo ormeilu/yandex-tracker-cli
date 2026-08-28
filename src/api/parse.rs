@@ -9,8 +9,8 @@
 use serde_json::{Map, Value};
 
 use crate::api::models::{
-    Attachment, ChecklistItem, Comment, DictEntry, Entity, Issue, Link, LinkKind, Person, User,
-    Worklog,
+    Attachment, Change, ChecklistItem, Comment, DictEntry, Entity, FieldChange, Issue, Link,
+    LinkKind, Person, User, Worklog,
 };
 
 /// System fields we map explicitly. Anything outside this set is treated as a
@@ -425,6 +425,73 @@ pub fn issue(value: &Value) -> Option<Issue> {
             .and_then(|count| u32::try_from(count).ok()),
         extra,
     })
+}
+
+/// One entry of the changelog.
+#[must_use]
+pub fn change(value: &Value) -> Option<Change> {
+    let fields = value
+        .get("fields")
+        .and_then(Value::as_array)
+        .map(|entries| entries.iter().filter_map(field_change).collect())
+        .unwrap_or_default();
+
+    Some(Change {
+        id: identifier(value.get("id"))?,
+        at: timestamp(value.get("updatedAt")),
+        by: user(value.get("updatedBy")),
+        kind: value
+            .get("type")
+            .and_then(Value::as_str)
+            .unwrap_or("change")
+            .to_owned(),
+        fields,
+    })
+}
+
+fn field_change(value: &Value) -> Option<FieldChange> {
+    // The field's id, not its display name, and for the same reason `dict list`
+    // prints keys: `Статус` is what a Russian organisation calls it, `status` is
+    // what `--set` and `--fields` take. Custom fields arrive prefixed with the
+    // queue id, and the trailing segment is the part a caller can type.
+    let field = value
+        .get("field")
+        .and_then(|field| field.get("id"))
+        .and_then(Value::as_str)
+        .map(custom_field_key)
+        .or_else(|| label(value.get("field")))?;
+
+    Some(FieldChange {
+        field,
+        from: changed_value(value.get("from")),
+        to: changed_value(value.get("to")),
+    })
+}
+
+/// One side of a change, as one line of text.
+///
+/// A field's value can be a reference object, a bare scalar or a list of either
+/// — tags and followers arrive as arrays — and all three have to render as
+/// something a person can compare against the other side. `null` becomes
+/// `None`: on a creation there is no before, and that is not the same as a
+/// field whose value is the word "null".
+fn changed_value(value: Option<&Value>) -> Option<String> {
+    match value? {
+        Value::Null => None,
+        Value::Bool(flag) => Some(flag.to_string()),
+        Value::Number(number) => Some(number.to_string()),
+        Value::Array(entries) => {
+            let joined: Vec<String> = entries
+                .iter()
+                .filter_map(|entry| changed_value(Some(entry)))
+                .collect();
+            (!joined.is_empty()).then(|| joined.join(", "))
+        }
+        // A reference whose only member is a numeric id — board membership
+        // arrives as `[{"id": 1}]` — still has to render as something, or the
+        // line claims nothing changed when something did.
+        other => label(Some(other)).or_else(|| identifier(other.get("id"))),
+    }
 }
 
 /// One entry of an issue type, priority, status or resolution listing.
