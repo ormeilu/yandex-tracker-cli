@@ -27,8 +27,10 @@ pub const DEFAULT_BASE_URL: &str = "https://api.tracker.yandex.net";
 
 /// Entity fields we ask for. Requesting an explicit set keeps the response small
 /// and its shape predictable; the endpoints return only identity otherwise.
-const ENTITY_FIELDS: &str =
-    "summary,description,entityStatus,start,end,lead,author,parentEntity,entityType";
+/// `entityType` is deliberately absent: it is an attribute of the entity, not
+/// one of its fields, and asking for it makes Tracker refuse the whole request
+/// with `поля [entityType] не существуют`. It comes back regardless.
+const ENTITY_FIELDS: &str = "summary,description,entityStatus,start,end,lead,author,parentEntity";
 
 /// The host part of a URL, for comparing two of them.
 fn host_of(url: &str) -> Option<String> {
@@ -567,6 +569,49 @@ impl Client {
             .unwrap_or_default())
     }
 
+    /// Boards visible to the active profile.
+    ///
+    /// Not paginated by the endpoint, and not by us: an organisation has boards
+    /// in the dozens, not the thousands.
+    pub async fn boards(&self) -> Result<Vec<Board>, ApiError> {
+        let raw = self.get_value("/v3/boards", "boards").await?;
+
+        Ok(raw
+            .as_array()
+            .map(|entries| entries.iter().filter_map(Board::parse).collect())
+            .unwrap_or_default())
+    }
+
+    /// One board.
+    pub async fn board(&self, id: &str) -> Result<Board, ApiError> {
+        let raw = self
+            .get_value(&format!("/v3/boards/{id}"), &format!("board {id}"))
+            .await?;
+
+        Board::parse(&raw).ok_or_else(|| ApiError::NotFound(format!("board {id}")))
+    }
+
+    /// The sprints of a board.
+    ///
+    /// A board that cannot have sprints answers with a refusal rather than an
+    /// empty list, and that refusal is passed through as Tracker worded it: a
+    /// kanban board having no sprints is Tracker's answer to the question, not
+    /// a failure of the command, and inventing an empty list here would hide
+    /// which of the two happened.
+    pub async fn sprints(&self, board: &str) -> Result<Vec<Sprint>, ApiError> {
+        let raw = self
+            .get_value(
+                &format!("/v3/boards/{board}/sprints"),
+                &format!("board {board} sprints"),
+            )
+            .await?;
+
+        Ok(raw
+            .as_array()
+            .map(|entries| entries.iter().filter_map(Sprint::parse).collect())
+            .unwrap_or_default())
+    }
+
     /// The comments of an issue.
     ///
     /// Fetched in one generous page: an issue with more than a hundred comments
@@ -721,6 +766,106 @@ impl Queue {
     }
 }
 
+/// A board, reduced to what a listing shows.
+///
+/// Columns are the reason to look at a board from a command line: they are the
+/// statuses the board arranges work by, in the order it arranges them.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Board {
+    pub id: String,
+    pub name: String,
+    pub columns: Vec<String>,
+    /// The field the board estimates by, when it estimates.
+    pub estimate_by: Option<String>,
+    pub owner: Option<String>,
+}
+
+impl Board {
+    fn parse(value: &Value) -> Option<Self> {
+        Some(Self {
+            id: match value.get("id")? {
+                Value::String(id) => id.clone(),
+                other => other.to_string(),
+            },
+            name: value
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            columns: value
+                .get("columns")
+                .and_then(Value::as_array)
+                .map(|columns| {
+                    columns
+                        .iter()
+                        .filter_map(|column| {
+                            column
+                                .get("display")
+                                .or_else(|| column.get("id"))
+                                .and_then(Value::as_str)
+                                .map(ToOwned::to_owned)
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            estimate_by: value
+                .get("estimateBy")
+                .and_then(|field| field.get("id").or_else(|| field.get("display")))
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned),
+            // Boards carry `createdBy`, not a lead, and a real organisation
+            // showed that user has a display name and no login.
+            owner: value
+                .get("createdBy")
+                .and_then(|user| {
+                    user.get("login")
+                        .or_else(|| user.get("display"))
+                        .or_else(|| user.get("id"))
+                })
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned),
+        })
+    }
+}
+
+/// One sprint of a board.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Sprint {
+    pub id: String,
+    pub name: String,
+    pub status: Option<String>,
+    pub start: Option<String>,
+    pub end: Option<String>,
+}
+
+impl Sprint {
+    fn parse(value: &Value) -> Option<Self> {
+        Some(Self {
+            id: match value.get("id")? {
+                Value::String(id) => id.clone(),
+                other => other.to_string(),
+            },
+            name: value
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            status: value
+                .get("status")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned),
+            start: value
+                .get("startDate")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned),
+            end: value
+                .get("endDate")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned),
+        })
+    }
+}
+
 /// One field of a queue. `queue fields` is how a caller learns the keys that
 /// `--fields` and `--set` accept, so the key matters more than the name here.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -790,9 +935,46 @@ async fn classify(response: reqwest::Response, what: &str) -> Result<String, Api
         429 => ApiError::RateLimited,
         _ => ApiError::Rejected {
             status,
-            message: message.chars().take(400).collect(),
+            message: complaint(&message),
         },
     })
+}
+
+/// What Tracker actually said, out of the envelope it says it in.
+///
+/// A rejection arrives as `{"errors": …, "errorMessages": […], "statusCode": …}`,
+/// and printing the whole envelope buries the one sentence a caller can act on
+/// under punctuation it cannot. The body is kept verbatim when it is not that
+/// shape, since an unrecognised error is exactly when guessing is worst.
+fn complaint(body: &str) -> String {
+    let messages = serde_json::from_str::<Value>(body)
+        .ok()
+        .and_then(|value| {
+            let mut said: Vec<String> = value
+                .get("errorMessages")
+                .and_then(Value::as_array)
+                .map(|entries| {
+                    entries
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(ToOwned::to_owned)
+                        .collect()
+                })
+                .unwrap_or_default();
+            // `errors` is keyed by field, and a field-level complaint is the
+            // most specific thing in the envelope when it is there.
+            if let Some(errors) = value.get("errors").and_then(Value::as_object) {
+                said.extend(
+                    errors
+                        .iter()
+                        .filter_map(|(field, text)| Some(format!("{field}: {}", text.as_str()?))),
+                );
+            }
+            (!said.is_empty()).then(|| said.join("; "))
+        })
+        .unwrap_or_else(|| body.to_owned());
+
+    messages.chars().take(400).collect()
 }
 
 /// Retry transport hiccups and server-side backpressure; never retry a request
@@ -809,6 +991,38 @@ fn is_retryable(error: &ApiError) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The sentence a caller can act on, not the envelope it arrived in.
+    #[test]
+    fn a_rejection_reads_as_what_tracker_said() {
+        assert_eq!(
+            complaint(
+                r#"{"errors":{},"errorMessages":["A board of this type cannot have sprints."],"statusCode":400}"#
+            ),
+            "A board of this type cannot have sprints."
+        );
+    }
+
+    /// A field-level complaint names its field: `summary` being required is a
+    /// different fix from `queue` being wrong.
+    #[test]
+    fn a_field_complaint_keeps_its_field() {
+        assert_eq!(
+            complaint(r#"{"errors":{"summary":"cannot be empty"},"errorMessages":[]}"#),
+            "summary: cannot be empty"
+        );
+    }
+
+    /// An unrecognised body is passed through: guessing is worst precisely when
+    /// the error is one we have not seen.
+    #[test]
+    fn an_unfamiliar_body_survives_untouched() {
+        assert_eq!(
+            complaint("<html>gateway timeout</html>"),
+            "<html>gateway timeout</html>"
+        );
+        assert_eq!(complaint("{}"), "{}");
+    }
 
     #[test]
     fn host_comparison_ignores_scheme_path_and_case() {

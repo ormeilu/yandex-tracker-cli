@@ -40,6 +40,9 @@ Labels split the work by area: `area:issues`, `area:entities`,
 
 - Worklogs, checklists and link editing, with reads and writes under separate
   command prefixes so an allowlist cannot be stretched from one into the other.
+- Boards, read-only: listing, columns in board order, and sprints. A board that
+  cannot have sprints is refused in Tracker's own words rather than answered
+  with an empty list.
 - Portfolios: listing, reading, and what one contains. Containment is a separate
   command rather than part of `get`, because it is a second request and nothing
   should pay for an answer it did not ask for.

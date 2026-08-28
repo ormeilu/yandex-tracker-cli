@@ -1,7 +1,7 @@
 ytcli — Yandex Tracker from the command line. Compact output by default.
 
 ## general
-  ytcli <group> <verb> [args]           groups: auth issue queue project portfolio goal attachment
+  ytcli <group> <verb> [args]           groups: auth issue queue board project portfolio goal attachment
   -p, --profile NAME                    act as a profile (else YTCLI_PROFILE, .tracker.toml, default)
   -f, --format text|json|json-raw|toon  text is compact and default; json is our stable schema
       --full                            print the whole description, not the first lines
@@ -56,6 +56,12 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
 ## queue
   ytcli queue list
   ytcli queue fields PROJ               field keys, including custom ones for --fields
+
+## board
+  ytcli board list                      id, name, column count, estimate field
+  ytcli board get 6                     the columns, in the order the board works in
+  ytcli board sprints ID                a kanban board is refused, in Tracker's words:
+                                        "no sprints" and "cannot have sprints" differ
 
 ## project
   ytcli project list

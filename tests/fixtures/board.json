@@ -1,0 +1,29 @@
+{
+  "self": "https://api.tracker.yandex.net/v3/boards/6",
+  "id": 6,
+  "version": 6,
+  "name": "Delivery",
+  "createdBy": {
+    "id": "1120000000000001",
+    "display": "Kim Novak"
+  },
+  "columns": [
+    {
+      "id": "1",
+      "display": "Open"
+    },
+    {
+      "id": "2",
+      "display": "In Progress"
+    },
+    {
+      "id": "3",
+      "display": "Done"
+    }
+  ],
+  "estimateBy": {
+    "id": "storyPoints",
+    "display": "Story Points"
+  },
+  "useRanking": false
+}

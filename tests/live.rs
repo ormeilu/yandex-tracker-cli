@@ -27,7 +27,7 @@
 #![cfg(feature = "live")]
 // A test that cannot reach its fixture has nothing to say; failing loudly is the
 // correct behaviour.
-#![allow(clippy::expect_used, clippy::unwrap_used)]
+#![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -236,6 +236,66 @@ async fn a_real_issue_has_the_fields_every_command_depends_on() {
         issue.updated_at.is_some(),
         "updatedAt did not parse — Tracker sends `+0300`, not `+03:00`"
     );
+}
+
+/// The entity endpoints accept exactly the field list we ask for.
+///
+/// This is the bug that shipped between two commits: `entityType` reads like a
+/// field, comes back in every payload, and is not one — asking for it makes
+/// Tracker refuse the whole search with 422, for projects, portfolios and goals
+/// alike. Fixtures answer whatever they are asked, so only a real organisation
+/// can say which names are real.
+#[tokio::test]
+#[ignore = "needs real credentials"]
+async fn every_entity_kind_accepts_the_fields_we_ask_for() {
+    let client = client();
+    for kind in ["project", "portfolio", "goal"] {
+        client
+            .entities(kind, None, 1, 5)
+            .await
+            .unwrap_or_else(|error| panic!("{kind} search rejected: {error}"));
+    }
+}
+
+/// Boards, and the columns every board command prints.
+#[tokio::test]
+#[ignore = "needs real credentials"]
+async fn boards_parse_and_keep_their_columns() {
+    let boards = client().boards().await.expect("boards");
+    for board in &boards {
+        assert!(!board.id.is_empty(), "a board with no id");
+        assert!(
+            !board.columns.is_empty(),
+            "board {} has no columns, which no board has",
+            board.id
+        );
+    }
+}
+
+/// A board that cannot have sprints is refused, not answered with an empty
+/// list. Both outcomes are correct; what must not happen is a decode failure.
+#[tokio::test]
+#[ignore = "needs real credentials"]
+async fn asking_a_board_for_its_sprints_either_answers_or_is_refused() {
+    let client = client();
+    let Some(board) = client.boards().await.expect("boards").first().cloned() else {
+        return;
+    };
+
+    match client.sprints(&board.id).await {
+        Ok(sprints) => {
+            for sprint in &sprints {
+                assert!(!sprint.id.is_empty(), "a sprint with no id");
+            }
+        }
+        Err(error) => {
+            let said = error.to_string();
+            assert!(
+                said.contains("400") || said.contains("404"),
+                "unexpected failure: {said}"
+            );
+        }
+    }
 }
 
 /// Writing, only into a queue somebody named on purpose.

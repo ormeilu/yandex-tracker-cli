@@ -36,6 +36,9 @@ async fn tracker_answers(harness: &Harness) {
         ("/v3/issues/PROJ-1/comments", "issue_comments.json"),
         ("/v3/queues", "queues.json"),
         ("/v3/queues/PROJ/fields", "queue_fields.json"),
+        ("/v3/boards", "boards.json"),
+        ("/v3/boards/6", "board.json"),
+        ("/v3/boards/9/sprints", "sprints.json"),
     ] {
         Mock::given(method("GET"))
             .and(path(route))
@@ -113,6 +116,18 @@ async fn tracker_answers(harness: &Harness) {
             .mount(&harness.server)
             .await;
     }
+
+    // A kanban board refuses the sprint question. The documented case pins how
+    // that reads, because passing Tracker's own words through is the behaviour.
+    Mock::given(method("GET"))
+        .and(path("/v3/boards/6/sprints"))
+        .respond_with(ResponseTemplate::new(400).set_body_json(serde_json::json!({
+            "errors": {},
+            "errorMessages": ["A board of this type cannot have sprints."],
+            "statusCode": 400
+        })))
+        .mount(&harness.server)
+        .await;
 
     Mock::given(method("POST"))
         .and(path("/v3/issues/_count"))

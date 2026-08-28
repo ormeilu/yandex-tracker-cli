@@ -12,6 +12,7 @@
 //! Snapshot tests cover every renderer, so changing a default shape shows up as
 //! a diff in review rather than as a surprise in someone's pipeline.
 
+pub mod board;
 pub mod entity;
 pub mod image;
 pub mod markdown;

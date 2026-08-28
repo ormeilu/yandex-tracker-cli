@@ -124,3 +124,33 @@ short id: 4   status: in_progress   lead: kim
 start: 2026-01-01   end: 2026-12-31
 
 ```
+
+```console
+$ ytcli board list
+6        Delivery                             3        storyPoints
+9        Support                              2        -
+shown 2 of 2
+
+```
+
+```console
+$ ytcli board get 6
+6  Delivery
+estimate: storyPoints   owner: Kim Novak
+columns: Open → In Progress → Done
+
+```
+
+```console
+$ ytcli board sprints 9
+21       Sprint 4                       in_progress    2026-08-17   2026-08-28
+shown 1 of 1 for board 9
+
+```
+
+```console
+$ ytcli board sprints 6
+? 5
+error: Tracker rejected the request (400 Bad Request): A board of this type cannot have sprints.
+
+```

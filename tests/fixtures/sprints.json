@@ -1,0 +1,14 @@
+[
+  {
+    "self": "https://api.tracker.yandex.net/v3/boards/9/sprints/21",
+    "id": 21,
+    "version": 2,
+    "name": "Sprint 4",
+    "status": "in_progress",
+    "board": {
+      "id": "9"
+    },
+    "startDate": "2026-08-17",
+    "endDate": "2026-08-28"
+  }
+]

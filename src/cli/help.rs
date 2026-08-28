@@ -333,6 +333,32 @@ Show one project.
 
 Takes the long id from `project list`, not an issue key and not the short id.";
 
+pub const BOARD_LIST: &str = "\
+List boards.
+
+  ytcli board list
+
+Id, name, how many columns and what the board estimates by. The columns
+themselves are `board get`: a listing answers which board, not how it is built.";
+
+pub const BOARD_GET: &str = "\
+Show one board and its columns.
+
+  ytcli board get 6
+
+Columns are printed in the order the board arranges work by, which is the one
+thing about a board a command line can say better than the web interface.";
+
+pub const BOARD_SPRINTS: &str = "\
+List the sprints of a board.
+
+  ytcli board sprints 6
+
+A board that cannot have sprints — a kanban board — is refused by Tracker rather
+than answered with an empty list, and that refusal is passed through in Tracker's
+own words. \"No sprints\" and \"never had sprints\" are different answers, and
+turning one into the other would hide which happened.";
+
 pub const PORTFOLIO_LIST: &str = "\
 List portfolios.
 

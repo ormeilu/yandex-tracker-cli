@@ -7,6 +7,7 @@
 
 pub mod attachment;
 pub mod auth;
+pub mod board;
 pub mod cheatsheet;
 pub mod entity;
 pub mod goal;
@@ -98,6 +99,9 @@ pub enum Command {
     /// Queues and their fields.
     #[command(subcommand)]
     Queue(queue::QueueCommand),
+    /// Boards and their sprints.
+    #[command(subcommand)]
+    Board(board::BoardCommand),
     /// Projects.
     #[command(subcommand)]
     Project(project::ProjectCommand),
