@@ -279,6 +279,17 @@ pub fn comment(value: &Value) -> Option<Comment> {
     })
 }
 
+/// The name a caller can actually type for a custom field.
+///
+/// Tracker returns them prefixed with the queue's opaque id —
+/// `603bd9b6cdc7ba0d2f4b1a55--component` — and accepts the trailing segment
+/// back. `queue fields` has always printed the short form; the issue view
+/// printed the raw one, which meant the line whose whole purpose is to say what
+/// to ask for next named a key `--fields` would not take.
+fn custom_field_key(key: &str) -> String {
+    key.rsplit("--").next().unwrap_or(key).to_owned()
+}
+
 /// Parse `GET /v3/issues/{key}` (or one element of a search result).
 ///
 /// Returns `None` only when the payload has no key, which means it is not an
@@ -297,10 +308,11 @@ pub fn issue(value: &Value) -> Option<Issue> {
         if member.is_null() {
             continue;
         }
+        let key = custom_field_key(key);
         if let Some(text) = label(Some(member)) {
-            extra.insert(key.clone(), Value::String(text));
+            extra.insert(key, Value::String(text));
         } else {
-            extra.insert(key.clone(), member.clone());
+            extra.insert(key, member.clone());
         }
     }
 
@@ -484,5 +496,28 @@ mod tests {
             issue(&value).expect("parsed").queue.as_deref(),
             Some("PROJ")
         );
+    }
+
+    /// The line whose whole purpose is to say what to ask for next has to name
+    /// a key `--fields` accepts. Tracker prefixes custom fields with the
+    /// queue's opaque id and takes the trailing segment back.
+    #[test]
+    fn a_custom_field_is_keyed_by_the_name_a_caller_can_type() {
+        let value = serde_json::json!({
+            "key": "PROJ-1",
+            "summary": "x",
+            "603bd9b6cdc7ba0d2f4b1a55--component": "backend",
+            "sprint": "S-12",
+        });
+
+        let parsed = issue(&value).expect("parses");
+
+        assert_eq!(
+            parsed.extra.get("component"),
+            Some(&serde_json::json!("backend"))
+        );
+        assert!(!parsed.extra.keys().any(|key| key.contains("--")));
+        // A field with no prefix is left exactly as it came.
+        assert_eq!(parsed.extra.get("sprint"), Some(&serde_json::json!("S-12")));
     }
 }

@@ -7,7 +7,7 @@ thousands of context tokens before anything is asked, and then answers with raw
 API payloads. `ytcli` costs nothing until it is called, and answers in about
 fifteen lines.
 
-> **Status: 0.1.0, released.** The whole v1 command tree is built — issues,
+> **Status: 0.2.0, released.** The whole v1 command tree is built — issues,
 > queues, projects, goals, attachments, reads and writes — and published on
 > crates.io, PyPI and GitHub Releases. What is planned and what was ruled out is
 > in [docs/TODO.md](docs/TODO.md) and the [issues](https://github.com/ormeilu/yandex-tracker-cli/issues).

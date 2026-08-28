@@ -10,7 +10,7 @@ status: In Progress   type: Bug   prio: Critical
 assignee: ilubenets   author: reporter   queue: PROJ
 updated: 2026-08-27T10:00:00Z   comments: 3
 storyPoints: 3
-custom: 3 set (603bd9b6cdc7ba0d2f4b1a55--component, sprint, tags) — see --fields
+custom: 3 set (component, sprint, tags) — see --fields
 links:
   depends on PROJ-3 [Open]
   parent PROJ-9
