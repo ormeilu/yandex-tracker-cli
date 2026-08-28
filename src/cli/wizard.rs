@@ -47,10 +47,18 @@ pub fn is_interactive() -> bool {
     std::io::stdin().is_terminal() && std::io::stderr().is_terminal()
 }
 
-/// Print a block of guidance above the prompt it belongs to.
-fn explain(block: &str) {
+/// Print the whole of `auth login --help`'s guidance, once, before anything is
+/// asked for.
+///
+/// It used to appear a block at a time, above the prompt each block belonged
+/// to. That is too late: by the time the token prompt asks for a token, the
+/// person has already gone looking for one. Both blocks up front means the
+/// procedure can be followed from the top, in one place, without leaving the
+/// command — and it is the same text `--help` prints, so neither can drift into
+/// being the real instructions while the other rots.
+pub fn introduce() {
     let mut err = anstream::stderr();
-    let _ = writeln!(err, "\n{block}\n");
+    let _ = writeln!(err, "\n{}", guidance::full());
 }
 
 /// Account name: which identity this token belongs to.
@@ -59,7 +67,10 @@ pub fn account(existing: &[String]) -> Result<String, WizardError> {
     if existing.is_empty() {
         let _ = writeln!(
             err,
-            "\nAn account holds one token. A profile is an organisation seen through an\naccount — so one account can serve several organisations."
+            "{}",
+            guidance::block(
+                "An account holds one token. A **profile** is an organisation seen through an account — so one account can serve several organisations."
+            )
         );
     } else {
         let _ = writeln!(err, "\nAccounts you already have: {}", existing.join(", "));
@@ -79,8 +90,6 @@ pub fn account(existing: &[String]) -> Result<String, WizardError> {
 /// an argument is visible in `ps` and lands in shell history, and one echoed at
 /// a prompt stays in the scrollback.
 pub fn token(account: &str) -> Result<String, WizardError> {
-    explain(guidance::TOKEN);
-
     let token = Password::with_theme(&theme())
         .with_prompt(format!("Paste the OAuth token for `{account}`"))
         .interact()?;
@@ -98,8 +107,6 @@ pub fn token(account: &str) -> Result<String, WizardError> {
 /// headers, and picking the wrong one produces a 403 that reads like a rights
 /// problem. Letting the tool try both costs one request.
 pub fn organisation() -> Result<(String, Option<OrgKind>), WizardError> {
-    explain(guidance::ORG);
-
     let id: String = Input::with_theme(&theme())
         .with_prompt("Organisation id")
         .interact_text()?;

@@ -16,10 +16,10 @@ use crate::render::{Format, entity as render, image, machine};
 #[derive(Debug, Subcommand)]
 pub enum AttachmentCommand {
     /// List the attachments of an issue.
-    #[command(long_about = crate::cli::help::ATTACHMENT_LIST)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ATTACHMENT_LIST))]
     List { key: String },
     /// Download one attachment.
-    #[command(long_about = crate::cli::help::ATTACHMENT_DOWNLOAD)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ATTACHMENT_DOWNLOAD))]
     Download {
         key: String,
         attachment: String,
@@ -31,10 +31,10 @@ pub enum AttachmentCommand {
         force: bool,
     },
     /// Draw an image attachment in the terminal.
-    #[command(long_about = crate::cli::help::ATTACHMENT_SHOW)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ATTACHMENT_SHOW))]
     Show { key: String, attachment: String },
     /// Upload a file to an issue.
-    #[command(long_about = crate::cli::help::ATTACHMENT_UPLOAD)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ATTACHMENT_UPLOAD))]
     Upload { key: String, file: PathBuf },
 }
 

@@ -16,7 +16,7 @@ use crate::render::{Format, image, machine, text};
 #[derive(Debug, Subcommand)]
 pub enum IssueCommand {
     /// Show one issue: summary, fields, links, first lines of the description.
-    #[command(long_about = crate::cli::help::ISSUE_GET)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_GET))]
     Get {
         /// Issue key, e.g. PROJ-42. Prefix it with a profile — `work/PROJ-42` —
         /// when two profiles can both see a queue with that key.
@@ -26,19 +26,19 @@ pub enum IssueCommand {
         fields: Vec<String>,
     },
     /// Search for issues.
-    #[command(long_about = crate::cli::help::ISSUE_FIND)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_FIND))]
     Find(FindArgs),
     /// Count matching issues without fetching them. The cheapest question here.
-    #[command(long_about = crate::cli::help::ISSUE_COUNT)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_COUNT))]
     Count(FindArgs),
     /// Show the links of an issue.
-    #[command(long_about = crate::cli::help::ISSUE_LINKS)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_LINKS))]
     Links { key: String },
     /// Show the comments of an issue.
-    #[command(long_about = crate::cli::help::ISSUE_COMMENTS)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_COMMENTS))]
     Comments { key: String },
     /// Create an issue.
-    #[command(long_about = crate::cli::help::ISSUE_CREATE)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_CREATE))]
     Create {
         #[arg(long, short = 'q')]
         queue: Option<String>,
@@ -52,7 +52,7 @@ pub enum IssueCommand {
         tags: Vec<String>,
     },
     /// Change fields of one or more issues.
-    #[command(long_about = crate::cli::help::ISSUE_UPDATE)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_UPDATE))]
     Update {
         /// Issues to change. More than one needs --yes.
         #[arg(required = true)]
@@ -66,29 +66,29 @@ pub enum IssueCommand {
         set: Vec<String>,
     },
     /// Add a comment.
-    #[command(long_about = crate::cli::help::ISSUE_COMMENT)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_COMMENT))]
     Comment {
         key: String,
         /// Comment body; `-` reads from stdin.
         text: String,
     },
     /// Show the worklog of an issue.
-    #[command(long_about = crate::cli::help::ISSUE_WORKLOGS)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_WORKLOGS))]
     Worklogs { key: String },
     /// Show the checklist of an issue.
-    #[command(long_about = crate::cli::help::ISSUE_CHECKLIST)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_CHECKLIST))]
     Checklist { key: String },
     /// Record or remove time spent. Every verb here writes.
-    #[command(subcommand, long_about = crate::cli::help::ISSUE_WORKLOG)]
+    #[command(subcommand, long_about = crate::cli::help::md(crate::cli::help::ISSUE_WORKLOG))]
     Worklog(WorklogCommand),
     /// Change an issue's checklist. Every verb here writes.
-    #[command(subcommand, long_about = crate::cli::help::ISSUE_CHECK)]
+    #[command(subcommand, long_about = crate::cli::help::md(crate::cli::help::ISSUE_CHECK))]
     Check(CheckCommand),
     /// Link or unlink issues. Every verb here writes.
-    #[command(subcommand, long_about = crate::cli::help::ISSUE_LINK)]
+    #[command(subcommand, long_about = crate::cli::help::md(crate::cli::help::ISSUE_LINK))]
     Link(LinkCommand),
     /// Move an issue through a workflow transition.
-    #[command(long_about = crate::cli::help::ISSUE_TRANSITION)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_TRANSITION))]
     Transition {
         key: String,
         /// Transition id; omit to list what is available.
@@ -104,7 +104,7 @@ pub enum IssueCommand {
 #[derive(Debug, Subcommand)]
 pub enum WorklogCommand {
     /// Record time spent on an issue.
-    #[command(long_about = crate::cli::help::WORKLOG_ADD)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WORKLOG_ADD))]
     Add {
         key: String,
         /// How long: 1h30m, 45m, 2d, or an ISO 8601 duration.
@@ -117,7 +117,7 @@ pub enum WorklogCommand {
         start: Option<String>,
     },
     /// Remove one worklog entry.
-    #[command(long_about = crate::cli::help::WORKLOG_DELETE)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WORKLOG_DELETE))]
     Delete { key: String, id: String },
 }
 
@@ -125,7 +125,7 @@ pub enum WorklogCommand {
 #[derive(Debug, Subcommand)]
 pub enum CheckCommand {
     /// Add a line to the checklist.
-    #[command(long_about = crate::cli::help::CHECK_ADD)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::CHECK_ADD))]
     Add {
         key: String,
         text: String,
@@ -136,13 +136,13 @@ pub enum CheckCommand {
         deadline: Option<String>,
     },
     /// Tick a line off.
-    #[command(long_about = crate::cli::help::CHECK_TICK)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::CHECK_TICK))]
     Tick { key: String, id: String },
     /// Put a ticked line back.
-    #[command(long_about = crate::cli::help::CHECK_UNTICK)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::CHECK_UNTICK))]
     Untick { key: String, id: String },
     /// Remove a line.
-    #[command(long_about = crate::cli::help::CHECK_DELETE)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::CHECK_DELETE))]
     Delete { key: String, id: String },
 }
 
@@ -150,7 +150,7 @@ pub enum CheckCommand {
 #[derive(Debug, Subcommand)]
 pub enum LinkCommand {
     /// Link two issues.
-    #[command(long_about = crate::cli::help::LINK_ADD)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::LINK_ADD))]
     Add {
         key: String,
         /// Relationship from this issue to the other: relates, depends,
@@ -161,7 +161,7 @@ pub enum LinkCommand {
         other: String,
     },
     /// Remove a link, by the link id `issue links` prints.
-    #[command(long_about = crate::cli::help::LINK_DELETE)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::LINK_DELETE))]
     Delete { key: String, id: String },
 }
 

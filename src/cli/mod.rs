@@ -32,8 +32,12 @@ use crate::render::{Audience, Context, Format};
 
 /// Token-efficient Yandex Tracker CLI for humans and AI agents.
 #[derive(Debug, Parser)]
-#[command(name = "ytcli", version, about, long_about = help::ROOT)]
+#[command(name = "ytcli", version, about, long_about = help::md(help::ROOT))]
 #[command(propagate_version = true)]
+// Help is rendered markdown, and clap's own wrapping counts escape codes as
+// characters — it would cut a table in half and break an example mid-flag.
+// The text arrives already wrapped to the window.
+#[command(term_width = 0)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
@@ -122,10 +126,10 @@ pub enum Command {
     #[command(subcommand)]
     Attachment(attachment::AttachmentCommand),
     /// Print a compact reference of the whole CLI, for agents.
-    #[command(long_about = help::CHEATSHEET)]
+    #[command(long_about = help::md(help::CHEATSHEET))]
     Cheatsheet(cheatsheet::CheatsheetArgs),
     /// Generate a shell completion script.
-    #[command(long_about = help::COMPLETIONS)]
+    #[command(long_about = help::md(help::COMPLETIONS))]
     Completions {
         /// Shell to generate for.
         #[arg(value_enum)]
@@ -335,7 +339,7 @@ pub fn render_context(global: &GlobalArgs, resolved: Option<&Resolved>) -> Conte
 /// A pseudo-terminal with no size set reports zero columns rather than failing,
 /// and wrapping prose to that would be worse than not asking at all — anything
 /// implausibly narrow is treated as "unknown", not as the answer.
-fn terminal_width() -> usize {
+pub(crate) fn terminal_width() -> usize {
     const UNKNOWN: usize = 100;
     match termimad::crossterm::terminal::size() {
         Ok((cols, _)) if cols >= 20 => cols as usize,

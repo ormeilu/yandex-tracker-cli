@@ -10,16 +10,16 @@ use crate::render::{Format, machine, queue};
 #[derive(Debug, Subcommand)]
 pub enum QueueCommand {
     /// List queues visible to this profile.
-    #[command(long_about = crate::cli::help::QUEUE_LIST)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::QUEUE_LIST))]
     List,
     /// Show a queue and the defaults issues in it start with.
-    #[command(long_about = crate::cli::help::QUEUE_GET)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::QUEUE_GET))]
     Get {
         /// Queue key, e.g. PROJ.
         key: String,
     },
     /// Show a queue's fields, including custom ones and their keys.
-    #[command(long_about = crate::cli::help::QUEUE_FIELDS)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::QUEUE_FIELDS))]
     Fields {
         /// Queue key, e.g. PROJ.
         key: String,

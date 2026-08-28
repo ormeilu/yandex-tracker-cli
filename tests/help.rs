@@ -63,6 +63,9 @@ fn leaves() -> Vec<Vec<String>> {
 /// An agent reading help to decide how to call something needs the call, not a
 /// paragraph about it. Anything before `Usage:` is ours to write; clap's flag
 /// list below it is not the part in question.
+///
+/// Help is markdown, and a test's stdout is not a terminal, so what arrives
+/// here is the source: examples sit at the margin inside a fenced block.
 #[test]
 fn every_command_shows_an_example_before_its_usage_line() {
     for path in leaves() {
@@ -70,7 +73,7 @@ fn every_command_shows_an_example_before_its_usage_line() {
         let prose = long.split("Usage:").next().unwrap_or_default();
 
         assert!(
-            prose.lines().any(|line| line.starts_with("  ytcli ")),
+            prose.lines().any(|line| line.starts_with("ytcli ")),
             "`ytcli {} --help` has no example",
             path.join(" ")
         );
@@ -106,7 +109,7 @@ fn the_examples_only_use_flags_that_exist() {
         let long = help(&path, true);
         let prose = long.split("Usage:").next().unwrap_or_default().to_owned();
 
-        for line in prose.lines().filter(|line| line.starts_with("  ytcli ")) {
+        for line in prose.lines().filter(|line| line.starts_with("ytcli ")) {
             let target = command_of(line);
             let target_help = help(&target, true);
 
@@ -144,4 +147,43 @@ fn flags(line: &str) -> Vec<String> {
         })
         .filter(|word| word.len() > 2)
         .collect()
+}
+
+/// Help is markdown, and its examples live in a fenced block.
+///
+/// The fence is what makes the difference visible once the text is rendered:
+/// a command to copy is set apart from the prose about it, rather than being a
+/// paragraph that happens to start with the word `ytcli`. It is also what
+/// `md()` keys on, so a command whose examples are loose prose renders as prose.
+#[test]
+fn every_example_sits_in_a_fenced_block() {
+    for path in leaves() {
+        let long = help(&path, true);
+        let prose = long.split("Usage:").next().unwrap_or_default();
+        let fences = prose.lines().filter(|line| line.trim() == "```").count();
+
+        assert!(
+            fences >= 2 && fences % 2 == 0,
+            "`ytcli {} --help` has {fences} fence lines; examples belong in one",
+            path.join(" ")
+        );
+    }
+}
+
+/// A pipe gets the markdown source, not a rendering of it.
+///
+/// Everything above runs with a captured stdout, so this is what those tests
+/// have been reading all along — but it is the promise that matters: an agent
+/// reads markdown natively, and escape codes in a captured help file are
+/// nothing but noise to diff.
+#[test]
+fn a_captured_help_carries_no_escape_codes() {
+    for path in leaves() {
+        let long = help(&path, true);
+        assert!(
+            !long.contains('\u{1b}'),
+            "`ytcli {} --help` was rendered into a pipe",
+            path.join(" ")
+        );
+    }
 }

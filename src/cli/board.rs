@@ -10,16 +10,16 @@ use crate::render::{Format, board as render, machine};
 #[derive(Debug, Subcommand)]
 pub enum BoardCommand {
     /// List boards.
-    #[command(long_about = crate::cli::help::BOARD_LIST)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::BOARD_LIST))]
     List,
     /// Show one board and its columns.
-    #[command(long_about = crate::cli::help::BOARD_GET)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::BOARD_GET))]
     Get {
         /// Board id as returned by `board list`.
         id: String,
     },
     /// List the sprints of a board.
-    #[command(long_about = crate::cli::help::BOARD_SPRINTS)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::BOARD_SPRINTS))]
     Sprints {
         /// Board id as returned by `board list`.
         id: String,

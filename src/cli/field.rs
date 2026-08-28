@@ -14,14 +14,14 @@ use crate::render::{Format, machine, queue as render};
 #[derive(Debug, Subcommand)]
 pub enum FieldCommand {
     /// List every field defined in the organisation.
-    #[command(long_about = crate::cli::help::FIELD_LIST)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::FIELD_LIST))]
     List,
 }
 
 #[derive(Debug, Subcommand)]
 pub enum TemplateCommand {
     /// List templates.
-    #[command(long_about = crate::cli::help::TEMPLATE_LIST)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::TEMPLATE_LIST))]
     List {
         /// Which templates to list.
         #[arg(long, value_enum, default_value_t = Kind::Issue)]

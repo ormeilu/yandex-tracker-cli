@@ -14,25 +14,25 @@ use crate::api::{Client, ClientConfig};
 use crate::cli::{Session, emit, guidance, report, wizard};
 use crate::config::{OrgKind, Profile, store};
 use crate::exit::ExitCode;
-use crate::render::style::{Painter, Palette, prose};
+use crate::render::style::{Painter, Palette};
 use crate::secrets;
 
 #[derive(Debug, Subcommand)]
 pub enum AuthCommand {
     /// Store a token for an account, and set up a profile to use it with.
-    #[command(long_about = crate::cli::guidance::LOGIN_HELP)]
+    #[command(long_about = crate::cli::guidance::login_help())]
     Login(LoginArgs),
     /// Remove a stored token.
-    #[command(long_about = crate::cli::help::AUTH_LOGOUT)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::AUTH_LOGOUT))]
     Logout {
         #[arg(long, short = 'a')]
         account: String,
     },
     /// List configured accounts and profiles.
-    #[command(long_about = crate::cli::help::AUTH_LIST)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::AUTH_LIST))]
     List,
     /// Check every profile: who the token belongs to, and what it can see.
-    #[command(long_about = crate::cli::help::AUTH_STATUS)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::AUTH_STATUS))]
     Status {
         /// Identity only — skip the counts, and the requests behind them.
         #[arg(long)]
@@ -89,15 +89,6 @@ pub async fn run(command: &AuthCommand, session: &Session) -> ExitCode {
     }
 }
 
-/// Colour for stderr, which is where guidance and progress go.
-///
-/// Judged separately from stdout: one of the two is often a pipe while the other
-/// is still a terminal.
-fn stderr_painter() -> Painter {
-    use std::io::IsTerminal;
-    Painter::for_stream(std::io::stderr().is_terminal())
-}
-
 /// Report on the configured profiles.
 ///
 /// This is the command someone runs when something is wrong, so it answers the
@@ -115,7 +106,7 @@ async fn status(session: &Session, brief: bool, active_only: bool) -> ExitCode {
 
     if session.config.profiles.is_empty() {
         let _ = writeln!(err, "no profiles configured yet.\n");
-        let _ = writeln!(err, "{}", prose(&guidance::full(), stderr_painter()));
+        let _ = writeln!(err, "{}", guidance::full());
         let _ = writeln!(
             err,
             "Then: ytcli auth login --account <name> --org-id <id> [--queue <QUEUE>]"
@@ -323,7 +314,7 @@ async fn report_profile(
             );
             let _ = writeln!(err, "  {error}");
             if matches!(error, crate::api::error::ApiError::Unauthorized) {
-                let _ = writeln!(err, "\n{}", prose(guidance::TOKEN, stderr_painter()));
+                let _ = writeln!(err, "\n{}", guidance::block(guidance::TOKEN));
             }
             return error.exit_code();
         }
@@ -442,6 +433,12 @@ async fn login(args: &LoginArgs, session: &Session) -> ExitCode {
     let interactive = wizard::is_interactive();
     let mut err = anstream::stderr();
 
+    // Interactive login always asks for the token — there is no flag to pass one
+    // in, on purpose — so there is always something the procedure is needed for.
+    if interactive {
+        wizard::introduce();
+    }
+
     let Identity {
         account,
         token,
@@ -469,7 +466,7 @@ async fn login(args: &LoginArgs, session: &Session) -> ExitCode {
             err,
             "no --org-id given, so no profile was written and nothing can be queried yet.\n"
         );
-        let _ = writeln!(err, "{}", prose(guidance::ORG, stderr_painter()));
+        let _ = writeln!(err, "{}", guidance::block(guidance::ORG));
         let _ = writeln!(
             err,
             "\nThen: ytcli auth login --account {account} --org-id <id> [--queue <QUEUE>]"
@@ -741,7 +738,7 @@ async fn verify(
                 let code = error.exit_code();
                 let reported = report(&error, code);
                 let mut err = anstream::stderr();
-                let _ = writeln!(err, "\n{}", prose(guidance::TOKEN, stderr_painter()));
+                let _ = writeln!(err, "\n{}", guidance::block(guidance::TOKEN));
                 return Err(reported);
             }
             Err(error) => last = Some(error),
@@ -755,7 +752,7 @@ async fn verify(
         code,
     );
     let mut err = anstream::stderr();
-    let _ = writeln!(err, "\n{}", prose(guidance::ORG, stderr_painter()));
+    let _ = writeln!(err, "\n{}", guidance::block(guidance::ORG));
     Err(reported)
 }
 

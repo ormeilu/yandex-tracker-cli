@@ -8,7 +8,7 @@ use crate::exit::ExitCode;
 #[derive(Debug, Subcommand)]
 pub enum GoalCommand {
     /// List goals.
-    #[command(long_about = crate::cli::help::GOAL_LIST)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::GOAL_LIST))]
     List {
         /// Free-text search over names and descriptions.
         #[arg(long, short = 'Q')]
@@ -18,7 +18,7 @@ pub enum GoalCommand {
         page: u32,
     },
     /// Show one goal.
-    #[command(long_about = crate::cli::help::GOAL_GET)]
+    #[command(long_about = crate::cli::help::md(crate::cli::help::GOAL_GET))]
     Get { id: String },
 }
 

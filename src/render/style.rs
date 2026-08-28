@@ -120,43 +120,6 @@ impl Painter {
     }
 }
 
-/// Style a block of guidance: headings stand out, URLs are worth spotting.
-///
-/// Applied to text we wrote, never to text from Tracker.
-#[must_use]
-pub fn prose(block: &str, paint: Painter) -> String {
-    block
-        .lines()
-        .map(|line| {
-            // A heading is a line that starts at the margin and ends in a colon.
-            if !line.starts_with(' ') && line.ends_with(':') {
-                return paint.paint(line, Palette::heading());
-            }
-            paint_urls(line, paint)
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-/// Underline every `http…` run in a line.
-fn paint_urls(line: &str, paint: Painter) -> String {
-    let mut out = String::with_capacity(line.len());
-    let mut rest = line;
-
-    while let Some(start) = rest.find("http") {
-        out.push_str(&rest[..start]);
-        let tail = &rest[start..];
-        let end = tail
-            .find(|c: char| c.is_whitespace() || c == ',')
-            .unwrap_or(tail.len());
-        out.push_str(&paint.paint(&tail[..end], Palette::url()));
-        rest = &tail[end..];
-    }
-
-    out.push_str(rest);
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -188,24 +151,6 @@ mod tests {
             plain.matches(' ').count(),
             "same visible width in both modes"
         );
-    }
-
-    #[test]
-    fn prose_leaves_the_words_alone() {
-        let block = "How to get a token:\n  Open https://example.com/new and sign in";
-        let styled = prose(block, Painter::colour());
-        let plain = prose(block, Painter::plain());
-
-        assert_eq!(plain, block);
-        assert!(styled.contains("https://example.com/new"));
-        assert!(styled.contains('\u{1b}'));
-    }
-
-    #[test]
-    fn a_url_ends_at_whitespace_not_at_the_end_of_the_line() {
-        let styled = prose("  see https://example.com and stop", Painter::colour());
-        assert!(styled.contains("https://example.com"));
-        assert!(styled.ends_with(" and stop"));
     }
 
     #[test]
