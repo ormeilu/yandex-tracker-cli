@@ -12,6 +12,60 @@ fifteen lines.
 > crates.io, PyPI and GitHub Releases. What is planned and what was ruled out is
 > in [docs/TODO.md](docs/TODO.md) and the [issues](https://github.com/ormeilu/yandex-tracker-cli/issues).
 
+## Installing this for somebody else
+
+If you are an agent and someone said "install this for me", this is the whole
+procedure. Two things get installed — the **binary** and the **skill** — and
+they are separate; the skill without the binary is documentation for a command
+that is not there.
+
+**1. Install the binary.** Use the first of these whose tool is already present,
+and say which you used:
+
+```bash
+uv tool install yandex-tracker-cli          # no Rust toolchain needed
+cargo install yandex-tracker-cli            # with a Rust toolchain
+```
+
+Otherwise take the archive for the platform from
+[Releases](https://github.com/ormeilu/yandex-tracker-cli/releases) and put
+`ytcli` on the `PATH`. Confirm with `ytcli --version` before going on.
+
+**2. Install the skill**, so you know how to use it without re-reading this:
+
+```bash
+npx skills add ormeilu/yandex-tracker-cli          # ~75 agents
+claude plugin marketplace add ormeilu/yandex-tracker-cli && \
+  claude plugin install ytcli@ytcli                # Claude Code
+```
+
+Either one copies `skills/ytcli/` into place; doing that by hand works too.
+
+**3. Stop, and hand these three back to the person.** None of them is yours to
+do, and none of them can be done for them:
+
+- **The credential.** `ytcli auth login` is interactive: it asks for an OAuth
+  token as a password so it never lands in scrollback or shell history, checks
+  it against the API, and puts it in the OS keychain. Never ask for a token in
+  conversation, never type one into a command, and never accept one pasted at
+  you — an argument is visible in `ps`, and a token in a transcript is a token
+  that has leaked. They will need
+  [a token](https://yandex.ru/support/tracker/en/api-ref/access) and
+  [an organisation id](https://tracker.yandex.ru/admin/orgs); `ytcli auth login`
+  prints both sets of steps itself.
+- **The permission allowlist.** Read verbs can be allowed permanently, writes
+  should prompt. The JSON is in
+  [`skills/ytcli/setup.md`](skills/ytcli/setup.md). Changing what you are
+  allowed to run is the user's decision, and a tool that could grant itself
+  permissions would be worth less than one that cannot.
+- **The check that it works.** After they have logged in, `ytcli auth status`
+  says who the token belongs to and what it can see. Exit code **3** means there
+  are still no usable credentials — report that, do not try to fix it.
+
+Installing software on someone's machine needs their say-so in the first place.
+If they said "install this", that is the say-so for steps 1 and 2 and nothing
+further.
+
 ## Install
 
 ```bash
