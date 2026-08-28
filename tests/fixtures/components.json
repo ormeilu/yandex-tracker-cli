@@ -1,0 +1,19 @@
+[
+  {
+    "self": "https://api.tracker.yandex.net/v3/components/1",
+    "id": 1,
+    "version": 1,
+    "name": "Billing",
+    "queue": {"self": "https://api.tracker.yandex.net/v3/queues/PROJ", "id": "2", "key": "PROJ", "display": "Storage"},
+    "lead": {"self": "https://api.tracker.yandex.net/v3/users/1", "id": "1", "display": "Ilya Lubenets", "login": "ilubenets"},
+    "assignAuto": true
+  },
+  {
+    "self": "https://api.tracker.yandex.net/v3/components/6",
+    "id": 6,
+    "version": 1,
+    "name": "Platform: backend",
+    "queue": {"id": "3", "key": "INFRA", "display": "Infrastructure"},
+    "assignAuto": false
+  }
+]

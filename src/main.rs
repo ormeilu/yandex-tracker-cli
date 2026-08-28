@@ -46,6 +46,7 @@ async fn run(cli: Cli) -> ExitCode {
         Command::Project(ref command) => ytcli::cli::project::run(command, &session).await,
         Command::Board(ref command) => ytcli::cli::board::run(command, &session).await,
         Command::Sprint(ref command) => ytcli::cli::sprint::run(command, &session).await,
+        Command::Component(ref command) => ytcli::cli::component::run(command, &session).await,
         Command::Portfolio(ref command) => ytcli::cli::portfolio::run(command, &session).await,
         Command::Goal(ref command) => ytcli::cli::goal::run(command, &session).await,
         Command::Attachment(ref command) => ytcli::cli::attachment::run(command, &session).await,

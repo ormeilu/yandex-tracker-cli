@@ -9,6 +9,7 @@ pub mod attachment;
 pub mod auth;
 pub mod board;
 pub mod cheatsheet;
+pub mod component;
 pub mod dict;
 pub mod entity;
 pub mod field;
@@ -120,6 +121,9 @@ pub enum Command {
     /// People in the organisation.
     #[command(subcommand)]
     User(user::UserCommand),
+    /// Components: the parts a queue splits its work by.
+    #[command(subcommand)]
+    Component(component::ComponentCommand),
     /// The values issues can take: types, priorities, statuses, resolutions.
     #[command(subcommand)]
     Dict(dict::DictCommand),

@@ -849,6 +849,27 @@ impl Client {
         })
     }
 
+    /// The components of one queue, or of the whole organisation.
+    ///
+    /// Tracker filters by queue itself, so `--queue` is a different path rather
+    /// than a listing narrowed here: asking for every component in order to
+    /// throw most of them away is the kind of cost this tool exists to avoid.
+    pub async fn components(&self, queue: Option<&str>) -> Result<Vec<Component>, ApiError> {
+        let (path, what) = match queue {
+            Some(queue) => (
+                format!("/v3/queues/{queue}/components"),
+                format!("components of queue {queue}"),
+            ),
+            None => ("/v3/components".to_owned(), "components".to_owned()),
+        };
+        let raw = self.get_value(&path, &what).await?;
+
+        Ok(raw
+            .as_array()
+            .map(|entries| entries.iter().filter_map(Component::parse).collect())
+            .unwrap_or_default())
+    }
+
     /// One of the four organisation-wide dictionaries.
     ///
     /// Small and unpaged — the largest of the four is statuses, in the dozens —
@@ -1718,6 +1739,56 @@ impl QueueField {
                 .unwrap_or("unknown")
                 .to_owned(),
             system: !id.contains("--"),
+        })
+    }
+}
+
+/// A part of the product a queue splits its work by.
+///
+/// `components` is a field on every issue, and until it could be listed a write
+/// to it was a guess. Half of them have no lead, so that column is genuinely
+/// optional rather than defensively so.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Component {
+    pub id: String,
+    pub name: String,
+    /// The queue it belongs to. A component belongs to exactly one.
+    pub queue: Option<String>,
+    pub lead: Option<String>,
+    /// Whether adding this component assigns the issue to its lead. It changes
+    /// what a write does, which is why it is a column and not a detail.
+    pub assign_auto: bool,
+    pub description: Option<String>,
+}
+
+impl Component {
+    fn parse(value: &Value) -> Option<Self> {
+        Some(Self {
+            id: id_of(value)?,
+            name: named(value),
+            queue: value
+                .get("queue")
+                .and_then(|queue| queue.get("key").or_else(|| queue.get("display")))
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned),
+            lead: value
+                .get("lead")
+                .and_then(|lead| {
+                    lead.get("login")
+                        .or_else(|| lead.get("display"))
+                        .or_else(|| lead.get("id"))
+                })
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned),
+            assign_auto: value
+                .get("assignAuto")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            description: value
+                .get("description")
+                .and_then(Value::as_str)
+                .filter(|text| !text.is_empty())
+                .map(ToOwned::to_owned),
         })
     }
 }

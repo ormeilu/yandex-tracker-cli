@@ -103,6 +103,10 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   ytcli user find ivan [--scan 5000]    Tracker has no user search, so this reads the
                                         directory and filters here; --scan caps the reading
 
+## component
+  ytcli component list [-q PROJ]        the names `--set components=` takes. AUTO means
+                                        the component reassigns the issue to its lead
+
 ## field, template
   ytcli field list                      every field the organisation defines, not one queue's
   ytcli field get storyPoints [--all]   what it holds and what values it accepts; a fixed

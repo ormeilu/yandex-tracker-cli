@@ -2,7 +2,7 @@
 
 use std::fmt::Write as _;
 
-use crate::api::{Automation, FieldSpec, Queue, QueueField, QueueSettings, Template};
+use crate::api::{Automation, Component, FieldSpec, Queue, QueueField, QueueSettings, Template};
 use crate::render::Context;
 use crate::render::style::Palette;
 use crate::render::table::{Column, render, tally};
@@ -259,6 +259,49 @@ fn accepts(field: &FieldSpec) -> String {
             ),
         Some(options) => options.values.join(", "),
     }
+}
+
+/// The components a queue splits its work by.
+///
+/// The name leads, because the name is what `--set components=…` takes; the id
+/// is beside it for the payloads that want one. `AUTO` is there because a
+/// component that assigns automatically changes what a write does, which is not
+/// something to discover afterwards.
+#[must_use]
+pub fn components(components: &[Component], scope: Option<&str>, ctx: &Context) -> String {
+    let columns = [
+        Column::new("NAME", 28, Palette::key()),
+        Column::whole("ID", 8, anstyle::Style::new()),
+        Column::whole("QUEUE", 12, anstyle::Style::new()),
+        Column::new("LEAD", 20, anstyle::Style::new()),
+        Column::by_value("AUTO", 6, |value| {
+            if value == "yes" {
+                Palette::warn()
+            } else {
+                Palette::label()
+            }
+        }),
+    ];
+
+    let rows: Vec<Vec<String>> = components
+        .iter()
+        .map(|component| {
+            vec![
+                component.name.clone(),
+                component.id.clone(),
+                component.queue.clone().unwrap_or_else(|| "-".to_owned()),
+                component.lead.clone().unwrap_or_else(|| "-".to_owned()),
+                if component.assign_auto { "yes" } else { "no" }.to_owned(),
+            ]
+        })
+        .collect();
+
+    let mut out = render(&columns, &rows, ctx);
+    out.push_str(&match scope {
+        Some(queue) => counted(queue, components.len(), ctx),
+        None => tally(components.len(), Some(components.len() as u64), None, ctx),
+    });
+    out
 }
 
 /// The versions a queue defines.

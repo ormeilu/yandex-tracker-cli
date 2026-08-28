@@ -588,6 +588,32 @@ async fn sprints_and_local_fields_answer_with_lists() {
         .unwrap_or_else(|error| panic!("local fields of {queue}: {error}"));
 }
 
+/// Components, which this organisation actually uses.
+///
+/// Worth a live test rather than a fixture alone: half of the ten it has carry
+/// no lead, which is the shape a fixture we wrote would not have thought to
+/// include, and the queue-scoped path has to agree with the organisation-wide
+/// one about which queue each belongs to.
+#[tokio::test]
+#[ignore = "needs real credentials"]
+async fn components_belong_to_the_queue_they_say_they_do() {
+    let client = client();
+    let all = client.components(None).await.expect("components");
+    let Some(queue) = all.iter().find_map(|component| component.queue.clone()) else {
+        return;
+    };
+
+    let scoped = client
+        .components(Some(&queue))
+        .await
+        .unwrap_or_else(|error| panic!("components of {queue}: {error}"));
+
+    assert!(!scoped.is_empty(), "{queue} answered with none of its own");
+    for component in &scoped {
+        assert_eq!(component.queue.as_deref(), Some(queue.as_str()));
+    }
+}
+
 /// The directory pages, and reports how many people it has.
 #[tokio::test]
 #[ignore = "needs real credentials"]

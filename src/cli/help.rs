@@ -557,6 +557,26 @@ ytcli queue get PROJ
 `issue create -q PROJ` with no type and no priority gets these, and nothing else
 says what they are.";
 
+pub const COMPONENT_LIST: &str = "\
+List components, in one queue or in the whole organisation.
+
+```
+ytcli component list
+ytcli component list -q PROJ
+```
+
+`components` is a field on every issue and takes the component's **name**, so
+without this listing a write to it is a guess — the same gap `dict list` closed
+for types and priorities.
+
+A component belongs to exactly one queue, and `--queue` is a different request
+rather than this listing filtered here: asking for every component in order to
+throw most of them away is the cost this tool exists to avoid.
+
+`AUTO` says the component assigns the issue to its lead when it is set. That
+changes what a write does, so it is a column rather than something to find out
+afterwards.";
+
 pub const FIELD_LIST: &str = "\
 List every field defined in the organisation.
 

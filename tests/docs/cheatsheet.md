@@ -218,6 +218,15 @@ shown 1 of 1 for PROJ
 ```
 
 ```console
+$ ytcli component list
+→ profile=test org=12345 (from YTCLI_PROFILE)
+Billing                      1        PROJ         ilubenets            yes
+Platform: backend            6        INFRA        -                    no
+shown 2 of 2
+
+```
+
+```console
 $ ytcli field get storyPoints
 → profile=test org=12345 (from YTCLI_PROFILE)
 storyPoints  Story Points
