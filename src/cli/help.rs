@@ -333,6 +333,14 @@ Show one project.
 
 Takes the long id from `project list`, not an issue key and not the short id.";
 
+pub const QUEUE_GET: &str = "\
+Show a queue and the defaults issues in it start with.
+
+  ytcli queue get PROJ
+
+`issue create -q PROJ` with no type and no priority gets these, and nothing else
+says what they are.";
+
 pub const FIELD_LIST: &str = "\
 List every field defined in the organisation.
 

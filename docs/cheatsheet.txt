@@ -55,6 +55,7 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
 
 ## queue
   ytcli queue list
+  ytcli queue get PROJ                  lead and the type/priority a new issue starts with
   ytcli queue fields PROJ               field keys, including custom ones for --fields
 
 ## field, template

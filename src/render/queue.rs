@@ -2,7 +2,7 @@
 
 use std::fmt::Write as _;
 
-use crate::api::{Queue, QueueField, Template};
+use crate::api::{Queue, QueueField, QueueSettings, Template};
 use crate::render::Context;
 use crate::render::style::Palette;
 use crate::render::table::{Column, render, tally};
@@ -82,6 +82,33 @@ pub fn fields(fields: &[QueueField], ctx: &Context) -> String {
             Palette::label()
         )
     );
+    out
+}
+
+/// One queue and the defaults an issue created in it starts with.
+#[must_use]
+pub fn settings(queue: &QueueSettings, ctx: &Context) -> String {
+    let mut out = String::with_capacity(200);
+    let paint = ctx.painter();
+    let label = |text: &str| paint.paint(text, Palette::label());
+
+    let _ = writeln!(
+        out,
+        "{}  {}",
+        paint.paint(&queue.key, Palette::key()),
+        queue.name
+    );
+    let _ = writeln!(
+        out,
+        "{} {}   {} {}   {} {}",
+        label("lead:"),
+        queue.lead.as_deref().unwrap_or("-"),
+        label("default type:"),
+        queue.default_type.as_deref().unwrap_or("-"),
+        label("default priority:"),
+        queue.default_priority.as_deref().unwrap_or("-"),
+    );
+
     out
 }
 

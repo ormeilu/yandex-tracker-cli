@@ -170,3 +170,10 @@ $ ytcli template list
 shown 1 of 1
 
 ```
+
+```console
+$ ytcli queue get PROJ
+PROJ  Product
+lead: ilubenets   default type: task   default priority: normal
+
+```

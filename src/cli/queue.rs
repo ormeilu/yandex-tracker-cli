@@ -12,6 +12,12 @@ pub enum QueueCommand {
     /// List queues visible to this profile.
     #[command(long_about = crate::cli::help::QUEUE_LIST)]
     List,
+    /// Show a queue and the defaults issues in it start with.
+    #[command(long_about = crate::cli::help::QUEUE_GET)]
+    Get {
+        /// Queue key, e.g. PROJ.
+        key: String,
+    },
     /// Show a queue's fields, including custom ones and their keys.
     #[command(long_about = crate::cli::help::QUEUE_FIELDS)]
     Fields {
@@ -31,6 +37,26 @@ pub async fn run(command: &QueueCommand, session: &Session) -> ExitCode {
             Ok(queues) => render(&queues, session, |queues| {
                 queue::queues(queues, &session.render)
             }),
+            Err(error) => {
+                let code = error.exit_code();
+                report(&error, code)
+            }
+        },
+        QueueCommand::Get { key } => match client.queue(key).await {
+            Ok(settings) => {
+                let rendered = match session.render.format {
+                    Format::Text => Ok(queue::settings(&settings, &session.render)),
+                    Format::JsonRaw => machine(&settings, Format::Json),
+                    other => machine(&settings, other),
+                };
+                match rendered {
+                    Ok(text) => {
+                        emit(&text);
+                        ExitCode::Success
+                    }
+                    Err(error) => report(&error, ExitCode::Failure),
+                }
+            }
             Err(error) => {
                 let code = error.exit_code();
                 report(&error, code)

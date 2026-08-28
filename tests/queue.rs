@@ -89,3 +89,44 @@ async fn an_unknown_queue_exits_four() {
         .code(4)
         .stderr(predicate::str::contains("queue NOPE fields not found"));
 }
+
+/// The defaults are the reason to read a queue: `issue create -q PROJ` with no
+/// type and no priority gets them, and nothing else says what they are.
+#[tokio::test]
+async fn queue_get_says_what_a_new_issue_starts_as() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v3/queues/PROJ"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("queue.json")))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness.run(&["queue", "get", "PROJ"]).assert().success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert!(stdout.contains("PROJ"));
+    assert!(stdout.contains("default type: task"), "{stdout}");
+    assert!(stdout.contains("default priority: normal"), "{stdout}");
+    // The key, not the localised label: that is what `issue create` takes.
+    assert!(!stdout.contains("Normal"), "{stdout}");
+}
+
+/// A queue nobody can see is a 404, and a 404 is exit code 4.
+#[tokio::test]
+async fn reading_an_unknown_queue_exits_four() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v3/queues/NOPE"))
+        .respond_with(ResponseTemplate::new(404).set_body_json(serde_json::json!({
+            "errorMessages": ["Queue does not exist."],
+            "statusCode": 404
+        })))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&["queue", "get", "NOPE"])
+        .assert()
+        .code(4)
+        .stderr(predicate::str::contains("queue NOPE not found"));
+}

@@ -1,0 +1,26 @@
+{
+  "self": "https://api.tracker.yandex.net/v3/queues/PROJ",
+  "id": 1,
+  "key": "PROJ",
+  "version": 2,
+  "name": "Product",
+  "lead": {
+    "self": "https://api.tracker.yandex.net/v3/users/1120000000000002",
+    "id": "1120000000000002",
+    "login": "ilubenets",
+    "display": "Ilya"
+  },
+  "assignAuto": false,
+  "defaultType": {
+    "self": "https://api.tracker.yandex.net/v3/issuetypes/2",
+    "id": "2",
+    "key": "task",
+    "display": "Task"
+  },
+  "defaultPriority": {
+    "self": "https://api.tracker.yandex.net/v3/priorities/3",
+    "id": "3",
+    "key": "normal",
+    "display": "Normal"
+  }
+}

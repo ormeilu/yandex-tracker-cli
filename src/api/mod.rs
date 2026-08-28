@@ -612,6 +612,15 @@ impl Client {
             .unwrap_or_default())
     }
 
+    /// One queue and its settings.
+    pub async fn queue(&self, key: &str) -> Result<QueueSettings, ApiError> {
+        let raw = self
+            .get_value(&format!("/v3/queues/{key}"), &format!("queue {key}"))
+            .await?;
+
+        QueueSettings::parse(&raw).ok_or_else(|| ApiError::NotFound(format!("queue {key}")))
+    }
+
     /// Every field defined in the organisation, not just one queue's.
     ///
     /// `queue fields` answers "what can I set on an issue here"; this answers
@@ -892,6 +901,53 @@ impl Sprint {
                 .get("endDate")
                 .and_then(Value::as_str)
                 .map(ToOwned::to_owned),
+        })
+    }
+}
+
+/// A queue with the settings that decide what an issue in it starts as.
+///
+/// The defaults are the point: `issue create -q PROJ` without a type or a
+/// priority gets these, and nothing else says what they are.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct QueueSettings {
+    pub key: String,
+    pub name: String,
+    pub lead: Option<String>,
+    pub default_type: Option<String>,
+    pub default_priority: Option<String>,
+    pub version: Option<u64>,
+}
+
+impl QueueSettings {
+    fn parse(value: &Value) -> Option<Self> {
+        let named = |name: &str| {
+            value
+                .get(name)
+                .and_then(|field| field.get("key").or_else(|| field.get("display")))
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned)
+        };
+
+        Some(Self {
+            key: value.get("key").and_then(Value::as_str)?.to_owned(),
+            name: value
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            lead: value
+                .get("lead")
+                .and_then(|lead| {
+                    lead.get("login")
+                        .or_else(|| lead.get("display"))
+                        .or_else(|| lead.get("id"))
+                })
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned),
+            default_type: named("defaultType"),
+            default_priority: named("defaultPriority"),
+            version: value.get("version").and_then(Value::as_u64),
         })
     }
 }
