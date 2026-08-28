@@ -8,7 +8,9 @@
 
 use serde_json::{Map, Value};
 
-use crate::api::models::{Attachment, Comment, Entity, Issue, Link, LinkKind, User};
+use crate::api::models::{
+    Attachment, ChecklistItem, Comment, Entity, Issue, Link, LinkKind, User, Worklog,
+};
 
 /// System fields we map explicitly. Anything outside this set is treated as a
 /// custom field and lands in `extra`.
@@ -277,6 +279,60 @@ pub fn comment(value: &Value) -> Option<Comment> {
         author: user(value.get("createdBy")),
         created_at: timestamp(value.get("createdAt")),
     })
+}
+
+/// Parse one entry of `GET /v3/issues/{key}/worklog`.
+#[must_use]
+pub fn worklog(value: &Value) -> Option<Worklog> {
+    Some(Worklog {
+        id: identifier(value.get("id"))?,
+        duration: value
+            .get("duration")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+        author: user(value.get("createdBy")),
+        start: timestamp(value.get("start")),
+        comment: value
+            .get("comment")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+    })
+}
+
+/// Parse one entry of `GET /v3/issues/{key}/checklistItems`.
+#[must_use]
+pub fn checklist_item(value: &Value) -> Option<ChecklistItem> {
+    Some(ChecklistItem {
+        id: identifier(value.get("id"))?,
+        text: value
+            .get("text")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+        checked: value
+            .get("checked")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        assignee: user(value.get("assignee")),
+        deadline: value
+            .get("deadline")
+            .and_then(|deadline| deadline.get("date").or(Some(deadline)))
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+    })
+}
+
+/// An id, whether Tracker sent it as a string or a number.
+///
+/// Worklog and checklist ids come back as numbers on some endpoints and strings
+/// on others, and a caller passes whichever they were given straight back.
+fn identifier(value: Option<&Value>) -> Option<String> {
+    match value? {
+        Value::String(text) => Some(text.clone()),
+        Value::Number(number) => Some(number.to_string()),
+        _ => None,
+    }
 }
 
 /// The name a caller can actually type for a custom field.

@@ -141,6 +141,37 @@ pub struct Comment {
     pub created_at: Option<jiff::Timestamp>,
 }
 
+/// One entry in an issue's worklog.
+///
+/// `duration` stays in Tracker's ISO 8601 form here — the API's word for it,
+/// which is what a `--format json` caller is scripting against.
+/// [`crate::api::duration::human`] is what turns it into something to read.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Worklog {
+    pub id: String,
+    pub duration: String,
+    #[serde(default)]
+    pub author: Option<User>,
+    #[serde(default)]
+    pub start: Option<jiff::Timestamp>,
+    /// What the time was spent on, when whoever logged it said.
+    #[serde(default)]
+    pub comment: Option<String>,
+}
+
+/// One line of an issue's checklist.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ChecklistItem {
+    pub id: String,
+    pub text: String,
+    pub checked: bool,
+    /// A checklist item can carry an assignee and a deadline of its own.
+    #[serde(default)]
+    pub assignee: Option<User>,
+    #[serde(default)]
+    pub deadline: Option<String>,
+}
+
 /// A project, portfolio or goal.
 ///
 /// These live behind one endpoint family and differ only in which fields are

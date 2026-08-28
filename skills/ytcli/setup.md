@@ -92,6 +92,8 @@ allowlist is worth having. For Claude Code, in `.claude/settings.json`:
       "Bash(ytcli project get:*)",
       "Bash(ytcli goal list:*)",
       "Bash(ytcli goal get:*)",
+      "Bash(ytcli issue worklogs:*)",
+      "Bash(ytcli issue checklist:*)",
       "Bash(ytcli attachment list:*)",
       "Bash(ytcli attachment show:*)",
       "Bash(ytcli auth status:*)",
@@ -103,6 +105,9 @@ allowlist is worth having. For Claude Code, in `.claude/settings.json`:
       "Bash(ytcli issue update:*)",
       "Bash(ytcli issue comment:*)",
       "Bash(ytcli issue transition:*)",
+      "Bash(ytcli issue worklog:*)",
+      "Bash(ytcli issue check:*)",
+      "Bash(ytcli issue link:*)",
       "Bash(ytcli attachment upload:*)",
       "Bash(ytcli auth login:*)",
       "Bash(ytcli auth logout:*)"

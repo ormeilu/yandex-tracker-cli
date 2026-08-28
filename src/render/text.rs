@@ -7,7 +7,7 @@
 
 use std::fmt::Write as _;
 
-use crate::api::models::{Comment, Issue, Link, Page, User};
+use crate::api::models::{ChecklistItem, Comment, Issue, Link, Page, User, Worklog};
 use crate::render::style::Palette;
 use crate::render::table::Column;
 use crate::render::{Context, untrusted};
@@ -138,6 +138,157 @@ pub fn comments(key: &str, comments: &[Comment], ctx: &Context) -> String {
         "{}",
         paint.paint(
             &format!("shown {} of {} for {key}", comments.len(), comments.len()),
+            Palette::label()
+        )
+    );
+    out
+}
+
+/// Render an issue's worklog.
+///
+/// The duration is shown the way it is typed — `1h 30m`, not `PT1H30M`. The
+/// ISO form is what `--format json` carries, because that is the API's own
+/// vocabulary and what a script is written against.
+#[must_use]
+pub fn worklogs(key: &str, worklogs: &[Worklog], ctx: &Context) -> String {
+    let columns = [
+        Column::whole("ID", 12, Palette::key()),
+        Column::whole("DURATION", 10, anstyle::Style::new()),
+        Column::whole("WHEN", 12, anstyle::Style::new()),
+        Column::new("WHO", 16, anstyle::Style::new()),
+        Column::new("COMMENT", 40, Palette::untrusted()),
+    ];
+
+    let rows: Vec<Vec<String>> = worklogs
+        .iter()
+        .map(|entry| {
+            vec![
+                entry.id.clone(),
+                crate::api::duration::human(&entry.duration),
+                entry.start.map_or_else(
+                    || "-".to_owned(),
+                    |start| start.to_string().chars().take(10).collect(),
+                ),
+                who(entry.author.as_ref()).to_owned(),
+                entry.comment.clone().unwrap_or_else(|| "-".to_owned()),
+            ]
+        })
+        .collect();
+
+    let mut out = crate::render::table::render(&columns, &rows, ctx);
+    let paint = ctx.painter();
+    let total = crate::api::duration::human(&total_duration(worklogs));
+    let _ = writeln!(
+        out,
+        "{}",
+        paint.paint(
+            &format!(
+                "shown {} of {} for {key} — {total} total",
+                rows.len(),
+                rows.len()
+            ),
+            Palette::label()
+        )
+    );
+    out
+}
+
+/// The sum of a worklog, in ISO 8601.
+///
+/// Days and weeks are left as they came: Tracker counts a working day as eight
+/// hours and a working week as five days, and quietly turning `P1D` into 24
+/// hours here would produce a total nobody's timesheet agrees with.
+fn total_duration(worklogs: &[Worklog]) -> String {
+    let (mut weeks, mut days, mut hours, mut minutes, mut seconds) = (0u64, 0u64, 0u64, 0u64, 0u64);
+
+    for entry in worklogs {
+        let Some(rest) = entry.duration.strip_prefix('P') else {
+            continue;
+        };
+        let mut number = String::new();
+        for character in rest.chars() {
+            if character.is_ascii_digit() {
+                number.push(character);
+                continue;
+            }
+            let Ok(value) = number.parse::<u64>() else {
+                number.clear();
+                continue;
+            };
+            match character {
+                'W' => weeks += value,
+                'D' => days += value,
+                'H' => hours += value,
+                'M' => minutes += value,
+                'S' => seconds += value,
+                _ => {}
+            }
+            number.clear();
+        }
+    }
+
+    minutes += seconds / 60;
+    seconds %= 60;
+    hours += minutes / 60;
+    minutes %= 60;
+
+    let mut out = String::from("P");
+    for (value, unit) in [(weeks, 'W'), (days, 'D')] {
+        if value > 0 {
+            let _ = write!(out, "{value}{unit}");
+        }
+    }
+    let mut time = String::new();
+    for (value, unit) in [(hours, 'H'), (minutes, 'M'), (seconds, 'S')] {
+        if value > 0 {
+            let _ = write!(time, "{value}{unit}");
+        }
+    }
+    if !time.is_empty() {
+        let _ = write!(out, "T{time}");
+    }
+    if out == "P" { "PT0M".to_owned() } else { out }
+}
+
+/// Render an issue's checklist.
+#[must_use]
+pub fn checklist(key: &str, items: &[ChecklistItem], ctx: &Context) -> String {
+    let mut out = String::with_capacity(items.len() * 64 + 32);
+    let paint = ctx.painter();
+
+    for item in items {
+        // The box is the state, and it is the first thing on the line so a
+        // column of them can be read at a glance.
+        let box_ = if item.checked { "[x]" } else { "[ ]" };
+        let assignee = match item.assignee.as_ref() {
+            Some(user) => format!(" @{}", who(Some(user))),
+            None => String::new(),
+        };
+        let deadline = match item.deadline.as_deref() {
+            Some(date) => format!(" due {date}"),
+            None => String::new(),
+        };
+        let _ = writeln!(
+            out,
+            "{} {} {}{}{}",
+            paint.paint(&item.id, Palette::key()),
+            box_,
+            paint.paint(&item.text, Palette::untrusted()),
+            assignee,
+            deadline
+        );
+    }
+
+    let done = items.iter().filter(|item| item.checked).count();
+    let _ = writeln!(
+        out,
+        "{}",
+        paint.paint(
+            &format!(
+                "shown {} of {} for {key} — {done} done",
+                items.len(),
+                items.len()
+            ),
             Palette::label()
         )
     );

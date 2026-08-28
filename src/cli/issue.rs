@@ -72,6 +72,21 @@ pub enum IssueCommand {
         /// Comment body; `-` reads from stdin.
         text: String,
     },
+    /// Show the worklog of an issue.
+    #[command(long_about = crate::cli::help::ISSUE_WORKLOGS)]
+    Worklogs { key: String },
+    /// Show the checklist of an issue.
+    #[command(long_about = crate::cli::help::ISSUE_CHECKLIST)]
+    Checklist { key: String },
+    /// Record or remove time spent. Every verb here writes.
+    #[command(subcommand, long_about = crate::cli::help::ISSUE_WORKLOG)]
+    Worklog(WorklogCommand),
+    /// Change an issue's checklist. Every verb here writes.
+    #[command(subcommand, long_about = crate::cli::help::ISSUE_CHECK)]
+    Check(CheckCommand),
+    /// Link or unlink issues. Every verb here writes.
+    #[command(subcommand, long_about = crate::cli::help::ISSUE_LINK)]
+    Link(LinkCommand),
     /// Move an issue through a workflow transition.
     #[command(long_about = crate::cli::help::ISSUE_TRANSITION)]
     Transition {
@@ -79,6 +94,75 @@ pub enum IssueCommand {
         /// Transition id; omit to list what is available.
         transition: Option<String>,
     },
+}
+
+/// Writing to a worklog.
+///
+/// Reading it is `issue worklogs`, deliberately a different word rather than a
+/// `list` under here: a host allowlists by command prefix, and a group holding
+/// both a read and a write cannot be allowed without allowing the writes too.
+#[derive(Debug, Subcommand)]
+pub enum WorklogCommand {
+    /// Record time spent on an issue.
+    #[command(long_about = crate::cli::help::WORKLOG_ADD)]
+    Add {
+        key: String,
+        /// How long: 1h30m, 45m, 2d, or an ISO 8601 duration.
+        duration: String,
+        /// What the time went on.
+        #[arg(long, short = 'm')]
+        comment: Option<String>,
+        /// When the work started, as a date or a timestamp. Defaults to now.
+        #[arg(long)]
+        start: Option<String>,
+    },
+    /// Remove one worklog entry.
+    #[command(long_about = crate::cli::help::WORKLOG_DELETE)]
+    Delete { key: String, id: String },
+}
+
+/// Writing to a checklist. Reading it is `issue checklist`.
+#[derive(Debug, Subcommand)]
+pub enum CheckCommand {
+    /// Add a line to the checklist.
+    #[command(long_about = crate::cli::help::CHECK_ADD)]
+    Add {
+        key: String,
+        text: String,
+        #[arg(long)]
+        assignee: Option<String>,
+        /// Deadline, as `2026-09-01`.
+        #[arg(long)]
+        deadline: Option<String>,
+    },
+    /// Tick a line off.
+    #[command(long_about = crate::cli::help::CHECK_TICK)]
+    Tick { key: String, id: String },
+    /// Put a ticked line back.
+    #[command(long_about = crate::cli::help::CHECK_UNTICK)]
+    Untick { key: String, id: String },
+    /// Remove a line.
+    #[command(long_about = crate::cli::help::CHECK_DELETE)]
+    Delete { key: String, id: String },
+}
+
+/// Writing links. Reading them is `issue links`.
+#[derive(Debug, Subcommand)]
+pub enum LinkCommand {
+    /// Link two issues.
+    #[command(long_about = crate::cli::help::LINK_ADD)]
+    Add {
+        key: String,
+        /// Relationship from this issue to the other: relates, depends,
+        /// is-dependent-by, subtask, parent, duplicates, is-duplicated-by,
+        /// epic, has-epic.
+        relation: String,
+        /// The other issue.
+        other: String,
+    },
+    /// Remove a link, by the link id `issue links` prints.
+    #[command(long_about = crate::cli::help::LINK_DELETE)]
+    Delete { key: String, id: String },
 }
 
 /// Search arguments shared by `find` and `count`.
@@ -148,7 +232,308 @@ pub async fn run(command: &IssueCommand, session: &Session) -> ExitCode {
         IssueCommand::Transition { key, transition } => {
             transition_cmd(key, transition.as_deref(), session).await
         }
+        IssueCommand::Worklogs { key } => worklogs(key, session).await,
+        IssueCommand::Checklist { key } => checklist(key, session).await,
+        IssueCommand::Worklog(command) => worklog_write(command, session).await,
+        IssueCommand::Check(command) => check_write(command, session).await,
+        IssueCommand::Link(command) => link_write(command, session).await,
     }
+}
+
+/// Read an issue's worklog.
+async fn worklogs(target: &str, session: &Session) -> ExitCode {
+    let (client, key) = match session.client_for(target) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    match client.worklogs(&key).await {
+        Ok(entries) => {
+            let rendered = match session.render.format {
+                Format::Text => Ok(text::worklogs(&key, &entries, &session.render)),
+                other => machine(&entries, other),
+            };
+            finish(rendered)
+        }
+        Err(error) => {
+            let code = error.exit_code();
+            report(&error, code)
+        }
+    }
+}
+
+/// Read an issue's checklist.
+async fn checklist(target: &str, session: &Session) -> ExitCode {
+    let (client, key) = match session.client_for(target) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    match client.checklist(&key).await {
+        Ok(items) => {
+            let rendered = match session.render.format {
+                Format::Text => Ok(text::checklist(&key, &items, &session.render)),
+                other => machine(&items, other),
+            };
+            finish(rendered)
+        }
+        Err(error) => {
+            let code = error.exit_code();
+            report(&error, code)
+        }
+    }
+}
+
+async fn worklog_write(command: &WorklogCommand, session: &Session) -> ExitCode {
+    match command {
+        WorklogCommand::Add {
+            key,
+            duration,
+            comment,
+            start,
+        } => {
+            let (client, key) = match session.client_for(key) {
+                Ok(pair) => pair,
+                Err(code) => return code,
+            };
+
+            let iso = match crate::api::duration::to_iso8601(duration) {
+                Ok(iso) => iso,
+                Err(error) => return report(&error, ExitCode::ConfirmationRequired),
+            };
+
+            let mut body = serde_json::Map::new();
+            body.insert("duration".to_owned(), serde_json::json!(iso));
+            // Tracker requires a start; "now" is what somebody logging time at
+            // the end of the work means, and it is what they would type.
+            body.insert(
+                "start".to_owned(),
+                serde_json::json!(start.clone().unwrap_or_else(now_for_tracker)),
+            );
+            if let Some(comment) = comment {
+                body.insert("comment".to_owned(), serde_json::json!(comment));
+            }
+            let body = serde_json::Value::Object(body);
+
+            let targets = [key.clone()];
+            let intent = Intent {
+                action: &format!("log {duration} against {key}"),
+                targets: &targets,
+                body: &body,
+            };
+            if let Gate::Stop(code) = check(&intent, session) {
+                return code;
+            }
+
+            match client.add_worklog(&key, &body).await {
+                Ok(entry) => {
+                    emit(&format!(
+                        "{key} worklog {} {}\n",
+                        entry.id,
+                        crate::api::duration::human(&entry.duration)
+                    ));
+                    ExitCode::Success
+                }
+                Err(error) => {
+                    let code = error.exit_code();
+                    report(&error, code)
+                }
+            }
+        }
+        WorklogCommand::Delete { key, id } => {
+            delete_with_gate(key, id, session, "worklog", |client, key, id| {
+                Box::pin(async move { client.delete_worklog(key, id).await })
+            })
+            .await
+        }
+    }
+}
+
+async fn check_write(command: &CheckCommand, session: &Session) -> ExitCode {
+    match command {
+        CheckCommand::Add {
+            key,
+            text: line,
+            assignee,
+            deadline,
+        } => {
+            let (client, key) = match session.client_for(key) {
+                Ok(pair) => pair,
+                Err(code) => return code,
+            };
+
+            let mut body = serde_json::Map::new();
+            body.insert("text".to_owned(), serde_json::json!(line));
+            if let Some(assignee) = assignee {
+                body.insert("assignee".to_owned(), serde_json::json!(assignee));
+            }
+            if let Some(deadline) = deadline {
+                body.insert(
+                    "deadline".to_owned(),
+                    serde_json::json!({ "date": deadline }),
+                );
+            }
+            let body = serde_json::Value::Object(body);
+
+            let targets = [key.clone()];
+            let intent = Intent {
+                action: &format!("add a checklist line to {key}"),
+                targets: &targets,
+                body: &body,
+            };
+            if let Gate::Stop(code) = check(&intent, session) {
+                return code;
+            }
+
+            match client.add_checklist_item(&key, &body).await {
+                Ok(items) => {
+                    emit(&text::checklist(&key, &items, &session.render));
+                    ExitCode::Success
+                }
+                Err(error) => {
+                    let code = error.exit_code();
+                    report(&error, code)
+                }
+            }
+        }
+        CheckCommand::Tick { key, id } => set_checked(key, id, true, session).await,
+        CheckCommand::Untick { key, id } => set_checked(key, id, false, session).await,
+        CheckCommand::Delete { key, id } => {
+            delete_with_gate(key, id, session, "checklist item", |client, key, id| {
+                Box::pin(async move { client.delete_checklist_item(key, id).await })
+            })
+            .await
+        }
+    }
+}
+
+async fn set_checked(target: &str, id: &str, checked: bool, session: &Session) -> ExitCode {
+    let (client, key) = match session.client_for(target) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    let body = serde_json::json!({ "checked": checked });
+    let targets = [key.clone()];
+    let verb = if checked { "tick" } else { "untick" };
+    let intent = Intent {
+        action: &format!("{verb} checklist item {id} of {key}"),
+        targets: &targets,
+        body: &body,
+    };
+    if let Gate::Stop(code) = check(&intent, session) {
+        return code;
+    }
+
+    match client.update_checklist_item(&key, id, &body).await {
+        Ok(items) => {
+            emit(&text::checklist(&key, &items, &session.render));
+            ExitCode::Success
+        }
+        Err(error) => {
+            let code = error.exit_code();
+            report(&error, code)
+        }
+    }
+}
+
+async fn link_write(command: &LinkCommand, session: &Session) -> ExitCode {
+    match command {
+        LinkCommand::Add {
+            key,
+            relation,
+            other,
+        } => {
+            let (client, key) = match session.client_for(key) {
+                Ok(pair) => pair,
+                Err(code) => return code,
+            };
+
+            let body = serde_json::json!({ "relationship": relation, "issue": other });
+            let targets = [key.clone()];
+            let intent = Intent {
+                action: &format!("link {key} {relation} {other}"),
+                targets: &targets,
+                body: &body,
+            };
+            if let Gate::Stop(code) = check(&intent, session) {
+                return code;
+            }
+
+            match client.add_link(&key, relation, other).await {
+                Ok(()) => {
+                    emit(&format!("{key} {relation} {other}\n"));
+                    ExitCode::Success
+                }
+                Err(error) => {
+                    let code = error.exit_code();
+                    report(&error, code)
+                }
+            }
+        }
+        LinkCommand::Delete { key, id } => {
+            delete_with_gate(key, id, session, "link", |client, key, id| {
+                Box::pin(async move { client.delete_link(key, id).await })
+            })
+            .await
+        }
+    }
+}
+
+/// The shape every deletion here shares: announce, gate, delete, say so.
+///
+/// Tracker has no undelete for any of these, and none of them is reported by
+/// anything else afterwards, so the line printed at the end is the only record
+/// the caller gets.
+async fn delete_with_gate<F>(
+    target: &str,
+    id: &str,
+    session: &Session,
+    what: &str,
+    delete: F,
+) -> ExitCode
+where
+    F: for<'a> FnOnce(
+        &'a crate::api::Client,
+        &'a str,
+        &'a str,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<(), crate::api::error::ApiError>> + 'a>,
+    >,
+{
+    let (client, key) = match session.client_for(target) {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+
+    let body = serde_json::json!({ "delete": id });
+    let targets = [key.clone()];
+    let intent = Intent {
+        action: &format!("delete {what} {id} of {key}"),
+        targets: &targets,
+        body: &body,
+    };
+    if let Gate::Stop(code) = check(&intent, session) {
+        return code;
+    }
+
+    match delete(&client, &key, id).await {
+        Ok(()) => {
+            emit(&format!("{key} {what} {id} deleted\n"));
+            ExitCode::Success
+        }
+        Err(error) => {
+            let code = error.exit_code();
+            report(&error, code)
+        }
+    }
+}
+
+/// Now, in the form Tracker takes for a worklog start.
+fn now_for_tracker() -> String {
+    jiff::Zoned::now()
+        .strftime("%Y-%m-%dT%H:%M:%S%.3f%z")
+        .to_string()
 }
 
 /// Fetch one issue and render it at whichever rung of the ladder was asked for.

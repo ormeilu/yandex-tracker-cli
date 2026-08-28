@@ -3,6 +3,7 @@
 //! We talk to the API directly instead of using the official Python-era client:
 //! see `docs/adr/0004-own-http-client.md`.
 
+pub mod duration;
 pub mod error;
 pub mod models;
 pub mod parse;
@@ -16,7 +17,9 @@ use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderName, HeaderValue,
 use serde_json::Value;
 
 use crate::api::error::ApiError;
-use crate::api::models::{Attachment, Comment, Entity, Issue, Link, Page, User};
+use crate::api::models::{
+    Attachment, ChecklistItem, Comment, Entity, Issue, Link, Page, User, Worklog,
+};
 use crate::config::OrgKind;
 
 /// Default API root. Overridable so tests can point at a `wiremock` server.
@@ -227,6 +230,138 @@ impl Client {
             )
             .await?;
         parse::comment(&value).ok_or_else(|| ApiError::NotFound("created comment".to_owned()))
+    }
+
+    /// `GET /v3/issues/{key}/worklog` — every entry, oldest first.
+    pub async fn worklogs(&self, key: &str) -> Result<Vec<Worklog>, ApiError> {
+        let raw = self
+            .get_value(
+                &format!("/v3/issues/{key}/worklog"),
+                &format!("issue {key} worklog"),
+            )
+            .await?;
+
+        Ok(raw
+            .as_array()
+            .map(|entries| entries.iter().filter_map(parse::worklog).collect())
+            .unwrap_or_default())
+    }
+
+    /// `POST /v3/issues/{key}/worklog` — record time spent.
+    pub async fn add_worklog(&self, key: &str, body: &Value) -> Result<Worklog, ApiError> {
+        let (value, _) = self
+            .post_value(
+                &format!("/v3/issues/{key}/worklog"),
+                body,
+                &format!("issue {key} worklog"),
+            )
+            .await?;
+        parse::worklog(&value).ok_or_else(|| ApiError::NotFound("created worklog".to_owned()))
+    }
+
+    /// `DELETE /v3/issues/{key}/worklog/{id}`.
+    pub async fn delete_worklog(&self, key: &str, id: &str) -> Result<(), ApiError> {
+        self.send_value(
+            reqwest::Method::DELETE,
+            &format!("/v3/issues/{key}/worklog/{id}"),
+            None,
+            &format!("worklog {id} of issue {key}"),
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// `GET /v3/issues/{key}/checklistItems`.
+    pub async fn checklist(&self, key: &str) -> Result<Vec<ChecklistItem>, ApiError> {
+        let raw = self
+            .get_value(
+                &format!("/v3/issues/{key}/checklistItems"),
+                &format!("issue {key} checklist"),
+            )
+            .await?;
+
+        Ok(raw
+            .as_array()
+            .map(|entries| entries.iter().filter_map(parse::checklist_item).collect())
+            .unwrap_or_default())
+    }
+
+    /// `POST /v3/issues/{key}/checklistItems` — add a line.
+    ///
+    /// Tracker answers with the whole issue rather than the item, so the list
+    /// comes back out of the issue's own `checklistItems`.
+    pub async fn add_checklist_item(
+        &self,
+        key: &str,
+        body: &Value,
+    ) -> Result<Vec<ChecklistItem>, ApiError> {
+        let (value, _) = self
+            .post_value(
+                &format!("/v3/issues/{key}/checklistItems"),
+                body,
+                &format!("issue {key} checklist"),
+            )
+            .await?;
+        Ok(checklist_of(&value))
+    }
+
+    /// `PATCH /v3/issues/{key}/checklistItems/{id}` — tick, untick or reword.
+    pub async fn update_checklist_item(
+        &self,
+        key: &str,
+        id: &str,
+        body: &Value,
+    ) -> Result<Vec<ChecklistItem>, ApiError> {
+        let (value, _) = self
+            .send_value(
+                reqwest::Method::PATCH,
+                &format!("/v3/issues/{key}/checklistItems/{id}"),
+                Some(body),
+                &format!("checklist item {id} of issue {key}"),
+            )
+            .await?;
+        Ok(checklist_of(&value))
+    }
+
+    /// `DELETE /v3/issues/{key}/checklistItems/{id}`.
+    pub async fn delete_checklist_item(&self, key: &str, id: &str) -> Result<(), ApiError> {
+        self.send_value(
+            reqwest::Method::DELETE,
+            &format!("/v3/issues/{key}/checklistItems/{id}"),
+            None,
+            &format!("checklist item {id} of issue {key}"),
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// `POST /v3/issues/{key}/links` — link two issues.
+    pub async fn add_link(
+        &self,
+        key: &str,
+        relationship: &str,
+        other: &str,
+    ) -> Result<(), ApiError> {
+        let body = serde_json::json!({ "relationship": relationship, "issue": other });
+        self.post_value(
+            &format!("/v3/issues/{key}/links"),
+            &body,
+            &format!("issue {key} links"),
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// `DELETE /v3/issues/{key}/links/{id}`.
+    pub async fn delete_link(&self, key: &str, id: &str) -> Result<(), ApiError> {
+        self.send_value(
+            reqwest::Method::DELETE,
+            &format!("/v3/issues/{key}/links/{id}"),
+            None,
+            &format!("link {id} of issue {key}"),
+        )
+        .await?;
+        Ok(())
     }
 
     /// Transitions available from the issue's current status.
@@ -581,6 +716,22 @@ impl QueueField {
             system: !id.contains("--"),
         })
     }
+}
+
+/// The checklist out of whatever Tracker answered a checklist write with.
+///
+/// It replies with the issue, not the item, so the list is under
+/// `checklistItems`; a bare array is accepted too, because an endpoint that
+/// changes its mind about the envelope should not empty somebody's checklist.
+fn checklist_of(value: &Value) -> Vec<ChecklistItem> {
+    let entries = value
+        .get("checklistItems")
+        .and_then(Value::as_array)
+        .or_else(|| value.as_array());
+
+    entries
+        .map(|entries| entries.iter().filter_map(parse::checklist_item).collect())
+        .unwrap_or_default()
 }
 
 /// Turn a response into either its body or a typed error.

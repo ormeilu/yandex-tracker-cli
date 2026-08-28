@@ -95,6 +95,11 @@ const UNRUNNABLE: &[(&str, &str)] = &[
     ("issue update", "a write"),
     ("issue comment", "a write"),
     ("issue transition", "a write"),
+    ("issue worklogs", "no recorded worklog fixture yet"),
+    ("issue checklist", "no recorded checklist fixture yet"),
+    ("issue worklog", "a write"),
+    ("issue check", "a write"),
+    ("issue link", "a write"),
     ("attachment list", "no recorded attachment fixture yet"),
     (
         "attachment show",

@@ -38,6 +38,8 @@ Labels split the work by area: `area:issues`, `area:entities`,
   than as clap's defaults. Both are checked against the binary by tests, since a
   stale example is acted on rather than noticed.
 
+- Worklogs, checklists and link editing, with reads and writes under separate
+  command prefixes so an allowlist cannot be stretched from one into the other.
 - Image attachments drawn in the terminals that can draw them, and a next step
   printed everywhere else.
 - Documentation that is executed: the README and cheatsheet examples run as

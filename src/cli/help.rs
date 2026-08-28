@@ -155,6 +155,142 @@ Add a comment.
 What you write is visible to everyone in the organisation and is not reliably
 deletable. Do not put credentials or personal data in it.";
 
+pub const ISSUE_WORKLOGS: &str = "\
+Show the time logged against an issue.
+
+  ytcli issue worklogs PROJ-1
+
+Every entry with its duration, when it was logged and by whom, and the total at
+the end. Durations read the way they are typed — `1h 30m` — while `--format
+json` keeps Tracker's ISO 8601, which is what a script is written against.
+
+The total leaves days and weeks as they came. Tracker counts a working day as
+eight hours and a working week as five days; turning `P1D` into 24 hours here
+would produce a number nobody's timesheet agrees with.
+
+Writing is `ytcli issue worklog add`, a different command on purpose.";
+
+pub const ISSUE_WORKLOG: &str = "\
+Record or remove time spent. Every verb here writes.
+
+  ytcli issue worklog add PROJ-1 1h30m -m \"pairing on the migration\"
+  ytcli issue worklog add PROJ-1 45m --start 2026-08-27T09:00:00+0300
+  ytcli issue worklog delete PROJ-1 12345
+
+Durations are `1h30m`, `45m`, `2d`, `1w`, or ISO 8601 if you already have one.
+`--start` defaults to now, which is what somebody logging time at the end of the
+work means.
+
+Reading the worklog is `ytcli issue worklogs`, deliberately a different word: a
+host allowlists by command prefix, and a group holding both a read and a write
+cannot be allowed without allowing the writes with it.
+
+Tracker has no undelete. What `delete` removes is gone.";
+
+pub const ISSUE_CHECKLIST: &str = "\
+Show an issue's checklist.
+
+  ytcli issue checklist PROJ-1
+
+Each line with its id, its box, and any assignee or deadline of its own. The
+ids are what `ytcli issue check tick` and `delete` take.
+
+Writing is `ytcli issue check`, a different command on purpose.";
+
+pub const ISSUE_CHECK: &str = "\
+Change an issue's checklist. Every verb here writes.
+
+  ytcli issue check add PROJ-1 \"migrate the audio tracks\"
+  ytcli issue check add PROJ-1 \"review\" --assignee login --deadline 2026-09-01
+  ytcli issue check tick PROJ-1 42
+  ytcli issue check untick PROJ-1 42
+  ytcli issue check delete PROJ-1 42
+
+Ids come from `ytcli issue checklist`. Each verb prints the checklist as it
+stands afterwards, so the result is visible without a second call.
+
+Reading the checklist is `ytcli issue checklist`, deliberately a different word:
+a host allowlists by command prefix, and a group holding both a read and a write
+cannot be allowed without allowing the writes with it.";
+
+pub const ISSUE_LINK: &str = "\
+Link or unlink issues. Every verb here writes.
+
+  ytcli issue link add PROJ-1 relates PROJ-7
+  ytcli issue link add PROJ-1 depends PROJ-3
+  ytcli issue link delete PROJ-1 987654
+
+Relationships: relates, depends, is-dependent-by, subtask, parent, duplicates,
+is-duplicated-by, epic, has-epic. The direction is from the issue you name to
+the other one.
+
+Ids for `delete` come from `ytcli issue links`, which is the read and stays a
+different command.";
+
+pub const WORKLOG_ADD: &str = "\
+Record time spent on an issue.
+
+  ytcli issue worklog add PROJ-1 1h30m -m \"pairing on the migration\"
+  ytcli issue worklog add PROJ-1 45m --start 2026-08-27T09:00:00+0300
+
+Durations are `1h30m`, `45m`, `2d`, `1w`, or ISO 8601. `--start` defaults to
+now, which is what somebody logging time at the end of the work means.";
+
+pub const WORKLOG_DELETE: &str = "\
+Remove one worklog entry.
+
+  ytcli issue worklog delete PROJ-1 12345
+
+The id comes from `ytcli issue worklogs`. Tracker has no undelete.";
+
+pub const CHECK_ADD: &str = "\
+Add a line to an issue's checklist.
+
+  ytcli issue check add PROJ-1 \"migrate the audio tracks\"
+  ytcli issue check add PROJ-1 \"review\" --assignee login --deadline 2026-09-01
+
+Prints the checklist as it stands afterwards, so the new id is visible without
+a second call.";
+
+pub const CHECK_TICK: &str = "\
+Tick a checklist line off.
+
+  ytcli issue check tick PROJ-1 42
+
+Ids come from `ytcli issue checklist`. The whole list is printed afterwards.";
+
+pub const CHECK_UNTICK: &str = "\
+Put a ticked checklist line back.
+
+  ytcli issue check untick PROJ-1 42
+
+The opposite of `tick`, and the same output.";
+
+pub const CHECK_DELETE: &str = "\
+Remove a line from an issue's checklist.
+
+  ytcli issue check delete PROJ-1 42
+
+Ids come from `ytcli issue checklist`. Tracker has no undelete.";
+
+pub const LINK_ADD: &str = "\
+Link two issues.
+
+  ytcli issue link add PROJ-1 relates PROJ-7
+  ytcli issue link add PROJ-1 depends PROJ-3
+
+Relationships: relates, depends, is-dependent-by, subtask, parent, duplicates,
+is-duplicated-by, epic, has-epic. The direction runs from the issue you name to
+the other one.";
+
+pub const LINK_DELETE: &str = "\
+Remove a link between two issues.
+
+  ytcli issue link delete PROJ-1 987654
+
+The id is the link's own, printed by `ytcli issue links` — not the key of the
+issue at the other end.";
+
 pub const ISSUE_TRANSITION: &str = "\
 Move an issue through a workflow transition.
 
