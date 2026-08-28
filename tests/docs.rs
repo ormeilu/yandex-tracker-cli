@@ -48,6 +48,7 @@ async fn tracker_answers(harness: &Harness) {
         ("/v3/queues/PROJ/triggers", "queue_triggers.json"),
         ("/v3/fields", "fields.json"),
         ("/v3/components", "components.json"),
+        ("/v3/linktypes", "linktypes.json"),
         ("/v3/fields/storyPoints", "field.json"),
         ("/v3/issueTemplates", "issue_templates.json"),
         ("/v3/boards", "boards.json"),

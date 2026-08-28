@@ -39,7 +39,8 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
                                         required only when two profiles share the queue key,
                                         in which case the bare form is refused, not guessed
   ytcli issue get PROJ-1 --fields status,assignee,storyPoints
-  ytcli issue links PROJ-1              links with their type
+  ytcli issue links PROJ-1              id first, then the type; the id is what
+                                        `issue link delete` takes
   ytcli issue remotelinks PROJ-1        links to things outside Tracker: wiki, repos,
                                         other trackers. A separate request, so a
                                         separate command
@@ -102,6 +103,12 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   ytcli user get ilubenets              by login or uid; `me` is not one — see auth status
   ytcli user find ivan [--scan 5000]    Tracker has no user search, so this reads the
                                         directory and filters here; --scan caps the reading
+
+## link
+  ytcli link types                      two vocabularies side by side: WRITE is what
+                                        `issue link add` takes, TYPE is the id reads
+                                        answer with. `depends` is a TYPE and is refused
+                                        as a relationship; `depends on` is the write
 
 ## component
   ytcli component list [-q PROJ]        the names `--set components=` takes. AUTO means

@@ -417,6 +417,103 @@ async fn a_queue_can_still_be_used_as_a_blueprint() {
     }
 }
 
+/// The direction of a link, read from both ends.
+///
+/// One end proves nothing: an inverted mapping is perfectly self-consistent
+/// when you only ever look at one side of the link, which is why `depends` was
+/// rendered backwards for months with a passing test suite behind it. So this
+/// writes a link whose meaning is known — the first issue depends on the second
+/// — and insists that each end says the opposite thing about the other.
+///
+/// The link is removed afterwards; the two issues stay, as everything this
+/// suite creates does.
+#[tokio::test]
+#[ignore = "creates real issues; needs YTCLI_TEST_QUEUE"]
+async fn a_link_reads_the_same_way_from_both_ends() {
+    let Some(queue) = setting("YTCLI_TEST_QUEUE") else {
+        return;
+    };
+    let client = client();
+
+    let make = |summary: &'static str| {
+        let queue = queue.clone();
+        let client = &client;
+        async move {
+            client
+                .create_issue(&serde_json::json!({
+                    "queue": queue,
+                    "summary": summary,
+                }))
+                .await
+                .expect("create")
+        }
+    };
+    let dependent = make("ytcli live test — depends on the other").await;
+    let blocker = make("ytcli live test — blocks the other").await;
+
+    client
+        .add_link(&dependent.key, "depends on", &blocker.key)
+        .await
+        .expect("link");
+
+    let from_dependent = client.issue_links(&dependent.key).await.expect("links");
+    let from_blocker = client.issue_links(&blocker.key).await.expect("links");
+
+    let one = from_dependent
+        .first()
+        .expect("no link on the dependent end");
+    let other = from_blocker.first().expect("no link on the blocking end");
+
+    assert_eq!(
+        one.kind,
+        ytcli::api::models::LinkKind::Depends,
+        "{} depends on {}, and its own listing says otherwise",
+        dependent.key,
+        blocker.key
+    );
+    assert_eq!(
+        other.kind,
+        ytcli::api::models::LinkKind::IsDependentBy,
+        "{} is depended on, and its own listing says otherwise",
+        blocker.key
+    );
+
+    // The id the help promises `issue link delete` can be given.
+    assert!(!one.id.is_empty(), "a link with no id: {one:?}");
+    client
+        .delete_link(&dependent.key, &one.id)
+        .await
+        .expect("unlink");
+}
+
+/// Both link vocabularies, and the fact that they are two.
+#[tokio::test]
+#[ignore = "needs real credentials"]
+async fn link_types_are_not_the_names_a_write_takes() {
+    let types = client().link_types().await.expect("link types");
+    assert!(!types.is_empty(), "an organisation with no link types");
+
+    for kind in &types {
+        assert!(
+            kind.outward.is_some() || kind.inward.is_some(),
+            "{} has no wording for either direction",
+            kind.id
+        );
+    }
+
+    // The trap this command exists for: `depends` is a type id and is refused
+    // as a relationship. If Tracker ever starts accepting it, this failing is
+    // how we find out rather than by leaving the warning in place for years.
+    let refused = client()
+        .add_link("PROJ-0", "depends", "PROJ-0")
+        .await
+        .expect_err("a type id was accepted as a relationship");
+    assert!(
+        format!("{refused}").contains("depends"),
+        "unexpected refusal: {refused}"
+    );
+}
+
 /// Writing, only into a queue somebody named on purpose.
 ///
 /// Tracker has no delete. Whatever this creates stays, so it is opt-in twice

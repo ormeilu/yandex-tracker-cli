@@ -5,10 +5,10 @@
     "type": {
       "self": "https://api.tracker.yandex.net/v3/linktypes/depends",
       "id": "depends",
-      "inward": "Depends on",
-      "outward": "Is dependent by"
+      "inward": "Blocking task",
+      "outward": "Depends on"
     },
-    "direction": "inward",
+    "direction": "outward",
     "object": {
       "self": "https://api.tracker.yandex.net/v3/issues/PROJ-3",
       "id": "5f7e1a2b3c4d5e6f7a8b9c11",

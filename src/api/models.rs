@@ -106,6 +106,9 @@ impl LinkKind {
 /// One edge from an issue to another issue.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Link {
+    /// What `issue link delete` takes. Carried because the help names this
+    /// listing as where the id comes from, and for a while it did not.
+    pub id: String,
     pub kind: LinkKind,
     /// Tracker's own wording for the relationship, in whatever language it
     /// answered in. Shown when `kind` is [`LinkKind::Other`], so an unrecognised

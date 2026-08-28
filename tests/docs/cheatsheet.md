@@ -13,9 +13,9 @@ PROJ-1  status=In Progress  assignee=ilubenets  storyPoints=3
 ```console
 $ ytcli issue links PROJ-1
 → profile=test org=12345 (from YTCLI_PROFILE)
-depends on PROJ-3 [Open]  Storage migration
-parent PROJ-9  Attachment subsystem
-relates PROJ-7  Flaky upload test
+101  depends on PROJ-3 [Open]  Storage migration
+102  parent PROJ-9  Attachment subsystem
+103  relates PROJ-7  Flaky upload test
 shown 3 of 3 for PROJ-1
 
 ```
@@ -214,6 +214,20 @@ shown 1 of 1 for PROJ
 triggers
 16       Close on merge               off      2          Transition
 shown 1 of 1 for PROJ
+
+```
+
+```console
+$ ytcli link types
+→ profile=test org=12345 (from YTCLI_PROFILE)
+relates              связана                    relates
+depends on           зависит от                 depends
+is dependent by      блокирующая задача         depends
+is parent task for   родительская задача        subtask
+is subtask for       подзадача                  subtask
+-                    клон                       cloners
+-                    оригинал                   cloners
+shown 7 of 7
 
 ```
 

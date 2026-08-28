@@ -24,7 +24,9 @@ async fn links_carry_their_type_and_the_other_issue() {
         .success();
     let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
 
-    assert!(stdout.contains("depends on PROJ-3 [Open]"));
+    // The id leads: `issue link delete` takes it, and this listing is where the
+    // help says to find it — which was a promise the output did not keep.
+    assert!(stdout.contains("101  depends on PROJ-3 [Open]"), "{stdout}");
     assert!(stdout.contains("parent PROJ-9"));
     assert!(stdout.contains("relates PROJ-7"));
     assert!(stdout.contains("Storage migration"));

@@ -326,16 +326,25 @@ Link or unlink issues. Every verb here writes.
 
 ```
 ytcli issue link add PROJ-1 relates PROJ-7
-ytcli issue link add PROJ-1 depends PROJ-3
+ytcli issue link add PROJ-1 \"depends on\" PROJ-3
 ytcli issue link delete PROJ-1 987654
 ```
 
-Relationships: relates, depends, is-dependent-by, subtask, parent, duplicates,
-is-duplicated-by, epic, has-epic. The direction is from the issue you name to
-the other one.
+Relationships, all nine of them:
 
-Ids for `delete` come from `ytcli issue links`, which is the read and stays a
-different command.";
+```
+relates              is parent task for   duplicates
+depends on           is subtask for       is duplicated by
+is dependent by      is epic of           has epic
+```
+
+The direction is from the issue you name to the other one. Hyphens are accepted
+in place of spaces, but the words have to be the whole phrase: `depends` is the
+id of a link *type* and not a relationship, and Tracker refuses it. `ytcli link
+types` prints both vocabularies side by side.
+
+Ids for `delete` come from `ytcli issue links`, which prints one per row and
+stays a different command from this one.";
 
 pub const WORKLOG_ADD: &str = "\
 Record time spent on an issue.
@@ -556,6 +565,26 @@ ytcli queue get PROJ
 
 `issue create -q PROJ` with no type and no priority gets these, and nothing else
 says what they are.";
+
+pub const LINK_TYPES: &str = "\
+List the kinds of link, and what a write takes for each.
+
+```
+ytcli link types
+```
+
+There are **two** vocabularies here and they are not the same list. `WRITE` is
+what `ytcli issue link add` takes — a directional phrase like `depends on`.
+`TYPE` is the id Tracker files the link under and answers reads with — `depends`.
+Writing the type id is refused, and this tool's own help got that wrong for
+several releases, so the two are printed side by side rather than separately.
+
+`MEANS` is Tracker's own wording for that direction, in the organisation's
+language, and it describes the end you are on.
+
+A direction with no write name — `cloners` — is printed with a dash rather than
+left out. Links of that type come back from reads, and no relationship in the
+write vocabulary makes one; dropping the row would say the type does not exist.";
 
 pub const COMPONENT_LIST: &str = "\
 List components, in one queue or in the whole organisation.

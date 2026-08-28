@@ -16,7 +16,7 @@ allow: ytcli issue get:*, ytcli issue find:*, ytcli issue list:*, ytcli issue co
        ytcli queue local-fields:*,
        ytcli board list, ytcli board get:*, ytcli board sprints:*, ytcli sprint list,
        ytcli field list, ytcli field get:*, ytcli template list:*,
-       ytcli dict list:*, ytcli component list:*,
+       ytcli dict list:*, ytcli component list:*, ytcli link types,
        ytcli user list:*, ytcli user get:*, ytcli user find:*,
        ytcli worklog find:*,
        ytcli portfolio contents:*, ytcli auth status

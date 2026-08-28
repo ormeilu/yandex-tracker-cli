@@ -1,0 +1,6 @@
+[
+  {"self": "https://api.tracker.yandex.net/v3/linktypes/relates", "id": "relates", "inward": "Связана", "outward": "Связана"},
+  {"self": "https://api.tracker.yandex.net/v3/linktypes/depends", "id": "depends", "inward": "Блокирующая задача", "outward": "Зависит от"},
+  {"self": "https://api.tracker.yandex.net/v3/linktypes/subtask", "id": "subtask", "inward": "Подзадача", "outward": "Родительская задача"},
+  {"self": "https://api.tracker.yandex.net/v3/linktypes/cloners", "id": "cloners", "inward": "Оригинал", "outward": "Клон"}
+]

@@ -870,6 +870,20 @@ impl Client {
             .unwrap_or_default())
     }
 
+    /// Every kind of link two issues can have.
+    ///
+    /// Small, fixed and organisation-wide — six entries in the organisation
+    /// this was checked against, `cloners` among them, which no write in this
+    /// tool can produce.
+    pub async fn link_types(&self) -> Result<Vec<LinkType>, ApiError> {
+        let raw = self.get_value("/v3/linktypes", "link types").await?;
+
+        Ok(raw
+            .as_array()
+            .map(|entries| entries.iter().filter_map(LinkType::parse).collect())
+            .unwrap_or_default())
+    }
+
     /// One of the four organisation-wide dictionaries.
     ///
     /// Small and unpaged — the largest of the four is statuses, in the dozens —
@@ -1739,6 +1753,37 @@ impl QueueField {
                 .unwrap_or("unknown")
                 .to_owned(),
             system: !id.contains("--"),
+        })
+    }
+}
+
+/// One kind of relationship two issues can have.
+///
+/// Deliberately not folded into [`Dictionary`]: the four dictionaries are values
+/// a *field* takes and share one shape, and this has neither a key nor a name —
+/// it has an id and two labels, one per direction. It is also not the vocabulary
+/// a write takes, which is the whole reason it is worth printing.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct LinkType {
+    pub id: String,
+    /// Tracker's wording for the end the link points away from.
+    pub outward: Option<String>,
+    /// Tracker's wording for the end it points at.
+    pub inward: Option<String>,
+}
+
+impl LinkType {
+    fn parse(value: &Value) -> Option<Self> {
+        let text = |member: &str| {
+            value
+                .get(member)
+                .and_then(Value::as_str)
+                .map(str::to_lowercase)
+        };
+        Some(Self {
+            id: value.get("id").and_then(Value::as_str)?.to_owned(),
+            outward: text("outward"),
+            inward: text("inward"),
         })
     }
 }

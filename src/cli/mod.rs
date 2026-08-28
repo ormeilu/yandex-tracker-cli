@@ -17,6 +17,7 @@ pub mod goal;
 pub mod guidance;
 pub mod help;
 pub mod issue;
+pub mod link;
 pub mod portfolio;
 pub mod project;
 pub mod queue;
@@ -121,6 +122,9 @@ pub enum Command {
     /// People in the organisation.
     #[command(subcommand)]
     User(user::UserCommand),
+    /// The kinds of link two issues can have.
+    #[command(subcommand)]
+    Link(link::LinkCommand),
     /// Components: the parts a queue splits its work by.
     #[command(subcommand)]
     Component(component::ComponentCommand),

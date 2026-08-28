@@ -650,6 +650,31 @@ async fn set_checked(target: &str, id: &str, checked: bool, session: &Session) -
     }
 }
 
+/// The four link *type* ids that are not link *relationships*.
+///
+/// `GET /v3/linktypes` answers with `depends`, `subtask`, `epic` and the rest;
+/// a write takes a directional phrase — `depends on`, `is subtask for` — and
+/// Tracker refuses anything else with `Unrecognized value`. The two lists were
+/// confused in this tool's own help until a live check caught it, which is
+/// evidence enough that the confusion is easy.
+///
+/// Only these four are refused here. Tracker tolerates hyphens for the rest,
+/// and `cloners` is a real type in an organisation checked against, so a closed
+/// list of accepted values here would block a write that would have worked.
+fn corrected(relation: &str) -> Option<&'static str> {
+    let normalised = relation
+        .trim()
+        .to_ascii_lowercase()
+        .replace(['-', '_'], " ");
+    Some(match normalised.as_str() {
+        "depends" => "depends on",
+        "parent" => "is parent task for",
+        "subtask" => "is subtask for",
+        "epic" => "is epic of",
+        _ => return None,
+    })
+}
+
 async fn link_write(command: &LinkCommand, session: &Session) -> ExitCode {
     match command {
         LinkCommand::Add {
@@ -657,6 +682,19 @@ async fn link_write(command: &LinkCommand, session: &Session) -> ExitCode {
             relation,
             other,
         } => {
+            // Four names look right and are not, and they are wrong in a way
+            // Tracker's own refusal does not help with: it names the value it
+            // did not recognise and never what it wanted instead.
+            if let Some(correct) = corrected(relation) {
+                return report(
+                    &format!(
+                        "`{relation}` is the id of a link type, not a relationship: write `{correct}`. \
+                         `ytcli link types` lists both."
+                    ),
+                    ExitCode::ConfirmationRequired,
+                );
+            }
+
             let (client, key) = match session.client_for(key).await {
                 Ok(pair) => pair,
                 Err(code) => return code,

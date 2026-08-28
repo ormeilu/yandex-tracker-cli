@@ -86,9 +86,13 @@ pub fn links(key: &str, links: &[Link]) -> String {
     let mut out = String::with_capacity(links.len() * 40 + 32);
 
     for link in links {
+        // The id leads, as it does in every other listing whose rows can be
+        // deleted: `issue link delete` takes it, and this is where the help
+        // says to find it.
         let _ = writeln!(
             out,
-            "{} {}{}{}",
+            "{}  {} {}{}{}",
+            link.id,
             relation_of(link),
             link.key,
             link.status
@@ -848,6 +852,7 @@ mod tests {
             description: Some("line one\nline two\nline three\nline four".to_owned()),
             links: vec![
                 Link {
+                    id: "101".to_owned(),
                     kind: LinkKind::IsBlockedBy,
                     relation: None,
                     key: "PROJ-3".to_owned(),
@@ -855,6 +860,7 @@ mod tests {
                     status: Some("Open".to_owned()),
                 },
                 Link {
+                    id: "102".to_owned(),
                     kind: LinkKind::Parent,
                     relation: None,
                     key: "PROJ-9".to_owned(),

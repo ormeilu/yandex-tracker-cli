@@ -96,6 +96,7 @@ ytcli sprint list                    # every sprint, with the board each belongs
 ytcli field list                     # every field the organisation defines
 ytcli field get storyPoints          # what one field accepts, before --set guesses
 ytcli component list -q PROJ         # names the components field takes, per queue
+ytcli link types                     # the write vocabulary, beside the type ids
 ytcli queue local-fields PROJ        # fields the queue owns; field get cannot see these
 ytcli template list --kind comment   # issue templates by default
 ytcli portfolio contents 655…        # the portfolios and projects inside one

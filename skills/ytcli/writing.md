@@ -34,8 +34,15 @@ ytcli issue worklog add PROJ-1 1h30m -m "pairing"
 ytcli issue worklog edit PROJ-1 ID -d 2h   # pass whichever of -d/-m is wrong
 ytcli issue check add PROJ-1 "write the migration"   # tick|untick|delete by id
 ytcli issue link add PROJ-1 relates PROJ-7
+ytcli issue link add PROJ-1 "depends on" PROJ-3    # not `depends`: see below
 ytcli attachment upload PROJ-1 ./file.png
 ```
+
+A link relationship is **not** a link type id. `ytcli link types` prints both:
+`depends` is the type Tracker files the link under and refuses as a write, and
+`depends on` is what the write takes. The nine relationships are `relates`,
+`depends on`, `is dependent by`, `is parent task for`, `is subtask for`,
+`duplicates`, `is duplicated by`, `is epic of`, `has epic`.
 
 Reads and writes never share a prefix: `worklogs` reads, `worklog` writes;
 `checklist` reads, `check` writes; `links` reads, `link` writes. That is what

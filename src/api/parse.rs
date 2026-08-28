@@ -155,18 +155,24 @@ fn widen_offset(text: &str) -> String {
 /// a Russian-locale organisation answers "Связана", and an English word list
 /// silently turns every link into "links".
 ///
-/// `direction` decides which end we are on, and it does not mean the same thing
-/// for every type: for `subtask`, being on the inward side makes the *other*
-/// issue the parent, while for `depends` the inward side is the one that
-/// depends. That asymmetry is why this is a table and not a rule.
+/// `direction` says which end we are on, and the rule is one rule: the kind has
+/// to mean what Tracker's own label for *our* side means. `subtask` outward is
+/// labelled "родительская задача" — we are the parent, so the other issue is
+/// the subtask; `depends` outward is labelled "зависит от" — we are the one
+/// that depends.
+///
+/// The `depends` pair was the wrong way round until a round trip against a real
+/// organisation caught it, and nothing else could have: written from one end
+/// the wrong mapping is self-consistent, and the fixtures were written from the
+/// same belief as the code. Both ends, or it proves nothing.
 fn link_kind(type_id: &str, inward: bool) -> LinkKind {
     match (type_id, inward) {
         ("subtask", true) => LinkKind::Parent,
         ("subtask", false) => LinkKind::Subtask,
-        ("depends", true) => LinkKind::Depends,
-        ("depends", false) => LinkKind::IsDependentBy,
-        ("duplicate", true) => LinkKind::Duplicates,
-        ("duplicate", false) => LinkKind::IsDuplicatedBy,
+        ("depends", true) => LinkKind::IsDependentBy,
+        ("depends", false) => LinkKind::Depends,
+        ("duplicates" | "duplicate", true) => LinkKind::Duplicates,
+        ("duplicates" | "duplicate", false) => LinkKind::IsDuplicatedBy,
         ("epic", true) => LinkKind::HasEpic,
         ("epic", false) => LinkKind::Epic,
         ("relates", _) => LinkKind::Relates,
@@ -194,6 +200,15 @@ pub fn link(value: &Value) -> Option<Link> {
         .map(str::to_lowercase);
 
     Some(Link {
+        // A number on the wire in some organisations, a string in others, and
+        // absent only in a payload we have never seen. A link with no id is
+        // still a link: dropping the row would make it invisible, and this
+        // command exists so that invisible and absent are not the same thing.
+        id: match value.get("id") {
+            Some(Value::String(id)) => id.clone(),
+            Some(other) => other.to_string(),
+            None => String::new(),
+        },
         kind: link_kind(type_id, inward),
         relation,
         key: object.get("key").and_then(Value::as_str)?.to_owned(),
@@ -722,17 +737,48 @@ mod tests {
         );
     }
 
-    /// `subtask` and `depends` invert relative to each other, so a table keyed
-    /// on the type id alone renders one of them backwards.
+    /// The labels here are Tracker's own, and they are the way round a real
+    /// organisation sends them: `depends` **inward** is "блокирующая задача",
+    /// the blocking task, so the issue on that end is the one being depended
+    /// on. This was asserted backwards for months, by a test written from the
+    /// same guess as the code, with a fixture that invented the labels the
+    /// other way round.
+    ///
+    /// A live round trip is what settles it, and there is one in the live
+    /// suite: write the link, read it from both ends.
     #[test]
-    fn depends_is_not_inverted_the_way_subtask_is() {
-        let inward = serde_json::json!({
-            "type": {"id": "depends", "inward": "Depends on", "outward": "Is dependent by"},
-            "direction": "inward",
-            "object": {"key": "PROJ-3", "display": "blocker"},
+    fn the_end_that_depends_is_the_outward_one() {
+        let kind = |direction: &str| {
+            let value = serde_json::json!({
+                "id": 10,
+                "type": {
+                    "id": "depends",
+                    "inward": "блокирующая задача",
+                    "outward": "зависит от",
+                },
+                "direction": direction,
+                "object": {"key": "PROJ-3", "display": "blocker"},
+            });
+            link(&value).expect("link").kind
+        };
+
+        assert_eq!(kind("outward"), LinkKind::Depends);
+        assert_eq!(kind("inward"), LinkKind::IsDependentBy);
+    }
+
+    /// A payload with no id is still a link. Dropping it would hide it, and a
+    /// hidden link is indistinguishable from one that is not there.
+    #[test]
+    fn a_link_without_an_id_is_still_shown() {
+        let value = serde_json::json!({
+            "type": {"id": "relates", "inward": "Связана", "outward": "Связана"},
+            "direction": "outward",
+            "object": {"key": "PROJ-2"},
         });
 
-        assert_eq!(link(&inward).expect("link").kind, LinkKind::Depends);
+        let parsed = link(&value).expect("link");
+        assert!(parsed.id.is_empty());
+        assert_eq!(parsed.key, "PROJ-2");
     }
 
     #[test]
