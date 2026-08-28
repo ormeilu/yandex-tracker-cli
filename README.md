@@ -24,6 +24,7 @@ that is not there.
 and say which you used:
 
 ```bash
+brew install ormeilu/tap/ytcli              # macOS or Linux, prebuilt
 uv tool install yandex-tracker-cli          # no Rust toolchain needed
 cargo install yandex-tracker-cli            # with a Rust toolchain
 ```
@@ -70,6 +71,9 @@ further.
 ## Install
 
 ```bash
+# with Homebrew — prebuilt, with shell completions
+brew install ormeilu/tap/ytcli
+
 # with uv, no Rust needed
 uvx --from yandex-tracker-cli ytcli --help
 uv tool install yandex-tracker-cli
@@ -79,6 +83,11 @@ cargo install yandex-tracker-cli
 ```
 
 Or download a binary from [Releases](https://github.com/ormeilu/yandex-tracker-cli/releases).
+
+The Homebrew formula lives in
+[ormeilu/homebrew-tap](https://github.com/ormeilu/homebrew-tap) and is generated
+by the release workflow from the archives it publishes, so it cannot drift from
+a release.
 
 ## Install the skill
 
