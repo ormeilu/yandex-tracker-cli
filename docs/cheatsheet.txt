@@ -1,7 +1,7 @@
 ytcli — Yandex Tracker from the command line. Compact output by default.
 
 ## general
-  ytcli <group> <verb> [args]           groups: auth issue user dict queue field template board project portfolio goal attachment
+  ytcli <group> <verb> [args]           groups: auth issue worklog user dict queue field template board project portfolio goal attachment
   -p, --profile NAME                    act as a profile (else YTCLI_PROFILE, .tracker.toml, default)
   -f, --format text|json|json-raw|toon  text is compact and default; json is our stable schema
       --full                            print the whole description, not the first lines
@@ -71,6 +71,13 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   ytcli queue create -k OPS -n Operations --like PROJ --yes
                                         copies issue types, workflows and defaults from
                                         --like. --yes always: a key is claimed once
+
+## worklog
+  ytcli worklog find --by me --since 7d  where the week went, across every issue
+  ytcli worklog find --by login --since 2026-08-01 --until 2026-08-31
+                                        --since/--until take a date or 7d/2w/3m;
+                                        --by me costs one request to resolve the login
+                                        no total to page against: a full --limit says so
 
 ## dict
   ytcli dict list                       types, priorities, statuses, resolutions — all four

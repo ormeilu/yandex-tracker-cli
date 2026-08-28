@@ -512,3 +512,28 @@ async fn a_login_from_the_listing_can_be_fetched_back() {
     let fetched = client.user(&first.login).await.expect("user");
     assert_eq!(fetched.login, first.login);
 }
+
+/// The organisation-wide worklog search, and the parameter that is easy to get
+/// wrong: `createdBy` takes a login, and answers 422 for `me`. The CLI resolves
+/// `me` before searching precisely because of this, so the belief is worth
+/// checking against the real API rather than against our own mock.
+#[tokio::test]
+#[ignore = "needs real credentials"]
+async fn the_worklog_search_takes_a_login_and_not_me() {
+    let client = client();
+    let me = client.myself().await.expect("myself");
+    let login = me.login.clone().unwrap_or(me.id.clone());
+
+    // An empty result is fine: what is being checked is that the request is
+    // accepted at all, and with a date range attached.
+    client
+        .worklog_search(Some(&login), Some("2020-01-01"), None, 5)
+        .await
+        .expect("worklog search by login");
+
+    let refused = client.worklog_search(Some("me"), None, None, 5).await;
+    assert!(
+        refused.is_err(),
+        "Tracker accepted `me` as a login; the CLI resolves it for nothing"
+    );
+}

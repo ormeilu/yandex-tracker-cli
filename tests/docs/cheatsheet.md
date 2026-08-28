@@ -257,3 +257,11 @@ $ ytcli issue changelog PROJ-1
 shown 3 of 3 for PROJ-1 — from 2 events
 
 ```
+
+```console
+$ ytcli worklog find --by ilubenets --since 2026-08-01 --until 2026-08-31
+→ profile=test org=12345 (from YTCLI_PROFILE)
+PROJ-1         2026-08-24   1h 30m     ilubenets        pairing
+shown 1 of 1 — 1h 30m total
+
+```

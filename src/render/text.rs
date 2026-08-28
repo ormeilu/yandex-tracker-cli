@@ -193,6 +193,50 @@ pub fn worklogs(key: &str, worklogs: &[Worklog], ctx: &Context) -> String {
     out
 }
 
+/// Worklog entries from across the organisation.
+///
+/// Different from [`worklogs`] in the one way that matters: the issue is a
+/// column, because here it is the only thing that says what the time was for.
+#[must_use]
+pub fn worklog_search(entries: &[Worklog], ctx: &Context) -> String {
+    let columns = [
+        Column::whole("ISSUE", 14, Palette::key()),
+        Column::whole("WHEN", 12, anstyle::Style::new()),
+        Column::whole("DURATION", 10, anstyle::Style::new()),
+        Column::new("WHO", 16, anstyle::Style::new()),
+        Column::new("COMMENT", 36, Palette::untrusted()),
+    ];
+
+    let rows: Vec<Vec<String>> = entries
+        .iter()
+        .map(|entry| {
+            vec![
+                entry.issue.clone().unwrap_or_else(|| "-".to_owned()),
+                entry.start.map_or_else(
+                    || "-".to_owned(),
+                    |start| start.to_string().chars().take(10).collect(),
+                ),
+                crate::api::duration::human(&entry.duration),
+                who(entry.author.as_ref()).to_owned(),
+                entry.comment.clone().unwrap_or_else(|| "-".to_owned()),
+            ]
+        })
+        .collect();
+
+    let mut out = crate::render::table::render(&columns, &rows, ctx);
+    let paint = ctx.painter();
+    let total = crate::api::duration::human(&total_duration(entries));
+    let _ = writeln!(
+        out,
+        "{}",
+        paint.paint(
+            &format!("shown {} of {} — {total} total", rows.len(), rows.len()),
+            Palette::label()
+        )
+    );
+    out
+}
+
 /// What changed on an issue, one line per field.
 ///
 /// The unit is a field, not an event: "who set the status to Closed" is the

@@ -849,3 +849,25 @@ Tracker has no user search endpoint, so this reads the directory and filters it
 here. `--scan` is what that costs, made visible: it caps how many people are
 read before the command stops, and a search that stopped early says so on
 stderr rather than presenting a partial answer as a complete one.";
+
+pub const WORKLOG_FIND: &str = "\
+Find worklog entries across every issue.
+
+```
+ytcli worklog find --by me --since 7d
+ytcli worklog find --by ilubenets --since 2026-08-01 --until 2026-08-31
+ytcli worklog find --since 1w --limit 500
+```
+
+`issue worklogs PROJ-1` answers what went into one issue. This answers where a
+week went, without knowing which issues to ask about first.
+
+`--since` and `--until` take a date or a span back from today — `7d`, `2w`,
+`3m`. `--by me` costs one extra request: Tracker does not accept `me` as a
+login, so it is resolved before the search.
+
+The total is on the last line, summed the way Tracker counts — a day is eight
+hours, a week is five days, and neither is turned into the other here.
+
+There is no total to page against, so a result that fills `--limit` says so on
+stderr rather than looking like the whole answer.";

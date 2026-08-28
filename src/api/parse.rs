@@ -324,6 +324,7 @@ pub fn worklog(value: &Value) -> Option<Worklog> {
             .get("comment")
             .and_then(Value::as_str)
             .map(str::to_owned),
+        issue: key_label(value.get("issue")),
     })
 }
 

@@ -203,6 +203,13 @@ pub struct Worklog {
     /// What the time was spent on, when whoever logged it said.
     #[serde(default)]
     pub comment: Option<String>,
+    /// Which issue the time went to.
+    ///
+    /// Absent when the entry was read through an issue, which already named it,
+    /// and present when it was found across the organisation, where it is the
+    /// only thing that says what the time was for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub issue: Option<String>,
 }
 
 /// One recorded change to an issue.

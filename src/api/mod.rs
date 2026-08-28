@@ -622,6 +622,49 @@ impl Client {
             .unwrap_or_default())
     }
 
+    /// Worklog entries across the whole organisation.
+    ///
+    /// `createdBy` takes a login or a uid and **not** `me`: Tracker reads it as
+    /// a login and answers 422 saying no such user exists. Resolving `me` is
+    /// the caller's job, with one extra request to `myself`.
+    pub async fn worklog_search(
+        &self,
+        who: Option<&str>,
+        since: Option<&str>,
+        until: Option<&str>,
+        per_page: u32,
+    ) -> Result<Vec<Worklog>, ApiError> {
+        use std::fmt::Write as _;
+
+        let mut query = format!("perPage={per_page}");
+        if let Some(who) = who {
+            let _ = write!(query, "&createdBy={who}");
+        }
+        // One parameter carries both ends of the range, and Tracker accepts
+        // either half on its own.
+        match (since, until) {
+            (Some(since), Some(until)) => {
+                let _ = write!(query, "&createdAt=from:{since},to:{until}");
+            }
+            (Some(since), None) => {
+                let _ = write!(query, "&createdAt=from:{since}");
+            }
+            (None, Some(until)) => {
+                let _ = write!(query, "&createdAt=to:{until}");
+            }
+            (None, None) => {}
+        }
+
+        let raw = self
+            .get_value(&format!("/v3/worklog?{query}"), "worklog")
+            .await?;
+
+        Ok(raw
+            .as_array()
+            .map(|entries| entries.iter().filter_map(parse::worklog).collect())
+            .unwrap_or_default())
+    }
+
     /// Move an issue to another queue.
     ///
     /// The issue keeps its identity and loses its name: `PROJ-42` becomes

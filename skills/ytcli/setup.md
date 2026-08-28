@@ -91,6 +91,7 @@ allowlist is worth having. For Claude Code, in `.claude/settings.json`:
       "Bash(ytcli queue list:*)",
       "Bash(ytcli queue get:*)",
       "Bash(ytcli queue fields:*)",
+      "Bash(ytcli worklog find:*)",
       "Bash(ytcli dict list:*)",
       "Bash(ytcli user list:*)",
       "Bash(ytcli user get:*)",

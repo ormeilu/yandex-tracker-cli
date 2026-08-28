@@ -14,6 +14,7 @@ allow: ytcli issue get:*, ytcli issue find:*, ytcli issue list:*, ytcli issue co
        ytcli board list, ytcli board get:*, ytcli board sprints:*,
        ytcli field list, ytcli template list:*,
        ytcli dict list:*, ytcli user list:*, ytcli user get:*, ytcli user find:*,
+       ytcli worklog find:*,
        ytcli portfolio contents:*, ytcli auth status
 ask:   ytcli issue create:*, ytcli issue update:*, ytcli issue comment:*,
        ytcli issue transition:*, ytcli issue move:*, ytcli issue worklog:*,

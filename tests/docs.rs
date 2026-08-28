@@ -80,6 +80,21 @@ async fn tracker_answers(harness: &Harness) {
         .mount(&harness.server)
         .await;
 
+    Mock::given(method("GET"))
+        .and(path("/v3/worklog"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+            {
+                "id": 1,
+                "issue": {"key": "PROJ-1", "display": "Attachments are lost on move"},
+                "duration": "PT1H30M",
+                "start": "2026-08-24T09:00:00.000+0300",
+                "createdBy": {"id": "1", "login": "ilubenets", "display": "Ilya Lubenets"},
+                "comment": "pairing"
+            }
+        ])))
+        .mount(&harness.server)
+        .await;
+
     // The directory reports its size in a header, like every other listing.
     Mock::given(method("GET"))
         .and(path("/v3/users"))

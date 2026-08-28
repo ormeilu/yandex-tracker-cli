@@ -21,6 +21,7 @@ pub mod project;
 pub mod queue;
 pub mod user;
 pub mod wizard;
+pub mod worklog;
 pub mod write;
 
 use std::io::Write;
@@ -109,6 +110,9 @@ pub enum Command {
     /// Boards and their sprints.
     #[command(subcommand)]
     Board(board::BoardCommand),
+    /// Time logged across issues.
+    #[command(subcommand)]
+    Worklog(worklog::WorklogCommand),
     /// People in the organisation.
     #[command(subcommand)]
     User(user::UserCommand),
