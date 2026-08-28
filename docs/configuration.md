@@ -103,6 +103,20 @@ whose main consumer is an agent should not offer that as a feature.
 
 For CI, where no keychain exists, `YTCLI_TOKEN` and `YTCLI_ORG_ID` take over.
 
+**`YTCLI_TOKEN` applies to every account at once.** It is checked before the
+keychain and is not per profile, so with more than one profile configured it
+makes them all the same identity: `auth status` will show two profiles with two
+account names, one person, and the same queues under both. That is right in CI
+and almost never right on a laptop.
+
+It is easy to have set without meaning to. A shell that sources `.env` on
+entering a directory — the oh-my-zsh `dotenv` plugin does exactly that — will
+export it inside any checkout that keeps a token there for tests, and nowhere
+else, so the same command behaves differently in two directories.
+
+`auth status` marks each profile it read that way with `(from YTCLI_TOKEN)`, and
+says so once at the end when more than one profile is configured.
+
 ### If macOS keeps asking for your password
 
 The Keychain grants "Always Allow" to the *exact binary* it was asked about, and

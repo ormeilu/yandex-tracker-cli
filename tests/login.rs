@@ -278,7 +278,9 @@ async fn status_reports_identity_and_what_the_profile_can_see() {
 
     assert!(stdout.contains("profile test"));
     assert!(stdout.contains("org: 12345 (Cloud)"));
-    assert!(stdout.contains("token: ok   user: ilubenets (Ilya Lubenets)"));
+    // The suffix is here because every test authenticates through
+    // `YTCLI_TOKEN`; a keychain-backed profile prints `token: ok` alone.
+    assert!(stdout.contains("token: ok (from YTCLI_TOKEN)   user: ilubenets (Ilya Lubenets)"));
     assert!(stdout.contains("queues: 2   projects: 3   goals: 1   my open issues: 7"));
     assert!(stdout.contains("Storage rework (12), Billing (13), +1 more"));
     assert!(stdout.contains("PROJ, INFRA"));
@@ -507,4 +509,27 @@ async fn status_answers(harness: &Harness) {
         .respond_with(ResponseTemplate::new(200).set_body_json(0))
         .mount(&harness.server)
         .await;
+}
+
+/// `YTCLI_TOKEN` applies to every account at once, which is right in CI and
+/// wrong on a laptop — a shell that exports it on entering a directory, as the
+/// oh-my-zsh `dotenv` plugin does, makes every profile the same identity. The
+/// rows then agree for a reason nothing in them explains, so the override says
+/// so on each of them and once at the end.
+#[tokio::test]
+async fn an_environment_token_says_it_is_standing_in_for_the_keychain() {
+    let harness = Harness::new().await;
+    harness.add_profile("second", "12345");
+    status_answers(&harness).await;
+
+    let output = harness.run_raw(&["auth", "status"]).assert().success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+    let stderr = String::from_utf8(output.get_output().stderr.clone()).expect("utf-8");
+
+    assert_eq!(
+        stdout.matches("(from YTCLI_TOKEN)").count(),
+        2,
+        "both profiles were read through the one token: {stdout}"
+    );
+    assert!(stderr.contains("YTCLI_TOKEN is set"), "{stderr}");
 }

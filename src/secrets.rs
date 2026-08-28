@@ -42,16 +42,32 @@ fn entry(account: &str) -> Result<keyring::Entry, SecretError> {
     keyring::Entry::new(SERVICE, account).map_err(SecretError::Unavailable)
 }
 
+/// Where a token came from.
+///
+/// Worth reporting rather than keeping to ourselves: the environment override
+/// applies to every account at once, so with more than one profile configured
+/// it silently makes them all the same identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Origin {
+    Keychain,
+    Environment,
+}
+
 /// Fetch the OAuth token for an account.
+pub fn token(account: &str) -> Result<String, SecretError> {
+    token_from(account).map(|(token, _)| token)
+}
+
+/// Fetch it, and say where it came from.
 ///
 /// The environment wins over the keychain so that a CI run, which has no
 /// keychain at all, does not have to pretend otherwise.
-pub fn token(account: &str) -> Result<String, SecretError> {
+pub fn token_from(account: &str) -> Result<(String, Origin), SecretError> {
     if let Ok(token) = std::env::var(TOKEN_ENV)
         && !token.is_empty()
     {
         tracing::debug!("using the token from {TOKEN_ENV}");
-        return Ok(token);
+        return Ok((token, Origin::Environment));
     }
 
     // A poisoned lock means another thread panicked mid-read. The cache is an
@@ -60,7 +76,7 @@ pub fn token(account: &str) -> Result<String, SecretError> {
     if let Ok(cached) = cache().lock()
         && let Some(token) = cached.get(account)
     {
-        return Ok(token.clone());
+        return Ok((token.clone(), Origin::Keychain));
     }
 
     match entry(account)?.get_password() {
@@ -68,11 +84,20 @@ pub fn token(account: &str) -> Result<String, SecretError> {
             if let Ok(mut cached) = cache().lock() {
                 cached.insert(account.to_owned(), token.clone());
             }
-            Ok(token)
+            Ok((token, Origin::Keychain))
         }
         Err(keyring::Error::NoEntry) => Err(SecretError::Missing(account.to_owned())),
         Err(err) => Err(SecretError::Backend(err)),
     }
+}
+
+/// Whether the environment is standing in for the keychain.
+///
+/// One token for every account is the right behaviour in CI and wrong
+/// everywhere else, so the commands that show identity say when it applies.
+#[must_use]
+pub fn overridden() -> bool {
+    std::env::var(TOKEN_ENV).is_ok_and(|token| !token.is_empty())
 }
 
 /// Store (or replace) the OAuth token for an account.

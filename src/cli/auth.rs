@@ -193,6 +193,18 @@ async fn status(session: &Session, brief: bool, active_only: bool) -> ExitCode {
     remember_queues(session, brief, active_only, active.as_deref(), &queues_seen);
     warn_about_collisions(session, paint, &queues_seen);
 
+    // A shell that exports YTCLI_TOKEN on entering a directory — the oh-my-zsh
+    // `dotenv` plugin does exactly this — makes every profile authenticate as
+    // one person, and the rows then agree with each other for a reason that has
+    // nothing to do with the configuration being read.
+    if secrets::overridden() && session.config.profiles.len() > 1 {
+        let _ = writeln!(
+            err,
+            "{} YTCLI_TOKEN is set, so every profile above was read through that one token, whatever account it names",
+            paint.paint("warning:", Palette::warn()),
+        );
+    }
+
     // The command someone runs to find out which profile is in play is the
     // command that should say how to change it.
     if session.config.profiles.len() > 1 {
@@ -308,8 +320,8 @@ async fn report_profile(
     out: &mut impl std::io::Write,
     err: &mut impl std::io::Write,
 ) -> ExitCode {
-    let token = match secrets::token(&profile.account) {
-        Ok(token) => token,
+    let (token, origin) = match secrets::token_from(&profile.account) {
+        Ok(pair) => pair,
         Err(error) => {
             let _ = writeln!(
                 out,
@@ -334,11 +346,19 @@ async fn report_profile(
         }
     };
 
+    // Which token answered, when it is not the one this profile's account
+    // holds. Without this the reader has no way to tell that every profile is
+    // being read through one identity.
+    let via = match origin {
+        secrets::Origin::Environment => " (from YTCLI_TOKEN)",
+        secrets::Origin::Keychain => "",
+    };
+
     match client.myself().await {
         Ok(user) => {
             let _ = writeln!(
                 out,
-                "  {} {}   {} {}{}",
+                "  {} {}{via}   {} {}{}",
                 paint.paint("token:", Palette::label()),
                 paint.paint("ok", Palette::ok()),
                 paint.paint("user:", Palette::label()),
