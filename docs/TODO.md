@@ -15,6 +15,12 @@ so there is one list rather than two that disagree.
   write guessable rather than a guess, issue history, moving an issue between
   queues, editing what was already written, and writes for the
   project-management entities.
+- [Milestone v4](https://github.com/ormeilu/yandex-tracker-cli/milestone/4) — the
+  endpoints a survey of the API found unused, and the query language written down
+  against a live Tracker rather than from memory.
+- [Milestone Yandex Wiki](https://github.com/ormeilu/yandex-tracker-cli/milestone/5)
+  — whether the other half of an organisation's writing belongs behind this
+  binary at all. Research first; the answer may be no.
 - [`kind:question`](https://github.com/ormeilu/yandex-tracker-cli/labels/kind%3Aquestion)
   — open design questions, filed so they are not re-litigated from scratch.
 
@@ -47,6 +53,14 @@ Labels split the work by area: `area:issues`, `area:entities`,
   name, because only one of the two can go in a script. `user find` filters the
   directory here — Tracker has no user search endpoint — and says how many
   people it read rather than presenting a capped answer as a complete one.
+- Milestone v4: `skills/ytcli/yql.md`, every query on it sent to a real Tracker
+  before it was written down — which is how `StoryPoints` turned out not to be a
+  filter name while `"Story Points"` is. `field get` says what a field accepts,
+  naming the command that lists the values when they live elsewhere.
+  `issue remotelinks` shows what an issue is attached to outside Tracker.
+  `queue automation` reports macros, autoactions and triggers, and says which
+  section it was refused rather than counting it zero. `sprint list` and
+  `queue local-fields` close the two listings that had no way in.
 - `ytcli issue list` as an alias of `issue find`: every other group lists with
   that word, and the group used most was the one exception.
 - Profile routing: a bare key goes to the profile that can see its queue, and
