@@ -48,9 +48,11 @@ Labels split the work by area: `area:issues`, `area:entities`,
 - Boards, read-only: listing, columns in board order, and sprints. A board that
   cannot have sprints is refused in Tracker's own words rather than answered
   with an empty list.
-- Portfolios: listing, reading, and what one contains. Containment is a separate
-  command rather than part of `get`, because it is a second request and nothing
-  should pay for an answer it did not ask for.
+- Portfolios: listing, reading, what one contains, and moving a project or a
+  portfolio in and out of one. Containment writes quote the version they read,
+  so a concurrent change is refused rather than overwritten.
+  Containment is a separate command rather than part of `get`, because it is a
+  second request and nothing should pay for an answer it did not ask for.
 - Image attachments drawn in the terminals that can draw them, and a next step
   printed everywhere else.
 - Documentation that is executed: the README and cheatsheet examples run as

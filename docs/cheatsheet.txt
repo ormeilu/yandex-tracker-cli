@@ -78,6 +78,10 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   ytcli portfolio contents ID           the portfolios and projects inside; TYPE says which
                                         get reads a row back. Two requests, one tally
 
+  ytcli portfolio place ID --into ID    also: --out. Same for `project place`.
+                                        Writes quote the version they read, so a
+                                        concurrent change is refused, not overwritten
+
 ## goal
   ytcli goal list
   ytcli goal get ID

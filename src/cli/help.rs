@@ -504,6 +504,38 @@ Containment is not typed but the endpoints are, so this asks twice and prints on
 listing with a TYPE column. `shown N of M` counts both; a page is a page of each,
 which only shows on a portfolio with more than a page of both kinds.";
 
+pub const PORTFOLIO_PLACE: &str = "\
+Put a portfolio inside another one, or take it out.
+
+```
+ytcli portfolio place 655… --into 644…
+ytcli portfolio place 655… --out
+```
+
+Reads the portfolio first, and quotes the version it read back. A portfolio that
+somebody else moved in between is refused by Tracker rather than overwritten —
+and a mistyped id fails before anything is written.
+
+`--dry-run` prints the body and sends nothing. Every write says which profile
+and organisation it is about to touch.
+
+Tracker's entity search runs off an index that lags a write by a few seconds, so
+`portfolio contents` can answer with the portfolio as it was. Reading the entity
+itself — `project get`, `portfolio get` — is immediate.";
+
+pub const PROJECT_PLACE: &str = "\
+Put a project inside a portfolio, or take it out.
+
+```
+ytcli project place 655… --into 644…
+ytcli project place 655… --out
+```
+
+Same shape as `portfolio place`, and the same version check.
+
+A project belongs to one portfolio at a time. Putting it in another moves it;
+nothing is duplicated, and nothing else about the project changes.";
+
 pub const GOAL_LIST: &str = "\
 List goals.
 

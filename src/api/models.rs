@@ -198,6 +198,10 @@ pub struct Entity {
     /// The portfolio this sits in, when it sits in one.
     #[serde(default)]
     pub parent: Option<String>,
+    /// Tracker's optimistic-concurrency counter. A write that quotes a stale
+    /// one is refused rather than applied over somebody else's change.
+    #[serde(default)]
+    pub version: Option<u64>,
 }
 
 /// One attachment of an issue.

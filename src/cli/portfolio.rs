@@ -33,6 +33,18 @@ pub enum PortfolioCommand {
         #[arg(long, default_value_t = 1)]
         page: u32,
     },
+    /// Put it inside a portfolio, or take it out of one.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::PORTFOLIO_PLACE))]
+    Place {
+        /// The portfolio to move, by the id `portfolio list` prints.
+        id: String,
+        /// Portfolio to put it in.
+        #[arg(long, conflicts_with = "out")]
+        into: Option<String>,
+        /// Take it out of whichever portfolio it is in.
+        #[arg(long, conflicts_with = "into")]
+        out: bool,
+    },
 }
 
 pub async fn run(command: &PortfolioCommand, session: &Session) -> ExitCode {
@@ -42,5 +54,14 @@ pub async fn run(command: &PortfolioCommand, session: &Session) -> ExitCode {
         }
         PortfolioCommand::Get { id } => entity::get("portfolio", id, session).await,
         PortfolioCommand::Contents { id, page } => entity::contents(id, *page, session).await,
+        PortfolioCommand::Place { id, into, out } => {
+            if into.is_none() && !*out {
+                return crate::cli::report(
+                    &"say where: --into <portfolio>, or --out to remove it from one",
+                    crate::exit::ExitCode::ConfirmationRequired,
+                );
+            }
+            entity::place("portfolio", id, into.as_deref(), session).await
+        }
     }
 }

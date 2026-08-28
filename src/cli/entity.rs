@@ -3,6 +3,7 @@
 //! Projects, portfolios and goals are the same endpoint family with a different
 //! type name, so they share everything but the word.
 
+use crate::cli::write::{Gate, Intent, check};
 use crate::cli::{Session, emit, report};
 use crate::exit::ExitCode;
 use crate::render::{Format, entity as render, machine};
@@ -93,5 +94,57 @@ fn finish(rendered: Result<String, crate::render::RenderError>) -> ExitCode {
             ExitCode::Success
         }
         Err(error) => report(&error, ExitCode::Failure),
+    }
+}
+
+/// Put an entity inside a portfolio, or take it out of one.
+///
+/// Two requests: the entity is read first for its version, so a portfolio that
+/// somebody else moved in the meantime is refused by Tracker rather than
+/// overwritten. The read also means a mistyped id fails before anything is
+/// written.
+pub async fn place(kind: &str, id: &str, parent: Option<&str>, session: &Session) -> ExitCode {
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+
+    let current = match client.entity(kind, id).await {
+        Ok(entity) => entity,
+        Err(error) => {
+            let code = error.exit_code();
+            return report(&error, code);
+        }
+    };
+
+    let action = match parent {
+        Some(parent) => format!("put {kind} {id} into portfolio {parent}"),
+        None => format!("take {kind} {id} out of its portfolio"),
+    };
+    let body = serde_json::json!({
+        "fields": { "parentEntity": parent }
+    });
+    let intent = Intent {
+        action: &action,
+        targets: std::slice::from_ref(&current.id),
+        body: &body,
+    };
+    if let Gate::Stop(code) = check(&intent, session) {
+        return code;
+    }
+
+    match client.place_entity(kind, id, parent, current.version).await {
+        Ok(placed) => {
+            let rendered = match session.render.format {
+                Format::Text => Ok(render::entity(&placed, &session.render)),
+                Format::JsonRaw => machine(&placed, Format::Json),
+                other => machine(&placed, other),
+            };
+            finish(rendered)
+        }
+        Err(error) => {
+            let code = error.exit_code();
+            report(&error, code)
+        }
     }
 }

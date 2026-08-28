@@ -231,6 +231,7 @@ pub fn entity(value: &Value) -> Option<Entity> {
             .and_then(Value::as_str)
             .map(ToOwned::to_owned),
         parent: parent_entity(field("parentEntity")),
+        version: value.get("version").and_then(Value::as_u64),
     })
 }
 
@@ -241,18 +242,20 @@ pub fn entity(value: &Value) -> Option<Entity> {
 /// at, because an entity whose parent silently reads as absent is worse than one
 /// that costs a few lines here.
 fn parent_entity(value: Option<&Value>) -> Option<String> {
+    fn id_of(value: &Value) -> Option<String> {
+        match value {
+            Value::String(id) => Some(id.clone()),
+            Value::Number(id) => Some(id.to_string()),
+            // A read answers `{"primary": {"id": …, "display": …}}`; a write
+            // takes `{"primary": "<id>"}`. Both arrive here.
+            Value::Object(map) => map.get("id").and_then(id_of),
+            _ => None,
+        }
+    }
+
     match value? {
-        Value::String(id) => Some(id.clone()),
-        Value::Number(id) => Some(id.to_string()),
-        Value::Object(map) => map
-            .get("primary")
-            .or_else(|| map.get("id"))
-            .and_then(|value| match value {
-                Value::String(id) => Some(id.clone()),
-                Value::Number(id) => Some(id.to_string()),
-                _ => None,
-            }),
-        _ => None,
+        Value::Object(map) => map.get("primary").and_then(id_of),
+        other => id_of(other),
     }
 }
 

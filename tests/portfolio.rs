@@ -7,7 +7,7 @@
 
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
-use wiremock::matchers::{body_json, method, path};
+use wiremock::matchers::{body_json, method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
 mod harness;
@@ -165,4 +165,146 @@ async fn get_does_not_pay_for_the_contents_nobody_asked_for() {
 
     let requests = harness.server.received_requests().await.unwrap_or_default();
     assert_eq!(requests.len(), 1, "{requests:?}");
+}
+
+/// The write quotes the version it just read, so a portfolio somebody else
+/// moved in between is Tracker's problem to refuse rather than ours to
+/// overwrite.
+#[tokio::test]
+async fn placing_reads_the_version_first_and_sends_it_back() {
+    let harness = Harness::new().await;
+    let mut body = entity("project", "p1", 10, "Card capture", None);
+    body["version"] = serde_json::json!(7);
+    Mock::given(method("GET"))
+        .and(path("/v3/entities/project/p1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(body.clone()))
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("PATCH"))
+        .and(path("/v3/entities/project/p1"))
+        .and(query_param("version", "7"))
+        .and(body_json(serde_json::json!({
+            "fields": {"parentEntity": {"primary": "aaa"}}
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(entity(
+            "project",
+            "p1",
+            10,
+            "Card capture",
+            Some("aaa"),
+        )))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness
+        .run(&["project", "place", "p1", "--into", "aaa"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert!(stdout.contains("in portfolio: aaa"), "{stdout}");
+}
+
+/// Taking something out sends `null`, not an empty object: an empty object is a
+/// change Tracker accepts and ignores, which reads as success and is not.
+#[tokio::test]
+async fn taking_an_entity_out_sends_a_null_parent() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v3/entities/portfolio/bbb"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(portfolio(
+            "bbb",
+            2,
+            "Payments",
+            Some("aaa"),
+        )))
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("PATCH"))
+        .and(path("/v3/entities/portfolio/bbb"))
+        .and(body_json(
+            serde_json::json!({"fields": {"parentEntity": serde_json::Value::Null}}),
+        ))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(portfolio("bbb", 2, "Payments", None)),
+        )
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&["portfolio", "place", "bbb", "--out"])
+        .assert()
+        .success();
+}
+
+/// Neither `--into` nor `--out` is a question, not a default: silently doing
+/// one of the two would be the one outcome nobody asked for.
+#[tokio::test]
+async fn placing_nowhere_is_refused_before_anything_is_read() {
+    let harness = Harness::new().await;
+
+    harness
+        .run(&["project", "place", "p1"])
+        .assert()
+        .code(2)
+        .stderr(predicates::str::contains("--into"));
+
+    let requests = harness.server.received_requests().await.unwrap_or_default();
+    assert!(requests.is_empty(), "{requests:?}");
+}
+
+/// A dry run reads, so it can fail on a bad id, and writes nothing.
+#[tokio::test]
+async fn a_dry_run_places_nothing() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v3/entities/project/p1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(entity(
+            "project",
+            "p1",
+            10,
+            "Card capture",
+            None,
+        )))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&["project", "place", "p1", "--into", "aaa", "--dry-run"])
+        .assert()
+        .success();
+
+    let requests = harness.server.received_requests().await.unwrap_or_default();
+    assert!(
+        requests.iter().all(|request| request.method == "GET"),
+        "a dry run wrote something: {requests:?}"
+    );
+}
+
+/// A version that moved on is a 412, and Tracker's own sentence explains it.
+#[tokio::test]
+async fn a_stale_version_is_reported_not_retried() {
+    let harness = Harness::new().await;
+    let mut body = entity("project", "p1", 10, "Card capture", None);
+    body["version"] = serde_json::json!(1);
+    Mock::given(method("GET"))
+        .and(path("/v3/entities/project/p1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(body))
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("PATCH"))
+        .and(path("/v3/entities/project/p1"))
+        .respond_with(ResponseTemplate::new(412).set_body_json(serde_json::json!({
+            "errorMessages": ["Could not save the change, try again."],
+            "statusCode": 412
+        })))
+        .expect(1)
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&["project", "place", "p1", "--into", "aaa"])
+        .assert()
+        .code(5)
+        .stderr(predicates::str::contains("try again"));
 }

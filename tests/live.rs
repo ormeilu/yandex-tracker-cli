@@ -328,6 +328,59 @@ async fn fields_and_templates_parse() {
     }
 }
 
+/// Containment, written and read back, against a portfolio this test makes.
+///
+/// Entities can be deleted, unlike issues, so this cleans up after itself and
+/// runs on the same opt-in as the issue write below. It is here because the
+/// shape of a containment write cannot be checked any other way: a read answers
+/// `parentEntity.primary` as an object, a write takes it as a string, and a
+/// mock can only agree with whichever we believed on the day.
+#[tokio::test]
+#[ignore = "creates and deletes real entities; needs YTCLI_TEST_QUEUE"]
+async fn a_project_can_be_put_in_a_portfolio_and_taken_out() {
+    if setting("YTCLI_TEST_QUEUE").is_none() {
+        return;
+    }
+    let client = client();
+
+    let portfolio = client
+        .create_entity("portfolio", "ytcli live test — deleted by this test")
+        .await
+        .expect("create portfolio");
+    let project = client
+        .create_entity("project", "ytcli live test — deleted by this test")
+        .await
+        .expect("create project");
+
+    let placed = client
+        .place_entity("project", &project.id, Some(&portfolio.id), project.version)
+        .await
+        .expect("place");
+    assert_eq!(
+        placed.parent.as_deref(),
+        Some(portfolio.id.as_str()),
+        "the write did not come back as the read we believe in"
+    );
+
+    let removed = client
+        .place_entity("project", &project.id, None, placed.version)
+        .await
+        .expect("remove");
+    assert!(
+        removed.parent.is_none(),
+        "the parent survived being cleared"
+    );
+
+    client
+        .delete_entity("project", &project.id)
+        .await
+        .expect("delete project");
+    client
+        .delete_entity("portfolio", &portfolio.id)
+        .await
+        .expect("delete portfolio");
+}
+
 /// Writing, only into a queue somebody named on purpose.
 ///
 /// Tracker has no delete. Whatever this creates stays, so it is opt-in twice

@@ -612,6 +612,77 @@ impl Client {
             .unwrap_or_default())
     }
 
+    /// Create a project, portfolio or goal with nothing but a name.
+    ///
+    /// Everything else about an entity is optional, and a command line is not
+    /// where a portfolio's description gets written.
+    pub async fn create_entity(&self, kind: &str, summary: &str) -> Result<Entity, ApiError> {
+        let body = serde_json::json!({ "fields": { "summary": summary } });
+        let (value, _) = self
+            .post_value(
+                &format!("/v3/entities/{kind}?fields={ENTITY_FIELDS}"),
+                &body,
+                kind,
+            )
+            .await?;
+
+        parse::entity(&value).ok_or_else(|| ApiError::NotFound(kind.to_owned()))
+    }
+
+    /// Delete a project, portfolio or goal.
+    ///
+    /// Entities can be deleted; issues cannot. That asymmetry is why the live
+    /// suite may write entities and may not write issues without being told a
+    /// queue to sacrifice.
+    pub async fn delete_entity(&self, kind: &str, id: &str) -> Result<(), ApiError> {
+        self.send_value(
+            reqwest::Method::DELETE,
+            &format!("/v3/entities/{kind}/{id}"),
+            None,
+            &format!("{kind} {id}"),
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Put an entity inside a portfolio, or take it out of one.
+    ///
+    /// `version` is Tracker's optimistic-concurrency counter and is quoted on
+    /// purpose: without it the write lands whatever happened in between, and
+    /// with it a portfolio that moved under us answers 412 instead of being
+    /// silently overwritten.
+    pub async fn place_entity(
+        &self,
+        kind: &str,
+        id: &str,
+        parent: Option<&str>,
+        version: Option<u64>,
+    ) -> Result<Entity, ApiError> {
+        // The response is the entity as it now stands, but only of the fields
+        // asked for — without this it comes back with an empty `fields` and the
+        // command prints a blank summary after a write that worked.
+        let path = match version {
+            Some(version) => {
+                format!("/v3/entities/{kind}/{id}?version={version}&fields={ENTITY_FIELDS}")
+            }
+            None => format!("/v3/entities/{kind}/{id}?fields={ENTITY_FIELDS}"),
+        };
+        let body = serde_json::json!({
+            "fields": { "parentEntity": place_body(parent) }
+        });
+
+        let (value, _) = self
+            .send_value(
+                reqwest::Method::PATCH,
+                &path,
+                Some(&body),
+                &format!("{kind} {id}"),
+            )
+            .await?;
+
+        parse::entity(&value).ok_or_else(|| ApiError::NotFound(format!("{kind} {id}")))
+    }
+
     /// One queue and its settings.
     pub async fn queue(&self, key: &str) -> Result<QueueSettings, ApiError> {
         let raw = self
@@ -902,6 +973,17 @@ impl Sprint {
                 .and_then(Value::as_str)
                 .map(ToOwned::to_owned),
         })
+    }
+}
+
+/// What `parentEntity` is set to: a portfolio, or nothing.
+///
+/// Removing is `null`, not an empty object — an empty object is a change
+/// Tracker accepts and ignores, which reads as success and is not.
+fn place_body(parent: Option<&str>) -> Value {
+    match parent {
+        Some(parent) => serde_json::json!({ "primary": parent }),
+        None => Value::Null,
     }
 }
 

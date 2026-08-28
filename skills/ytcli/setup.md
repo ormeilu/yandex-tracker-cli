@@ -110,6 +110,8 @@ allowlist is worth having. For Claude Code, in `.claude/settings.json`:
       "Bash(ytcli cheatsheet:*)"
     ],
     "ask": [
+      "Bash(ytcli portfolio place:*)",
+      "Bash(ytcli project place:*)",
       "Bash(ytcli issue create:*)",
       "Bash(ytcli issue update:*)",
       "Bash(ytcli issue comment:*)",

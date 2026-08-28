@@ -176,6 +176,8 @@ const UNRUNNABLE: &[(&str, &str)] = &[
     ("issue worklog", "a write"),
     ("issue check", "a write"),
     ("issue link", "a write"),
+    ("portfolio place", "a write"),
+    ("project place", "a write"),
     ("attachment list", "no recorded attachment fixture yet"),
     (
         "attachment show",
