@@ -14,6 +14,8 @@ use std::path::{Path, PathBuf};
 
 use assert_cmd::Command;
 
+mod harness;
+
 fn skill_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("skills/ytcli")
 }
@@ -118,4 +120,63 @@ fn every_topic_file_is_referenced_from_the_entry_point() {
         }
         assert!(entry.contains(name.as_ref()), "{name} is never mentioned");
     }
+}
+
+/// Every query the skill teaches, taken off the page rather than kept in a list
+/// beside it: a list beside it is a list that drifts.
+fn documented_queries() -> Vec<String> {
+    let text = std::fs::read_to_string(skill_dir().join("yql.md")).expect("yql.md");
+    let queries: Vec<String> = text
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("ytcli issue find --yql "))
+        .map(|rest| rest.trim().trim_matches('\'').to_owned())
+        .collect();
+
+    assert!(
+        queries.len() >= 10,
+        "yql.md teaches {} queries; the extraction is probably broken",
+        queries.len()
+    );
+    queries
+}
+
+/// The queries reach Tracker exactly as written.
+///
+/// This is not a test of the language — a stub accepts anything — but of the
+/// path between the page and the wire: shell quoting, the `--yql` argument, and
+/// the body the client builds. A documented query the CLI mangles is a
+/// documented query that fails in the field. Whether Tracker *accepts* them is
+/// the live suite's question, and the same list answers it there.
+#[tokio::test]
+async fn every_documented_query_survives_the_trip_to_the_request_body() {
+    let harness = harness::Harness::new().await;
+    wiremock::Mock::given(wiremock::matchers::method("POST"))
+        .and(wiremock::matchers::path("/v3/issues/_search"))
+        .respond_with(
+            wiremock::ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!([]))
+                .append_header("X-Total-Count", "0"),
+        )
+        .mount(&harness.server)
+        .await;
+
+    for query in documented_queries() {
+        harness
+            .run(&["issue", "find", "--yql", &query])
+            .assert()
+            .success();
+    }
+
+    let requests = harness
+        .server
+        .received_requests()
+        .await
+        .expect("recorded requests");
+    let sent: Vec<String> = requests
+        .iter()
+        .filter_map(|request| serde_json::from_slice::<serde_json::Value>(&request.body).ok())
+        .filter_map(|body| body["query"].as_str().map(ToOwned::to_owned))
+        .collect();
+
+    assert_eq!(sent, documented_queries());
 }

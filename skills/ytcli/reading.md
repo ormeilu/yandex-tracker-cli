@@ -32,7 +32,9 @@ ytcli issue find --yql 'Queue: PROJ AND Status: Open AND Updated: >now()-7d'
 lists. Both are allowlisted; neither can write.
 
 `--yql` is the full Yandex Query Language filter, and it is read-only like every
-other search — there is no write reachable through it.
+other search — there is no write reachable through it. Operators, functions,
+relative dates, sorting and the filter names are in `yql.md`; a name Tracker
+does not know is refused with a 422 that says which one.
 
 ## Pagination
 

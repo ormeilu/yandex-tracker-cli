@@ -18,13 +18,18 @@ use std::io::IsTerminal;
 pub const TOKEN: &str = "\
 ## Get an OAuth token
 
-1. Create an application at https://oauth.yandex.com/client/new — pick
+1. Create an application at https://oauth.yandex.ru/client/new — pick
    **For API access or debugging**, and grant `tracker:write` for full access
    or `tracker:read` to stay read-only.
-   (https://oauth.yandex.ru/client/new for a Russian-locale account.)
 2. Copy the application's **ClientID** from its page.
-3. Open `https://oauth.yandex.com/authorize?response_type=token&client_id=<ClientID>`
+3. Open `https://oauth.yandex.ru/authorize?response_type=token&client_id=<ClientID>`
    and sign in. The token comes back in the address bar you land on.
+
+**Stay on one domain for both steps.** `oauth.yandex.com` works too, but it is a
+separate origin with its own cookies, so your browser may be signed in there as
+somebody else — or as nobody. An application created under one account and
+authorised under another produces a token for the wrong person, and the first
+sign of it is `auth status` naming a stranger.
 
 It looks like `y0__xAbc...`, roughly 60-90 characters.
 

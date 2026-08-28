@@ -45,11 +45,17 @@ the wrong one is a 403 that looks like a permissions problem.
 
 You need two things: an OAuth token and an organisation id.
 
-**Token** — create an application at [oauth.yandex.com/client/new](https://oauth.yandex.com/client/new),
+**Token** — create an application at [oauth.yandex.ru/client/new](https://oauth.yandex.ru/client/new),
 choose "For API access or debugging", grant `tracker:write` (or `tracker:read`
 to stay read-only), then open
-`https://oauth.yandex.com/authorize?response_type=token&client_id=<ClientID>`
+`https://oauth.yandex.ru/authorize?response_type=token&client_id=<ClientID>`
 and sign in. The token comes back in the address bar and looks like `y0__xAbc…`.
+
+Use the same domain for both steps. `oauth.yandex.com` serves the same thing,
+but it is a separate origin with its own cookies, so the browser may be signed
+in there as a different account or none at all — and an application created
+under one account and authorised under another yields a working token for the
+wrong person. `ytcli auth status` naming somebody unexpected is usually this.
 
 **Organisation id** — [tracker.yandex.ru/admin/orgs](https://tracker.yandex.ru/admin/orgs)
 lists every organisation you belong to, with its id and its kind. A Yandex 360

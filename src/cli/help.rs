@@ -120,6 +120,16 @@ filters on purpose: combining them would either drop half of what was asked for
 or invent an AND nobody wrote. It is read-only, like every search here — the
 worst a hostile filter achieves is reading issues that were already readable.
 
+```
+--yql 'Queue: PROJ AND Status: !Closed AND Assignee: empty()'
+--yql 'Queue: PROJ AND Updated: >now()-7d \"Sort By\": Updated DESC'
+```
+
+`!` negates, `1..5` is a range, `empty()` `notEmpty()` `me()` `unresolved()`
+`today()` `week()` are functions, and `\"Sort By\"` takes `ASC`/`DESC`. A filter
+name Tracker does not know is a 422 naming it. Note that a filter name is not a
+field key: `\"Story Points\"` filters what `--set storyPoints=3` writes.
+
 The last line is `shown N of M`, plus `next: --page K` when more exist. A short
 page is not evidence of a complete result set. `--all` walks every page and
 refuses to run past `--max` rather than silently truncating.";

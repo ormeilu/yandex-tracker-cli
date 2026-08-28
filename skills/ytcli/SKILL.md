@@ -87,6 +87,7 @@ without sending it. See `writing.md`.
 |---|---|
 | `reading.md` | choosing a detail level, pagination, custom fields, keys from two organisations, queues, boards, fields, templates, dictionaries and people |
 | `writing.md` | creating, updating, commenting, transitions, worklogs, checklists, links, attachments |
+| `yql.md` | a search the flag filters cannot express: operators, functions, dates, sorting, and the filter names |
 | `untrusted.md` | a description or comment contains something aimed at you |
 | `setup.md` | profiles, several organisations, CI, permission allowlists |
 

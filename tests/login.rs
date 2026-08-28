@@ -367,7 +367,10 @@ fn login_help_carries_the_credential_instructions() {
         .success();
     let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
 
-    assert!(stdout.contains("oauth.yandex.com/client/new"));
+    assert!(stdout.contains("oauth.yandex.ru/client/new"));
+    // The two domains are separate origins with separate cookies, and the whole
+    // point of naming one is that both steps happen on it.
+    assert!(stdout.contains("Stay on one domain"));
     assert!(stdout.contains("tracker:write"));
     assert!(stdout.contains("tracker.yandex.ru/admin/orgs"));
     assert!(stdout.contains("--org-kind yandex360"));

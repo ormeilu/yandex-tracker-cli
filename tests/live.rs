@@ -585,3 +585,46 @@ async fn a_project_can_be_created_changed_and_deleted() {
         "the rename did not survive being read through a different endpoint"
     );
 }
+
+/// Every query the skill teaches, sent to a real Tracker.
+///
+/// The stub-backed test proves the query survives the trip to the request body;
+/// only this one proves the language is real. A filter name Tracker does not
+/// know is a 422 naming it, which is exactly what an invented example looks
+/// like — and inventing plausible syntax is the failure mode of writing
+/// documentation about a language from memory.
+#[tokio::test]
+#[ignore = "needs real credentials"]
+async fn every_query_the_skill_teaches_is_accepted() {
+    let client = client();
+    let queue = a_queue(&client).await;
+    let text =
+        std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("skills/ytcli/yql.md"))
+            .expect("yql.md");
+
+    let queries: Vec<String> = text
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("ytcli issue find --yql "))
+        // The page is written against the queue this was developed in; any
+        // organisation has a first queue, and the names being tested are the
+        // filters rather than the queue.
+        .map(|rest| {
+            rest.trim()
+                .trim_matches('\'')
+                .replace("Queue: TRACKER", &format!("Queue: {queue}"))
+        })
+        .collect();
+    assert!(queries.len() >= 10, "found {} queries", queries.len());
+
+    let mut refused = Vec::new();
+    for query in queries {
+        if client.count(&query).await.is_err() {
+            refused.push(query);
+        }
+    }
+
+    assert!(
+        refused.is_empty(),
+        "Tracker refused queries the skill teaches: {refused:#?}"
+    );
+}
