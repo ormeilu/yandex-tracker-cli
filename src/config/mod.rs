@@ -250,8 +250,6 @@ impl Config {
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
-    use figment::providers::Format as _;
-
     use super::*;
 
     /// A screenshot is usually the most informative thing on a bug, so the
