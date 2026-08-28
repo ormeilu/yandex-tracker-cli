@@ -4,7 +4,7 @@
 # binary and the library keep the short name: `cargo install yandex-tracker-cli`
 # puts `ytcli` on the path, the same trade `uvx --from` already makes.
 name = "yandex-tracker-cli"
-version = "0.5.2"
+version = "0.6.0"
 edition = "2024"
 rust-version = "1.90"
 description = "Token-efficient Yandex Tracker CLI for humans and AI agents"
