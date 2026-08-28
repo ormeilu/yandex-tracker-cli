@@ -72,6 +72,19 @@ fallback: tokens live in the OS keychain or the command fails and says so.
 
 There is no command that prints a stored token.
 
+`YTCLI_TOKEN` is **not per account**: it is checked before the keychain and used
+for whichever profile is in play, so with more than one profile configured it
+makes them all the same identity. `ytcli auth status` marks each profile it read
+that way with `(from YTCLI_TOKEN)` and warns once at the end. If two profiles
+report the same person, that is the first thing to check — a shell that sources
+`.env` on entering a directory sets it without anyone deciding to.
+
+In a sandbox that is rebuilt per session — no keychain, nothing kept between
+runs — `YTCLI_TOKEN` is the only mechanism there is. The user sets it in the
+environment themselves. **Do not ask for a token in the conversation to put it
+there**: a token in a transcript is a token to revoke, and an environment
+variable set from a command line is visible to every process on the machine.
+
 ## Permission allowlists
 
 The verb is the risk class, and no verb both reads and writes, so a static

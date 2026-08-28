@@ -20,7 +20,16 @@ const TOKEN_ENV: &str = "YTCLI_TOKEN";
 pub enum SecretError {
     #[error("no token stored for account `{0}`; run `ytcli auth login --account {0}`")]
     Missing(String),
-    #[error("the OS keychain is unavailable; ytcli never falls back to plaintext storage")]
+    // Containers and sandboxes are where this lands: a Linux image with no
+    // Secret Service running, or a session sandbox that is thrown away at the
+    // end. Saying only that the keychain is missing leaves the reader with no
+    // next step, and the next step is not "store it in a file".
+    #[error(
+        "the OS keychain is unavailable; ytcli never falls back to plaintext storage.\n\
+         Where there is no keychain — a container, CI, a session sandbox — put the token in the \
+         environment as YTCLI_TOKEN instead. Set it as an environment variable, never as a \
+         command-line argument: arguments are visible to every process on the machine"
+    )]
     Unavailable(#[source] keyring::Error),
     #[error("keychain error")]
     Backend(#[source] keyring::Error),
