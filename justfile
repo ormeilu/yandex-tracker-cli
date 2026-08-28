@@ -163,17 +163,35 @@ secrets:
 
 # --- build and run ------------------------------------------------------------
 
-# Debug build
-build:
+# Debug build, signed so the Keychain approval survives it
+build: && (sign "target/debug/ytcli")
     {{cargo}} build
 
 # Release build, as shipped
-release:
+release: && (sign "target/release/ytcli")
     {{cargo}} build --release
 
 # Run the CLI: just run issue get PROJ-1
-run *ARGS:
-    {{cargo}} run --quiet -- {{ARGS}}
+run *ARGS: build
+    ./target/debug/ytcli {{ARGS}}
+
+# Sign a locally built binary with the ytcli-dev identity, if there is one
+#
+# Cargo links an ad-hoc signature that changes with every build, and the
+# Keychain grants "Always Allow" to a signature rather than to a path — so
+# without this, every rebuild is a new application asking for the password
+# again. Signing with a stable identity makes the approval outlive the build.
+#
+# Silent when there is no identity or no such binary: this hangs off `build`,
+# and a build must not fail because a convenience is not set up.
+[private]
+sign BINARY:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ "$(uname)" != "Darwin" ] || [ ! -f "{{BINARY}}" ]; then exit 0; fi
+    if security find-identity -v -p codesigning 2>/dev/null | grep -q ytcli-dev; then
+        codesign --force --sign ytcli-dev "{{BINARY}}" 2>/dev/null
+    fi
 
 # Regenerate shell completions into dist/completions
 completions:

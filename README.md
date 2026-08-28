@@ -277,9 +277,16 @@ Exit codes: `0` ok, `1` error, `2` confirmation required, `3` auth, `4` not foun
 ```bash
 just install     # tooling and git hooks
 just check       # format, clippy, tests, cargo-deny
+just build       # debug build, signed for the Keychain (see below)
 just run issue get PROJ-1
 just snapshots   # review output-format changes
 ```
+
+On macOS, run `just signing-identity` once. Cargo links an ad-hoc signature that
+changes with every build, and the Keychain grants "Always Allow" to a signature
+rather than to a path — so without a stable identity, every rebuild is a new
+application and macOS asks for your password again. `just build`, `just run` and
+`just local-install` sign with it; a bare `cargo build` does not.
 
 The output format is the product, so every renderer is pinned by a snapshot test:
 changing what callers see shows up as a diff in review.
