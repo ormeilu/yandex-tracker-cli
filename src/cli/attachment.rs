@@ -314,6 +314,7 @@ async fn upload(target: &str, file: &Path, session: &Session) -> ExitCode {
         action: &format!("upload {name} to {key}"),
         targets: &targets,
         body: &body,
+        always_confirm: false,
     };
     if let Gate::Stop(code) = check(&intent, session) {
         return code;

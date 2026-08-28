@@ -320,6 +320,7 @@ async fn worklog_write(command: &WorklogCommand, session: &Session) -> ExitCode 
                 action: &format!("log {duration} against {key}"),
                 targets: &targets,
                 body: &body,
+                always_confirm: false,
             };
             if let Gate::Stop(code) = check(&intent, session) {
                 return code;
@@ -380,6 +381,7 @@ async fn check_write(command: &CheckCommand, session: &Session) -> ExitCode {
                 action: &format!("add a checklist line to {key}"),
                 targets: &targets,
                 body: &body,
+                always_confirm: false,
             };
             if let Gate::Stop(code) = check(&intent, session) {
                 return code;
@@ -420,6 +422,7 @@ async fn set_checked(target: &str, id: &str, checked: bool, session: &Session) -
         action: &format!("{verb} checklist item {id} of {key}"),
         targets: &targets,
         body: &body,
+        always_confirm: false,
     };
     if let Gate::Stop(code) = check(&intent, session) {
         return code;
@@ -455,6 +458,7 @@ async fn link_write(command: &LinkCommand, session: &Session) -> ExitCode {
                 action: &format!("link {key} {relation} {other}"),
                 targets: &targets,
                 body: &body,
+                always_confirm: false,
             };
             if let Gate::Stop(code) = check(&intent, session) {
                 return code;
@@ -512,6 +516,7 @@ where
         action: &format!("delete {what} {id} of {key}"),
         targets: &targets,
         body: &body,
+        always_confirm: false,
     };
     if let Gate::Stop(code) = check(&intent, session) {
         return code;
@@ -1049,6 +1054,7 @@ async fn create(
         action: &format!("create an issue in {queue}"),
         targets: &[],
         body: &body,
+        always_confirm: false,
     };
     if let Gate::Stop(code) = check(&intent, session) {
         return code;
@@ -1121,6 +1127,7 @@ async fn update(
         action: &format!("update {}", keys.join(", ")),
         targets: &keys,
         body: &body,
+        always_confirm: false,
     };
     if let Gate::Stop(code) = check(&intent, session) {
         return code;
@@ -1163,6 +1170,7 @@ async fn comment(target: &str, raw: &str, session: &Session) -> ExitCode {
         action: &format!("comment on {key}"),
         targets: &targets,
         body: &body,
+        always_confirm: false,
     };
     if let Gate::Stop(code) = check(&intent, session) {
         return code;
@@ -1214,6 +1222,7 @@ async fn transition_cmd(target: &str, transition: Option<&str>, session: &Sessio
         action: &format!("move {key} through `{transition}`"),
         targets: &targets,
         body: &body,
+        always_confirm: false,
     };
     if let Gate::Stop(code) = check(&intent, session) {
         return code;

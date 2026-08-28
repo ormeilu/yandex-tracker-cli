@@ -3,7 +3,7 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use predicates::prelude::*;
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 mod harness;
@@ -129,4 +129,180 @@ async fn reading_an_unknown_queue_exits_four() {
         .assert()
         .code(4)
         .stderr(predicate::str::contains("queue NOPE not found"));
+}
+
+fn blueprint() -> serde_json::Value {
+    serde_json::json!({
+        "id": 1,
+        "key": "PROJ",
+        "version": 2,
+        "name": "Product",
+        "lead": {"id": "1", "login": "ilubenets"},
+        "defaultType": {"id": "2", "key": "task", "display": "Task"},
+        "defaultPriority": {"id": "3", "key": "normal", "display": "Normal"},
+        "issueTypesConfig": [{
+            "issueType": {"id": "2", "key": "task", "display": "Task"},
+            "workflow": {"id": "quickStartV2PresetWorkflow", "display": "Preset"},
+            "resolutions": [
+                {"id": "1", "key": "fixed", "display": "Fixed"},
+                {"id": "2", "key": "wontFix", "display": "Won\'t fix"}
+            ]
+        }]
+    })
+}
+
+async fn a_queue_to_copy(harness: &Harness) {
+    Mock::given(method("GET"))
+        .and(path("/v3/queues/PROJ"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(blueprint()))
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v3/myself"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "id": "1", "login": "ilubenets", "display": "Ilya"
+        })))
+        .mount(&harness.server)
+        .await;
+}
+
+/// The whole point of `--like`: workflow ids are organisation-specific strings
+/// nobody has memorised, so they are copied rather than asked for — and copied
+/// as the keys the create endpoint takes, not the objects the read answers with.
+#[tokio::test]
+async fn creating_copies_the_issue_types_as_keys_and_ids() {
+    let harness = Harness::new().await;
+    a_queue_to_copy(&harness).await;
+    Mock::given(method("POST"))
+        .and(path("/v3/queues"))
+        .and(body_json(serde_json::json!({
+            "key": "OPS",
+            "name": "Operations",
+            "lead": "ilubenets",
+            "defaultType": "task",
+            "defaultPriority": "normal",
+            "issueTypesConfig": [{
+                "issueType": "task",
+                "workflow": "quickStartV2PresetWorkflow",
+                "resolutions": ["fixed", "wontFix"]
+            }]
+        })))
+        .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({
+            "id": 9,
+            "key": "OPS",
+            "version": 1,
+            "name": "Operations",
+            "lead": {"id": "1", "login": "ilubenets"},
+            "defaultType": {"id": "2", "key": "task"},
+            "defaultPriority": {"id": "3", "key": "normal"}
+        })))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness
+        .run(&[
+            "queue",
+            "create",
+            "-k",
+            "OPS",
+            "-n",
+            "Operations",
+            "--like",
+            "PROJ",
+            "--yes",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert!(stdout.contains("OPS"));
+    assert!(stdout.contains("Operations"));
+}
+
+/// A queue key is claimed once — Tracker deletes a queue by hiding it, and the
+/// key stays spent. One target, and `--yes` all the same.
+#[tokio::test]
+async fn creating_a_queue_without_yes_sends_nothing() {
+    let harness = Harness::new().await;
+    a_queue_to_copy(&harness).await;
+
+    harness
+        .run(&[
+            "queue",
+            "create",
+            "-k",
+            "OPS",
+            "-n",
+            "Operations",
+            "--like",
+            "PROJ",
+        ])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("cannot be undone"));
+
+    let requests = harness.server.received_requests().await.unwrap_or_default();
+    assert!(
+        requests.iter().all(|request| request.method == "GET"),
+        "{requests:?}"
+    );
+}
+
+/// `--dry-run` prints the body `--like` decided on, which is the cheap way to
+/// find out what a queue would be created with.
+#[tokio::test]
+async fn a_dry_run_prints_what_like_decided() {
+    let harness = Harness::new().await;
+    a_queue_to_copy(&harness).await;
+
+    let output = harness
+        .run(&[
+            "queue",
+            "create",
+            "-k",
+            "OPS",
+            "-n",
+            "Operations",
+            "--like",
+            "PROJ",
+            "--yes",
+            "--dry-run",
+        ])
+        .assert()
+        .success();
+    let stderr = String::from_utf8(output.get_output().stderr.clone()).expect("utf-8");
+
+    assert!(stderr.contains("quickStartV2PresetWorkflow"), "{stderr}");
+    let requests = harness.server.received_requests().await.unwrap_or_default();
+    assert!(requests.iter().all(|request| request.method == "GET"));
+}
+
+/// A queue with no issue types cannot be copied from, and saying so beats
+/// sending a body Tracker will refuse for a reason nobody can read.
+#[tokio::test]
+async fn a_model_queue_without_issue_types_is_refused_before_the_write() {
+    let harness = Harness::new().await;
+    let mut thin = blueprint();
+    thin["issueTypesConfig"] = serde_json::json!([]);
+    Mock::given(method("GET"))
+        .and(path("/v3/queues/PROJ"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(thin))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&[
+            "queue",
+            "create",
+            "-k",
+            "OPS",
+            "-n",
+            "Operations",
+            "--like",
+            "PROJ",
+            "--yes",
+        ])
+        .assert()
+        .code(4)
+        .stderr(predicate::str::contains("issue types of queue PROJ"));
 }

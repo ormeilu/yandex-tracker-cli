@@ -692,6 +692,74 @@ impl Client {
         QueueSettings::parse(&raw).ok_or_else(|| ApiError::NotFound(format!("queue {key}")))
     }
 
+    /// The parts of a queue that another queue can be built from.
+    ///
+    /// `issueTypesConfig` pairs each issue type with a workflow and a set of
+    /// resolutions, and workflow ids are organisation-specific strings nobody
+    /// has memorised. Copying them from a queue that already works is the only
+    /// way to create one from a command line without asking for internals.
+    pub async fn queue_blueprint(&self, key: &str) -> Result<Blueprint, ApiError> {
+        let raw = self
+            .get_value(
+                &format!("/v3/queues/{key}?expand=all"),
+                &format!("queue {key}"),
+            )
+            .await?;
+
+        let named = |name: &str| {
+            raw.get(name)
+                .and_then(|field| field.get("key"))
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned)
+        };
+
+        let types = raw
+            .get("issueTypesConfig")
+            .and_then(Value::as_array)
+            .map(|entries| {
+                entries
+                    .iter()
+                    .filter_map(|entry| {
+                        Some(serde_json::json!({
+                            "issueType": entry.get("issueType")?.get("key")?.as_str()?,
+                            "workflow": entry.get("workflow")?.get("id")?.as_str()?,
+                            "resolutions": entry
+                                .get("resolutions")
+                                .and_then(Value::as_array)
+                                .map(|resolutions| {
+                                    resolutions
+                                        .iter()
+                                        .filter_map(|resolution| {
+                                            resolution.get("key").and_then(Value::as_str)
+                                        })
+                                        .collect::<Vec<_>>()
+                                })
+                                .unwrap_or_default(),
+                        }))
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        if types.is_empty() {
+            return Err(ApiError::NotFound(format!("issue types of queue {key}")));
+        }
+
+        Ok(Blueprint {
+            default_type: named("defaultType"),
+            default_priority: named("defaultPriority"),
+            issue_types: types,
+        })
+    }
+
+    /// Create a queue.
+    pub async fn create_queue(&self, body: &Value) -> Result<QueueSettings, ApiError> {
+        let (value, _) = self.post_value("/v3/queues", body, "queue").await?;
+
+        QueueSettings::parse(&value)
+            .ok_or_else(|| ApiError::NotFound("the created queue".to_owned()))
+    }
+
     /// Every field defined in the organisation, not just one queue's.
     ///
     /// `queue fields` answers "what can I set on an issue here"; this answers
@@ -974,6 +1042,16 @@ impl Sprint {
                 .map(ToOwned::to_owned),
         })
     }
+}
+
+/// The parts of an existing queue a new one can be built from.
+#[derive(Debug, Clone)]
+pub struct Blueprint {
+    pub default_type: Option<String>,
+    pub default_priority: Option<String>,
+    /// `issueTypesConfig` as the create endpoint takes it: keys and ids, not
+    /// the expanded objects the read answers with.
+    pub issue_types: Vec<Value>,
 }
 
 /// What `parentEntity` is set to: a portfolio, or nothing.

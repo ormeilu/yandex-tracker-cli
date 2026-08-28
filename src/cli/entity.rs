@@ -128,6 +128,7 @@ pub async fn place(kind: &str, id: &str, parent: Option<&str>, session: &Session
         action: &action,
         targets: std::slice::from_ref(&current.id),
         body: &body,
+        always_confirm: false,
     };
     if let Gate::Stop(code) = check(&intent, session) {
         return code;

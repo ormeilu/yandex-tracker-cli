@@ -408,6 +408,26 @@ ytcli project get 655…
 
 Takes the long id from `project list`, not an issue key and not the short id.";
 
+pub const QUEUE_CREATE: &str = "\
+Create a queue, modelled on one that already exists.
+
+```
+ytcli queue create -k OPS -n Operations --like PROJ --yes
+ytcli queue create -k OPS -n Operations --like PROJ --dry-run
+```
+
+A queue needs each issue type paired with a workflow and a set of resolutions,
+and workflow ids are organisation-specific strings nobody has memorised.
+`--like` copies that from a queue that already works, along with the default
+type and priority, so this is a command you can run rather than one you can run
+after reading the API reference. The lead defaults to whoever the token belongs
+to.
+
+`--yes` is required even though this touches one queue. A key is claimed once:
+Tracker deletes a queue by hiding it, and the key stays spent. `--dry-run`
+prints the whole body first, which is the cheaper way to find out what `--like`
+decided.";
+
 pub const QUEUE_GET: &str = "\
 Show a queue and the defaults issues in it start with.
 

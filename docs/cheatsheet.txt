@@ -57,6 +57,9 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   ytcli queue list
   ytcli queue get PROJ                  lead and the type/priority a new issue starts with
   ytcli queue fields PROJ               field keys, including custom ones for --fields
+  ytcli queue create -k OPS -n Operations --like PROJ --yes
+                                        copies issue types, workflows and defaults from
+                                        --like. --yes always: a key is claimed once
 
 ## field, template
   ytcli field list                      every field the organisation defines, not one queue's

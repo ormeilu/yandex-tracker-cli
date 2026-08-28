@@ -381,6 +381,36 @@ async fn a_project_can_be_put_in_a_portfolio_and_taken_out() {
         .expect("delete portfolio");
 }
 
+/// A queue can be copied from, which is what `queue create --like` depends on.
+///
+/// Reading only. Creating a queue is not something a test suite should do to
+/// somebody's organisation: Tracker deletes a queue by hiding it, and the key
+/// stays spent. What can be checked without writing is the half that breaks —
+/// that `expand=all` still answers with issue types, workflows and resolutions
+/// under the names the create endpoint takes back.
+#[tokio::test]
+#[ignore = "needs real credentials"]
+async fn a_queue_can_still_be_used_as_a_blueprint() {
+    let client = client();
+    let queue = a_queue(&client).await;
+
+    let blueprint = client.queue_blueprint(&queue).await.expect("blueprint");
+    assert!(
+        blueprint.default_type.is_some(),
+        "{queue} has no default type"
+    );
+    for config in &blueprint.issue_types {
+        assert!(
+            config.get("workflow").and_then(|w| w.as_str()).is_some(),
+            "an issue type with no workflow id: {config}"
+        );
+        assert!(
+            config.get("issueType").and_then(|t| t.as_str()).is_some(),
+            "an issue type with no key: {config}"
+        );
+    }
+}
+
 /// Writing, only into a queue somebody named on purpose.
 ///
 /// Tracker has no delete. Whatever this creates stays, so it is opt-in twice

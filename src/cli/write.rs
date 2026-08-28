@@ -25,6 +25,12 @@ pub struct Intent<'a> {
     pub targets: &'a [String],
     /// The request body that would be sent.
     pub body: &'a serde_json::Value,
+    /// Ask for `--yes` even for a single target.
+    ///
+    /// For work that is irreversible in kind rather than at scale: a queue key
+    /// is claimed once, and Tracker deletes a queue by hiding it, so the key
+    /// stays spent whatever happens next.
+    pub always_confirm: bool,
 }
 
 /// Outcome of the gate.
@@ -67,6 +73,15 @@ pub fn check(intent: &Intent<'_>, session: &Session) -> Gate {
             intent.action,
             intent.targets.len(),
             intent.targets.join(", "),
+        );
+        return Gate::Stop(ExitCode::ConfirmationRequired);
+    }
+
+    if intent.always_confirm && !session.global.yes {
+        let _ = writeln!(
+            err,
+            "refusing to {} without --yes: this one cannot be undone",
+            intent.action,
         );
         return Gate::Stop(ExitCode::ConfirmationRequired);
     }

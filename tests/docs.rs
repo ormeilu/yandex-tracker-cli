@@ -168,6 +168,7 @@ const UNRUNNABLE: &[(&str, &str)] = &[
     ),
     ("auth list", "prints the profiles of whoever runs it"),
     ("issue create", "a write"),
+    ("queue create", "a write"),
     ("issue update", "a write"),
     ("issue comment", "a write"),
     ("issue transition", "a write"),

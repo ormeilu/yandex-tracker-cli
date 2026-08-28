@@ -40,8 +40,10 @@ Labels split the work by area: `area:issues`, `area:entities`,
 
 - Worklogs, checklists and link editing, with reads and writes under separate
   command prefixes so an allowlist cannot be stretched from one into the other.
-- `queue get`: the lead and the type and priority an issue created there starts
-  with. Queue creation is deliberately still open (#23).
+- `queue get`, and `queue create --like`: a new queue copies its issue types,
+  workflows, resolutions and defaults from one that already works, because
+  workflow ids are organisation-specific strings nobody has memorised. `--yes`
+  is required for one queue, since a key is claimed once.
 - Organisation-wide field and template listings, read-only. The template paths
   are `issueTemplates` and `commentTemplates`; there is no `_templates`
   collection, and every plausible guess at one answers 400 or 404.
