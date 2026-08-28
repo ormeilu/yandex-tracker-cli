@@ -570,6 +570,24 @@ async fn automation_survives_a_section_it_may_not_read() {
     );
 }
 
+/// Two small listings that used to be unreachable.
+///
+/// Both answer 200 and both are empty in the organisation this runs against, so
+/// what is verified is the path and the envelope. That is worth saying out
+/// loud: an empty pass here is not evidence that the parsing is right.
+#[tokio::test]
+#[ignore = "needs real credentials"]
+async fn sprints_and_local_fields_answer_with_lists() {
+    let client = client();
+    let queue = a_queue(&client).await;
+
+    client.all_sprints().await.expect("sprints");
+    client
+        .queue_local_fields(&queue)
+        .await
+        .unwrap_or_else(|error| panic!("local fields of {queue}: {error}"));
+}
+
 /// The directory pages, and reports how many people it has.
 #[tokio::test]
 #[ignore = "needs real credentials"]

@@ -1,0 +1,33 @@
+[
+  {
+    "self": "https://api.tracker.yandex.net/v3/queues/PROJ/localFields/rollout",
+    "id": "6054ae3a2b6b2c7f--rollout",
+    "name": "Rollout stage",
+    "key": "rollout",
+    "version": 1,
+    "schema": {"type": "string", "required": false},
+    "readonly": false,
+    "options": true,
+    "suggest": false,
+    "optionsProvider": {
+      "type": "FixedListOptionsProvider",
+      "needValidation": true,
+      "values": ["canary", "partial", "full"]
+    },
+    "order": 3,
+    "queue": {"id": "1", "key": "PROJ", "display": "Storage"},
+    "type": "local"
+  },
+  {
+    "self": "https://api.tracker.yandex.net/v3/queues/PROJ/localFields/reviewers",
+    "id": "6054ae3a2b6b2c7f--reviewers",
+    "name": "Reviewers",
+    "key": "reviewers",
+    "schema": {"type": "array", "items": "user"},
+    "readonly": false,
+    "options": true,
+    "optionsProvider": {"type": "TeamOptionsProvider"},
+    "queue": {"id": "1", "key": "PROJ", "display": "Storage"},
+    "type": "local"
+  }
+]

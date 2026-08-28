@@ -11,7 +11,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 mod harness;
-use harness::Harness;
+use harness::{Harness, fixture};
 
 fn boards() -> serde_json::Value {
     serde_json::json!([
@@ -134,4 +134,25 @@ async fn sprints_list_with_their_dates_and_a_tally() {
     assert!(stdout.contains("Sprint 4"));
     assert!(stdout.contains("2026-08-28"));
     assert!(stdout.ends_with("shown 1 of 1 for board 9\n"), "{stdout}");
+}
+
+/// A sprint name is a thing people say without knowing the board. The board
+/// column is what makes two of them called "Sprint 1" tellable apart, and is
+/// the whole difference from `board sprints`.
+#[tokio::test]
+async fn sprints_across_the_organisation_name_their_board() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v3/sprints"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("all_sprints.json")))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness.run(&["sprint", "list"]).assert().success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert_eq!(stdout.matches("Sprint 1").count(), 2, "{stdout}");
+    assert!(stdout.contains("Storage"), "{stdout}");
+    assert!(stdout.contains("Infrastructure"), "{stdout}");
+    assert!(stdout.ends_with("shown 2 of 2\n"), "{stdout}");
 }

@@ -42,6 +42,8 @@ async fn tracker_answers(harness: &Harness) {
         ("/v3/queues/PROJ/versions", "queue_versions.json"),
         ("/v3/queues/PROJ/tags", "queue_tags.json"),
         ("/v3/queues/PROJ/macros", "queue_macros.json"),
+        ("/v3/queues/PROJ/localFields", "queue_local_fields.json"),
+        ("/v3/sprints", "all_sprints.json"),
         ("/v3/queues/PROJ/autoactions", "queue_autoactions.json"),
         ("/v3/queues/PROJ/triggers", "queue_triggers.json"),
         ("/v3/fields", "fields.json"),

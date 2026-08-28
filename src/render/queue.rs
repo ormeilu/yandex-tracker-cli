@@ -149,8 +149,8 @@ fn values(field: &FieldSpec, all: bool, ctx: &Context) -> String {
         // are just kept somewhere this endpoint does not reach. Naming the
         // command that does reach them is the whole use of knowing the
         // provider's name.
-        return match provider_hint(&options.provider) {
-            Some(hint) => format!("{} {hint}\n", label("values:")),
+        return match provider_source(&options.provider) {
+            Some((what, command)) => format!("{} {what} — {command}\n", label("values:")),
             None => format!(
                 "{} decided by {} — not listed by this endpoint\n",
                 label("values:"),
@@ -189,28 +189,76 @@ fn values(field: &FieldSpec, all: bool, ctx: &Context) -> String {
     out
 }
 
-/// Which command answers what a provider will accept.
+/// Which command answers what a provider will accept, and what it holds.
 ///
 /// Tracker names a class; a caller wants a command. Only the providers whose
 /// answer this tool can actually fetch are mapped — an unrecognised one is
 /// passed through by name rather than guessed at, because a wrong command here
 /// costs a request and reads like a bug.
-fn provider_hint(provider: &str) -> Option<&'static str> {
+fn provider_source(provider: &str) -> Option<(&'static str, &'static str)> {
     Some(match provider {
-        "TeamOptionsProvider" => "people in the organisation — ytcli user list",
-        "QueueOptionsProvider" => "queue keys — ytcli queue list",
-        "IssueTypeOptionsProvider" => "issue types — ytcli dict list --kind types",
-        "PriorityOptionsProvider" => "priorities — ytcli dict list --kind priorities",
-        "StatusOptionsProvider" => "statuses — ytcli dict list --kind statuses",
-        "ResolutionOptionsProvider" => "resolutions — ytcli dict list --kind resolutions",
-        "VersionOptionsProvider" => "versions of the queue — ytcli queue versions PROJ",
-        "TagOptionsProvider" => "tags in use in the queue — ytcli queue tags PROJ",
-        "SprintOptionsProvider" => "sprints — ytcli sprint list",
-        "BoardOptionsProvider" => "boards — ytcli board list",
-        "ProjectOptionsProvider" => "projects — ytcli project list",
-        "MetaEntityOptionsProvider" => "goals — ytcli goal list",
+        "TeamOptionsProvider" => ("people in the organisation", "ytcli user list"),
+        "QueueOptionsProvider" => ("queue keys", "ytcli queue list"),
+        "IssueTypeOptionsProvider" => ("issue types", "ytcli dict list --kind types"),
+        "PriorityOptionsProvider" => ("priorities", "ytcli dict list --kind priorities"),
+        "StatusOptionsProvider" => ("statuses", "ytcli dict list --kind statuses"),
+        "ResolutionOptionsProvider" => ("resolutions", "ytcli dict list --kind resolutions"),
+        "VersionOptionsProvider" => ("versions of the queue", "ytcli queue versions PROJ"),
+        "TagOptionsProvider" => ("tags in use in the queue", "ytcli queue tags PROJ"),
+        "SprintOptionsProvider" => ("sprints", "ytcli sprint list"),
+        "BoardOptionsProvider" => ("boards", "ytcli board list"),
+        "ProjectOptionsProvider" => ("projects", "ytcli project list"),
+        "MetaEntityOptionsProvider" => ("goals", "ytcli goal list"),
         _ => return None,
     })
+}
+
+/// The fields a queue defines itself.
+///
+/// Carries what each accepts, which the organisation-wide `field get` cannot
+/// answer for these: a local field is not reachable through `/v3/fields`, so if
+/// this listing does not say, nothing does.
+#[must_use]
+pub fn local_fields(queue: &str, fields: &[FieldSpec], ctx: &Context) -> String {
+    let columns = [
+        Column::whole("KEY", 24, Palette::key()),
+        Column::whole("TYPE", 10, anstyle::Style::new()),
+        Column::new("NAME", 24, anstyle::Style::new()),
+        Column::new("ACCEPTS", 28, Palette::label()),
+    ];
+    let rows: Vec<Vec<String>> = fields
+        .iter()
+        .map(|field| {
+            vec![
+                field.key.clone(),
+                match &field.items {
+                    Some(items) => format!("[{items}]"),
+                    None => field.field_type.clone(),
+                },
+                field.name.clone(),
+                accepts(field),
+            ]
+        })
+        .collect();
+
+    let mut out = render(&columns, &rows, ctx);
+    out.push_str(&counted(queue, fields.len(), ctx));
+    out
+}
+
+/// One cell's worth of what a field accepts.
+fn accepts(field: &FieldSpec) -> String {
+    match &field.options {
+        None => "anything of that type".to_owned(),
+        // The command, not the sentence: a cell has no room for prose, and the
+        // command is the half a caller can run.
+        Some(options) if options.values.is_empty() => provider_source(&options.provider)
+            .map_or_else(
+                || options.provider.clone(),
+                |(_, command)| command.to_owned(),
+            ),
+        Some(options) => options.values.join(", "),
+    }
 }
 
 /// The versions a queue defines.

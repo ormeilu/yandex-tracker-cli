@@ -72,6 +72,8 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   ytcli queue get PROJ                  lead and the type/priority a new issue starts with
   ytcli queue fields PROJ               field keys, including custom ones for --fields
   ytcli queue versions PROJ             what fixVersions points at; open/released/archived
+  ytcli queue local-fields PROJ         the fields the queue defines itself, with what
+                                        each accepts; `field get` cannot reach these
   ytcli queue automation PROJ           macros, autoactions and triggers: what changes
                                         issues with nobody touching them. Triggers need
                                         queue-owner rights; a refused section says so
@@ -111,6 +113,7 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
 ## board
   ytcli board list                      id, name, column count, estimate field
   ytcli board get 6                     the columns, in the order the board works in
+  ytcli sprint list                     every sprint, with the board each belongs to
   ytcli board sprints ID                a kanban board is refused, in Tracker's words:
                                         "no sprints" and "cannot have sprints" differ
 

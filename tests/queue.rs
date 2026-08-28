@@ -460,3 +460,30 @@ async fn a_queue_that_answers_nothing_is_an_error() {
         .assert()
         .code(4);
 }
+
+/// A local field belongs to its queue: `field list` cannot see it and
+/// `field get` cannot fetch it. So this listing carries what each one accepts,
+/// because no other command could.
+#[tokio::test]
+async fn local_fields_say_what_they_accept() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v3/queues/PROJ/localFields"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("queue_local_fields.json")))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness
+        .run(&["queue", "local-fields", "PROJ"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    // The key a caller types, not the prefixed id the payload carries.
+    assert!(stdout.contains("rollout"), "{stdout}");
+    assert!(!stdout.contains("6054ae3a"), "{stdout}");
+    assert!(stdout.contains("canary, partial, full"), "{stdout}");
+    // A provider that keeps its values elsewhere names where they are instead.
+    assert!(stdout.contains("ytcli user list"), "{stdout}");
+    assert!(stdout.ends_with("shown 2 of 2 for PROJ\n"), "{stdout}");
+}

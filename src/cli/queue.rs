@@ -51,6 +51,12 @@ pub enum QueueCommand {
         /// Queue key, e.g. PROJ.
         key: String,
     },
+    /// List the fields this queue defines itself.
+    #[command(name = "local-fields", long_about = crate::cli::help::md(crate::cli::help::QUEUE_LOCAL_FIELDS))]
+    LocalFields {
+        /// Queue key, e.g. PROJ.
+        key: String,
+    },
     /// Show a queue's fields, including custom ones and their keys.
     #[command(long_about = crate::cli::help::md(crate::cli::help::QUEUE_FIELDS))]
     Fields {
@@ -134,6 +140,15 @@ pub async fn run(command: &QueueCommand, session: &Session) -> ExitCode {
                     Err(error) => report(&error, ExitCode::Failure),
                 }
             }
+            Err(error) => {
+                let code = error.exit_code();
+                report(&error, code)
+            }
+        },
+        QueueCommand::LocalFields { key } => match client.queue_local_fields(key).await {
+            Ok(fields) => render(&fields, session, |fields| {
+                queue::local_fields(key, fields, &session.render)
+            }),
             Err(error) => {
                 let code = error.exit_code();
                 report(&error, code)

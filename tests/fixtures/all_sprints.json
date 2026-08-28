@@ -1,0 +1,23 @@
+[
+  {
+    "self": "https://api.tracker.yandex.net/v3/sprints/21",
+    "id": 21,
+    "version": 1435288720018,
+    "name": "Sprint 1",
+    "board": {"self": "https://api.tracker.yandex.net/v3/boards/6", "id": "6", "display": "Storage"},
+    "status": "in_progress",
+    "archived": false,
+    "startDate": "2026-08-17",
+    "endDate": "2026-08-28"
+  },
+  {
+    "self": "https://api.tracker.yandex.net/v3/sprints/22",
+    "id": 22,
+    "name": "Sprint 1",
+    "board": {"id": "9", "display": "Infrastructure"},
+    "status": "planned",
+    "archived": false,
+    "startDate": "2026-08-31",
+    "endDate": "2026-09-11"
+  }
+]

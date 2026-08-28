@@ -19,6 +19,7 @@ pub mod issue;
 pub mod portfolio;
 pub mod project;
 pub mod queue;
+pub mod sprint;
 pub mod user;
 pub mod wizard;
 pub mod worklog;
@@ -110,6 +111,9 @@ pub enum Command {
     /// Boards and their sprints.
     #[command(subcommand)]
     Board(board::BoardCommand),
+    /// Sprints, across every board.
+    #[command(subcommand)]
+    Sprint(sprint::SprintCommand),
     /// Time logged across issues.
     #[command(subcommand)]
     Worklog(worklog::WorklogCommand),

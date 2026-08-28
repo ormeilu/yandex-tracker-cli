@@ -599,6 +599,33 @@ ytcli template list --kind comment
 Issue templates by default. A template that belongs to a queue only applies
 there, so the queue is printed beside it.";
 
+pub const SPRINT_LIST: &str = "\
+List every sprint in the organisation.
+
+```
+ytcli sprint list
+```
+
+`board sprints 6` needs the board first. A sprint name is a thing people say
+without knowing which board it belongs to, so this lists them all with the board
+named on each — two boards each having a `Sprint 1` is normal, and the board
+column is what tells them apart.";
+
+pub const QUEUE_LOCAL_FIELDS: &str = "\
+List the fields this queue defines itself.
+
+```
+ytcli queue local-fields PROJ
+```
+
+`queue fields PROJ` lists everything the queue can use, organisation-wide fields
+included. These are the ones that belong to the queue, and the difference is
+what answers where a field came from.
+
+A local field is invisible to `field list` and cannot be fetched through
+`field get` — it does not exist outside its queue — so this listing carries what
+each one accepts. If it does not say, nothing does.";
+
 pub const BOARD_LIST: &str = "\
 List boards.
 

@@ -946,6 +946,41 @@ impl Client {
             .unwrap_or_default())
     }
 
+    /// Every sprint in the organisation.
+    ///
+    /// `board sprints ID` needs the board first, and a sprint name is a thing
+    /// people say without knowing which board it belongs to. This is the same
+    /// records with the board named on each.
+    pub async fn all_sprints(&self) -> Result<Vec<Sprint>, ApiError> {
+        let raw = self.get_value("/v3/sprints", "sprints").await?;
+
+        Ok(raw
+            .as_array()
+            .map(|entries| entries.iter().filter_map(Sprint::parse).collect())
+            .unwrap_or_default())
+    }
+
+    /// The fields a queue defines itself.
+    ///
+    /// Not a subset of [`Self::queue_fields`], which lists everything the queue
+    /// can use: a local field belongs to the queue, is invisible to the
+    /// organisation-wide listing, and cannot be fetched through `/v3/fields` at
+    /// all. So these carry their full definition — what they accept included —
+    /// because there is no second command that could answer that for them.
+    pub async fn queue_local_fields(&self, key: &str) -> Result<Vec<FieldSpec>, ApiError> {
+        let raw = self
+            .get_value(
+                &format!("/v3/queues/{key}/localFields"),
+                &format!("local fields of queue {key}"),
+            )
+            .await?;
+
+        Ok(raw
+            .as_array()
+            .map(|entries| entries.iter().filter_map(FieldSpec::parse).collect())
+            .unwrap_or_default())
+    }
+
     /// Create a project, portfolio or goal with nothing but a name.
     ///
     /// Everything else about an entity is optional, and a command line is not
@@ -1484,6 +1519,12 @@ pub struct Sprint {
     pub status: Option<String>,
     pub start: Option<String>,
     pub end: Option<String>,
+    /// Which board it belongs to. Absent when the sprint was read through that
+    /// board, which already named it, and present when it was listed across the
+    /// organisation, where it is what makes two sprints called "Sprint 1"
+    /// tellable apart.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub board: Option<String>,
 }
 
 impl Sprint {
@@ -1508,6 +1549,11 @@ impl Sprint {
                 .map(ToOwned::to_owned),
             end: value
                 .get("endDate")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned),
+            board: value
+                .get("board")
+                .and_then(|board| board.get("display").or_else(|| board.get("id")))
                 .and_then(Value::as_str)
                 .map(ToOwned::to_owned),
         })

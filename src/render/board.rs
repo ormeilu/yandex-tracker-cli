@@ -71,6 +71,40 @@ pub fn board(board: &Board, ctx: &Context) -> String {
     out
 }
 
+/// Every sprint in the organisation, with the board each belongs to.
+///
+/// The board column is the difference from [`sprints`]: two boards each having
+/// a "Sprint 1" is normal, and without it the listing would be a set of names
+/// nobody could act on.
+#[must_use]
+pub fn all_sprints(sprints: &[Sprint], ctx: &Context) -> String {
+    let columns = [
+        Column::whole("ID", 8, Palette::key()),
+        Column::new("NAME", 26, anstyle::Style::new()),
+        Column::new("BOARD", 20, Palette::label()),
+        Column::new("STATUS", 12, anstyle::Style::new()),
+        Column::whole("START", 12, anstyle::Style::new()),
+        Column::whole("END", 12, anstyle::Style::new()),
+    ];
+    let rows: Vec<Vec<String>> = sprints
+        .iter()
+        .map(|sprint| {
+            vec![
+                sprint.id.clone(),
+                sprint.name.clone(),
+                sprint.board.as_deref().unwrap_or("-").to_owned(),
+                sprint.status.as_deref().unwrap_or("-").to_owned(),
+                sprint.start.as_deref().unwrap_or("-").to_owned(),
+                sprint.end.as_deref().unwrap_or("-").to_owned(),
+            ]
+        })
+        .collect();
+
+    let mut out = render(&columns, &rows, ctx);
+    out.push_str(&tally(sprints.len(), Some(sprints.len() as u64), None, ctx));
+    out
+}
+
 /// The sprints of a board.
 #[must_use]
 pub fn sprints(board: &str, sprints: &[Sprint], ctx: &Context) -> String {

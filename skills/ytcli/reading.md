@@ -92,8 +92,10 @@ ytcli queue get PROJ                 # the type and priority a new issue starts 
 ytcli queue versions PROJ            # what an issue's fixVersions points at
 ytcli board list                     # id, name, column count
 ytcli board sprints 6                # a kanban board is refused, in Tracker's words
+ytcli sprint list                    # every sprint, with the board each belongs to
 ytcli field list                     # every field the organisation defines
 ytcli field get storyPoints          # what one field accepts, before --set guesses
+ytcli queue local-fields PROJ        # fields the queue owns; field get cannot see these
 ytcli template list --kind comment   # issue templates by default
 ytcli portfolio contents 655…        # the portfolios and projects inside one
 ytcli issue worklogs PROJ-1          # time logged, with the total
