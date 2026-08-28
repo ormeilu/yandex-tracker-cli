@@ -29,6 +29,17 @@ jobs:
           - {os: macos-latest, target: x86_64-apple-darwin}
           - {os: windows-latest, target: x86_64-pc-windows-msvc}
     runs-on: ${{ matrix.os }}
+    # Secrets cannot be read from a step `if:`, so they are lifted into the job
+    # environment and the macOS signing steps test those. Absent, they are empty
+    # strings and every signing step is skipped: a release must not fail over a
+    # credential a fork will never have.
+    env:
+      APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+      APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
@@ -36,6 +47,53 @@ jobs:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --release --locked --target ${{ matrix.target }}
+      - name: Sign for macOS
+        # A Developer ID signature makes the Keychain's "Always Allow" survive a
+        # version upgrade: the approval is tied to the signing identity rather
+        # than to the bytes, which an ad-hoc signature changes on every build.
+        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE_P12 != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          # The password protects a keychain that lives for the length of one
+          # job on a throwaway runner; it is not a secret worth having.
+          password="$(uuidgen)"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+
+          printf '%s' "$APPLE_CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/certificate.p12"
+          # Without this codesign asks for permission to use the key, and a
+          # runner has nobody to ask.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" login.keychain-db
+
+          codesign --force --timestamp --options runtime \
+            --sign "$APPLE_SIGNING_IDENTITY" \
+            "target/${{ matrix.target }}/release/ytcli"
+          codesign --verify --strict --verbose=2 "target/${{ matrix.target }}/release/ytcli"
+      - name: Notarise
+        # Gatekeeper quarantines a downloaded binary until Apple has seen it.
+        # The ticket binds to the binary's own hash, so it applies to the copy
+        # inside the tarball we ship even though only the zip is submitted —
+        # `stapler` works on bundles and installers, not on a bare executable.
+        if: runner.os == 'macOS' && env.APPLE_API_KEY_P8 != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$APPLE_API_KEY_P8" | base64 --decode > "$RUNNER_TEMP/key.p8"
+          ditto -c -k "target/${{ matrix.target }}/release/ytcli" "$RUNNER_TEMP/notarise.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarise.zip" \
+            --key "$RUNNER_TEMP/key.p8" \
+            --key-id "$APPLE_API_KEY_ID" \
+            --issuer "$APPLE_API_ISSUER" \
+            --wait --timeout 30m
+          rm -f "$RUNNER_TEMP/key.p8" "$RUNNER_TEMP/notarise.zip"
       - name: Package
         shell: bash
         run: |

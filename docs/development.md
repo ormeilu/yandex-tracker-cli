@@ -94,3 +94,38 @@ Test the promises — exit codes, field order, tallies, fencing, profile provena
 
 `prek` runs formatting, clippy, secret scanning and a check for unreviewed
 snapshots before each commit. `just hooks` runs the lot over the whole tree.
+
+## Releasing
+
+A tag starting `v` builds the binaries and wheels, publishes to crates.io and
+PyPI through Trusted Publishing, attaches the archives to a GitHub release, and
+regenerates the Homebrew formula in `ormeilu/homebrew-tap`.
+
+Every credential-dependent step is skipped when its secret is absent rather than
+failing the release: a fork can build the whole thing, and one optional channel
+must not take the rest down with it.
+
+| Secret | Used for |
+|:-|:-|
+| `TAP_DEPLOY_KEY` | pushing the generated formula to the tap |
+| `APPLE_CERTIFICATE_P12` | base64 of a Developer ID Application `.p12` |
+| `APPLE_CERTIFICATE_PASSWORD` | the password that `.p12` was exported with |
+| `APPLE_SIGNING_IDENTITY` | `Developer ID Application: Name (TEAMID)` |
+| `APPLE_API_KEY_P8` | base64 of an App Store Connect key, for notarising |
+| `APPLE_API_KEY_ID` | that key's id |
+| `APPLE_API_ISSUER` | the issuer id it belongs to |
+
+The Apple half exists so the macOS Keychain's "Always Allow" survives a version
+upgrade: the approval is tied to the signing identity, and an ad-hoc signature —
+which is what Cargo's linker leaves — changes with every build. Notarisation is
+the other half of the same story, so Gatekeeper does not quarantine a download.
+
+The notarisation ticket binds to the binary's own hash, which is why only a zip
+of the executable is submitted while the release still ships a tarball:
+`stapler` staples bundles and installers, not bare executables, and the ticket
+applies to the binary wherever it ends up.
+
+Locally, `just signing-identity` creates a self-signed `ytcli-dev` certificate
+for the same reason, and `just build`, `just test`, `just run` and
+`just local-install` sign what they produce with it. A bare `cargo build` does
+not, which is worth remembering when the Keychain starts asking again.
