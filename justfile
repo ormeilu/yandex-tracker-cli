@@ -126,11 +126,11 @@ fix:
     {{cargo}} fmt --all
 
 # Tests
-test *ARGS:
+test *ARGS: && (sign "target/debug/ytcli")
     {{cargo}} nextest run --all-features {{ARGS}}
 
 # Tests without the live suite (the default; live needs real credentials)
-test-fast:
+test-fast: && (sign "target/debug/ytcli")
     {{cargo}} nextest run --all-features
 
 # Tests against a real organisation. Needs credentials; writes only if YTCLI_TEST_QUEUE

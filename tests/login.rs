@@ -533,3 +533,21 @@ async fn an_environment_token_says_it_is_standing_in_for_the_keychain() {
     );
     assert!(stderr.contains("YTCLI_TOKEN is set"), "{stderr}");
 }
+
+/// "Where did this come from" is the question this command exists to answer, so
+/// it answers it about the configuration too, not only about the profiles.
+#[tokio::test]
+async fn status_names_the_config_file_and_the_overriding_environment() {
+    let harness = Harness::new().await;
+    status_answers(&harness).await;
+
+    let output = harness.run_raw(&["auth", "status", "--brief"]).assert();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert!(stdout.starts_with("config: "), "{stdout}");
+    assert!(stdout.contains("config.toml"), "{stdout}");
+    // Names, never values: one of these holds a token, and a diagnostic that
+    // prints credentials cannot be pasted into a bug report.
+    assert!(stdout.contains("environment: YTCLI_"), "{stdout}");
+    assert!(!stdout.contains("test-token"), "{stdout}");
+}

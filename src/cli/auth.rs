@@ -121,6 +121,8 @@ async fn status(session: &Session, brief: bool, active_only: bool) -> ExitCode {
         return ExitCode::Auth;
     }
 
+    report_sources(session, paint, &mut out);
+
     let active = session
         .resolved
         .as_ref()
@@ -258,6 +260,50 @@ fn remember_queues(
     cache.save(&cache_path);
 }
 
+/// Where the configuration itself came from, before anything about profiles.
+///
+/// Two questions get asked whenever this command surprises somebody: which file
+/// was read, and what in the environment is overriding it. Both are cheap to
+/// answer and neither is guessable from the rows below — a token from the
+/// environment and a token from the keychain produce identical-looking output
+/// until one of them is named.
+///
+/// Variable **names** only. One of them holds a token, and a diagnostic that
+/// prints credentials is a diagnostic nobody can paste into a bug report.
+fn report_sources(session: &Session, paint: Painter, out: &mut impl std::io::Write) {
+    let from = match std::env::var("YTCLI_CONFIG") {
+        Ok(path) if session.config_file == std::path::Path::new(&path) => "from YTCLI_CONFIG",
+        _ if session.global.config.is_some() => "from --config",
+        _ => "default location",
+    };
+
+    let _ = writeln!(
+        out,
+        "{} {} ({})",
+        paint.paint("config:", Palette::label()),
+        session.config_file.display(),
+        paint.paint(from, Palette::label()),
+    );
+
+    // Everything `YTCLI_`-prefixed: figment merges these over the file, so a
+    // value in the config that does not match what the tool is doing is usually
+    // one of these.
+    let mut overriding: Vec<String> = std::env::vars()
+        .map(|(name, _)| name)
+        .filter(|name| name.starts_with("YTCLI_") && !name.is_empty())
+        .collect();
+    overriding.sort();
+
+    if !overriding.is_empty() {
+        let _ = writeln!(
+            out,
+            "{} {}",
+            paint.paint("environment:", Palette::label()),
+            overriding.join(", "),
+        );
+    }
+}
+
 /// Say which queue keys mean two different things.
 ///
 /// Two profiles seeing one queue key is only a problem when they are looking at
@@ -351,7 +397,10 @@ async fn report_profile(
     // being read through one identity.
     let via = match origin {
         secrets::Origin::Environment => " (from YTCLI_TOKEN)",
-        secrets::Origin::Keychain => "",
+        // Named rather than left blank: "where did this credential come from"
+        // is the question, and an unlabelled answer is only obvious to whoever
+        // wrote the tool.
+        secrets::Origin::Keychain => " (from keychain)",
     };
 
     match client.myself().await {
@@ -886,6 +935,7 @@ fn logout(account: &str) -> ExitCode {
 /// Whether a token exists is shown; the token never is.
 fn list(session: &Session) -> ExitCode {
     let mut out = String::with_capacity(256);
+
     let active = session
         .resolved
         .as_ref()

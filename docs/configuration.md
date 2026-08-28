@@ -114,8 +114,12 @@ entering a directory — the oh-my-zsh `dotenv` plugin does exactly that — wil
 export it inside any checkout that keeps a token there for tests, and nowhere
 else, so the same command behaves differently in two directories.
 
-`auth status` marks each profile it read that way with `(from YTCLI_TOKEN)`, and
-says so once at the end when more than one profile is configured.
+`auth status` answers where everything came from: the config file it read and
+how that path was chosen, the `YTCLI_*` variables in the environment **by name**
+— never by value, since one of them holds a token — and, per profile, whether
+the credential came `(from keychain)` or `(from YTCLI_TOKEN)`. When more than
+one profile is configured and the environment is standing in for the keychain,
+it says so once at the end as well.
 
 ### If macOS keeps asking for your password
 
