@@ -447,3 +447,68 @@ async fn a_created_issue_can_be_read_back_and_commented_on() {
         "the comment did not come back"
     );
 }
+
+/// The four dictionaries, through our parser.
+///
+/// The claim worth checking against a real organisation is not that the request
+/// succeeds but that `key` and `name` are genuinely different things: the whole
+/// reason to print both is that a localised organisation answers `Ошибка` for
+/// the type whose key is `bug`, and fixtures we wrote cannot prove that.
+#[tokio::test]
+#[ignore = "needs real credentials"]
+async fn every_dictionary_answers_with_keys() {
+    let client = client();
+    for kind in ytcli::api::Dictionary::ALL {
+        let entries = client.dictionary(kind).await.expect("dictionary");
+        assert!(!entries.is_empty(), "{} is empty", kind.label());
+        for entry in &entries {
+            assert!(!entry.key.is_empty(), "an entry with no key: {entry:?}");
+        }
+    }
+
+    let statuses = client
+        .dictionary(ytcli::api::Dictionary::Statuses)
+        .await
+        .expect("statuses");
+    assert!(
+        statuses.iter().any(|status| status.category.is_some()),
+        "no status carried a category, which is the column that makes the list readable"
+    );
+}
+
+/// The directory pages, and reports how many people it has.
+#[tokio::test]
+#[ignore = "needs real credentials"]
+async fn the_directory_pages_and_reports_its_size() {
+    let page = client().users(1, 3).await.expect("users");
+    assert!(!page.items.is_empty(), "an organisation with nobody in it");
+    assert!(
+        page.items.len() <= 3,
+        "perPage was ignored: {} came back",
+        page.items.len()
+    );
+    for person in &page.items {
+        assert!(
+            !person.login.is_empty(),
+            "a person with no login: {person:?}"
+        );
+        assert!(!person.uid.is_empty(), "a person with no uid: {person:?}");
+    }
+}
+
+/// A login taken from the directory can be fetched back by that login.
+///
+/// `/v3/users/{login}` and `/v3/users` are different endpoints, and this is the
+/// round trip every `--assignee` depends on.
+#[tokio::test]
+#[ignore = "needs real credentials"]
+async fn a_login_from_the_listing_can_be_fetched_back() {
+    let client = client();
+    let page = client.users(1, 1).await.expect("users");
+    let Some(first) = page.items.first() else {
+        return;
+    };
+
+    let fetched = client.user(&first.login).await.expect("user");
+    assert_eq!(fetched.login, first.login);
+}

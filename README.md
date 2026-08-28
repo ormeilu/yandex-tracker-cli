@@ -191,7 +191,8 @@ ytcli issue comment PROJ-1 "deployed to staging"
 ytcli issue worklogs PROJ-1
 ytcli queue get PROJ
 ytcli board sprints 6
-ytcli field list
+ytcli dict list
+ytcli user find ivan
 ```
 
 `issue get` returns a compact view rather than a payload:

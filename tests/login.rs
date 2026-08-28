@@ -442,3 +442,69 @@ async fn use_under_dry_run_changes_nothing() {
     let after = std::fs::read_to_string(harness.config_path()).expect("read config");
     assert_eq!(before, after);
 }
+
+/// Two profiles on one organisation are not a collision. `FINANSY-1` names one
+/// issue there, and either login fetches it — the tool routes rather than
+/// refuses, so a warning saying it will be refused describes a rule that was
+/// removed and sends the reader to qualify keys that never needed it.
+#[tokio::test]
+async fn two_profiles_on_one_organisation_are_not_warned_about() {
+    let harness = Harness::new().await;
+    harness.add_profile("second", "12345");
+    status_answers(&harness).await;
+
+    let output = harness.run_raw(&["auth", "status"]).assert().success();
+    let stderr = String::from_utf8(output.get_output().stderr.clone()).expect("utf-8");
+
+    assert!(!stderr.contains("PROJ"), "{stderr}");
+}
+
+/// One organisation apart, the same two queue keys *are* ambiguous, and that is
+/// the case the warning exists for.
+#[tokio::test]
+async fn a_queue_key_shared_across_organisations_is_warned_about() {
+    let harness = Harness::new().await;
+    harness.add_profile("other", "99999");
+    status_answers(&harness).await;
+
+    let output = harness.run_raw(&["auth", "status"]).assert().success();
+    let stderr = String::from_utf8(output.get_output().stderr.clone()).expect("utf-8");
+
+    assert!(stderr.contains("queue PROJ is visible in"), "{stderr}");
+    assert!(stderr.contains("different organisations"), "{stderr}");
+}
+
+/// Enough of an organisation for `auth status` to finish for every profile.
+async fn status_answers(harness: &Harness) {
+    Mock::given(method("GET"))
+        .and(path("/v3/myself"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(myself()))
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v3/queues"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+            {"id": 7, "key": "PROJ", "name": "Product"}
+        ])))
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v3/entities/project/_search"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "hits": 0, "pages": 1, "values": []
+        })))
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v3/entities/goal/_search"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "hits": 0, "pages": 1, "values": []
+        })))
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v3/issues/_count"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(0))
+        .mount(&harness.server)
+        .await;
+}

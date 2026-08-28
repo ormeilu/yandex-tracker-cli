@@ -18,7 +18,7 @@ use serde_json::Value;
 
 use crate::api::error::ApiError;
 use crate::api::models::{
-    Attachment, ChecklistItem, Comment, Entity, Issue, Link, Page, User, Worklog,
+    Attachment, ChecklistItem, Comment, DictEntry, Entity, Issue, Link, Page, Person, User, Worklog,
 };
 use crate::config::OrgKind;
 
@@ -569,6 +569,60 @@ impl Client {
             .unwrap_or_default())
     }
 
+    /// One of the four organisation-wide dictionaries.
+    ///
+    /// Small and unpaged — the largest of the four is statuses, in the dozens —
+    /// so this asks for the whole thing and says nothing about pages.
+    pub async fn dictionary(&self, kind: Dictionary) -> Result<Vec<DictEntry>, ApiError> {
+        let raw = self
+            .get_value(&format!("/v3/{}", kind.path()), kind.path())
+            .await?;
+
+        Ok(raw
+            .as_array()
+            .map(|entries| entries.iter().filter_map(parse::dict_entry).collect())
+            .unwrap_or_default())
+    }
+
+    /// One page of the organisation's directory.
+    ///
+    /// Paged, unlike the dictionaries: an organisation has as many people in it
+    /// as it has people, and the one this was written against already answers
+    /// with a three-figure total.
+    pub async fn users(&self, page: u32, per_page: u32) -> Result<Page<Person>, ApiError> {
+        let path = format!("/v3/users?page={page}&perPage={per_page}");
+        let (value, headers) = self
+            .send_value(reqwest::Method::GET, &path, None, "users")
+            .await?;
+
+        let items = value
+            .as_array()
+            .map(|entries| entries.iter().filter_map(parse::person).collect())
+            .unwrap_or_default();
+
+        Ok(Page {
+            items,
+            page,
+            per_page,
+            total: headers
+                .get("x-total-count")
+                .and_then(|count| count.to_str().ok())
+                .and_then(|count| count.parse().ok()),
+        })
+    }
+
+    /// One person, by login or by uid.
+    ///
+    /// There is no `users/me`: Tracker answers 404 for it, and `myself` is the
+    /// endpoint that question belongs to.
+    pub async fn user(&self, who: &str) -> Result<Person, ApiError> {
+        let raw = self
+            .get_value(&format!("/v3/users/{who}"), &format!("user {who}"))
+            .await?;
+
+        parse::person(&raw).ok_or_else(|| ApiError::NotFound(format!("user {who}")))
+    }
+
     /// Boards visible to the active profile.
     ///
     /// Not paginated by the endpoint, and not by us: an organisation has boards
@@ -884,6 +938,51 @@ impl Client {
             .send_value(reqwest::Method::GET, path, None, what)
             .await?
             .0)
+    }
+}
+
+/// Which organisation-wide dictionary to read.
+///
+/// The four endpoints answer with the same shape but are not spelled the way
+/// the values are: the endpoint is `issuetypes`, the field on an issue is
+/// `type`, and the flag people reach for is `--type`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Dictionary {
+    Types,
+    Priorities,
+    Statuses,
+    Resolutions,
+}
+
+impl Dictionary {
+    /// Every dictionary, in the order a listing shows them: what an issue *is*,
+    /// then how urgent, then where it stands, then how it ended.
+    pub const ALL: [Self; 4] = [
+        Self::Types,
+        Self::Priorities,
+        Self::Statuses,
+        Self::Resolutions,
+    ];
+
+    #[must_use]
+    pub fn path(self) -> &'static str {
+        match self {
+            Self::Types => "issuetypes",
+            Self::Priorities => "priorities",
+            Self::Statuses => "statuses",
+            Self::Resolutions => "resolutions",
+        }
+    }
+
+    /// What to call it in output, singular-free: these are always lists.
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Types => "types",
+            Self::Priorities => "priorities",
+            Self::Statuses => "statuses",
+            Self::Resolutions => "resolutions",
+        }
     }
 }
 

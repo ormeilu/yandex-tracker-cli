@@ -1,0 +1,5 @@
+[
+  {"self":"https://api.tracker.yandex.net/v3/statuses/1","id":1,"version":1,"key":"open","name":"Открыт","description":"Open status","order":100,"type":"new"},
+  {"self":"https://api.tracker.yandex.net/v3/statuses/3","id":3,"version":1,"key":"inProgress","name":"В работе","description":"In progress status","order":300,"type":"inProgress"},
+  {"self":"https://api.tracker.yandex.net/v3/statuses/6","id":6,"version":1,"key":"closed","name":"Закрыт","description":"Closed status","order":600,"type":"done"}
+]

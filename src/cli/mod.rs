@@ -9,6 +9,7 @@ pub mod attachment;
 pub mod auth;
 pub mod board;
 pub mod cheatsheet;
+pub mod dict;
 pub mod entity;
 pub mod field;
 pub mod goal;
@@ -18,6 +19,7 @@ pub mod issue;
 pub mod portfolio;
 pub mod project;
 pub mod queue;
+pub mod user;
 pub mod wizard;
 pub mod write;
 
@@ -107,6 +109,12 @@ pub enum Command {
     /// Boards and their sprints.
     #[command(subcommand)]
     Board(board::BoardCommand),
+    /// People in the organisation.
+    #[command(subcommand)]
+    User(user::UserCommand),
+    /// The values issues can take: types, priorities, statuses, resolutions.
+    #[command(subcommand)]
+    Dict(dict::DictCommand),
     /// Fields defined across the organisation.
     #[command(subcommand)]
     Field(field::FieldCommand),

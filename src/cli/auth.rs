@@ -191,7 +191,7 @@ async fn status(session: &Session, brief: bool, active_only: bool) -> ExitCode {
     }
 
     remember_queues(session, brief, active_only, active.as_deref(), &queues_seen);
-    warn_about_collisions(paint, &queues_seen);
+    warn_about_collisions(session, paint, &queues_seen);
 
     // The command someone runs to find out which profile is in play is the
     // command that should say how to change it.
@@ -248,26 +248,49 @@ fn remember_queues(
 
 /// Say which queue keys mean two different things.
 ///
+/// Two profiles seeing one queue key is only a problem when they are looking at
+/// two different organisations: then `FINANSY-1` names two issues and the tool
+/// refuses to choose. Inside one organisation it names one issue seen through
+/// two logins, either of which fetches it — warning about that would be telling
+/// the reader their setup is broken when it is working as designed.
+///
 /// Better heard here than discovered by commenting on the wrong issue.
 fn warn_about_collisions(
+    session: &Session,
     paint: Painter,
     queues_seen: &std::collections::BTreeMap<String, Vec<String>>,
 ) {
     let mut err = anstream::stderr();
 
-    let shared: Vec<(&String, &Vec<String>)> = queues_seen
+    let organisation = |name: &str| {
+        session
+            .config
+            .profiles
+            .get(name)
+            .map(|profile| profile.org_id.clone())
+    };
+
+    let ambiguous: Vec<(&String, &Vec<String>)> = queues_seen
         .iter()
-        .filter(|(_, profiles)| profiles.len() > 1)
+        .filter(|(_, profiles)| {
+            profiles.len() > 1
+                && profiles
+                    .iter()
+                    .filter_map(|name| organisation(name))
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .len()
+                    > 1
+        })
         .collect();
-    if shared.is_empty() {
+    if ambiguous.is_empty() {
         return;
     }
 
     let _ = writeln!(err);
-    for (key, profiles) in shared {
+    for (key, profiles) in ambiguous {
         let _ = writeln!(
             err,
-            "{} queue {key} is visible in {} — a bare {key}-1 will be refused; write {}/{key}-1",
+            "{} queue {key} is visible in {} — in different organisations, so a bare {key}-1 will be refused; write {}/{key}-1",
             paint.paint("warning:", Palette::warn()),
             profiles.join(" and "),
             profiles.first().map_or("profile", String::as_str),

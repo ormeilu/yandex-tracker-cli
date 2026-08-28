@@ -9,7 +9,8 @@
 use serde_json::{Map, Value};
 
 use crate::api::models::{
-    Attachment, ChecklistItem, Comment, Entity, Issue, Link, LinkKind, User, Worklog,
+    Attachment, ChecklistItem, Comment, DictEntry, Entity, Issue, Link, LinkKind, Person, User,
+    Worklog,
 };
 
 /// System fields we map explicitly. Anything outside this set is treated as a
@@ -423,6 +424,69 @@ pub fn issue(value: &Value) -> Option<Issue> {
             .and_then(Value::as_u64)
             .and_then(|count| u32::try_from(count).ok()),
         extra,
+    })
+}
+
+/// One entry of an issue type, priority, status or resolution listing.
+///
+/// Without a `key` the entry is useless for the purpose it is listed for — a
+/// write quotes the key — so an entry that has none is dropped rather than
+/// printed as a row nobody can act on.
+#[must_use]
+pub fn dict_entry(value: &Value) -> Option<DictEntry> {
+    Some(DictEntry {
+        key: value.get("key").and_then(Value::as_str)?.to_owned(),
+        name: value
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+        description: value
+            .get("description")
+            .and_then(Value::as_str)
+            .filter(|text| !text.is_empty())
+            .map(ToOwned::to_owned),
+        order: value.get("order").and_then(Value::as_i64),
+        category: value
+            .get("type")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned),
+    })
+}
+
+/// One directory record.
+///
+/// `display` is assembled by Tracker from the first and last name and is what
+/// a person is called in every other answer, so it is preferred over
+/// re-assembling it here. An account with neither falls back to its login,
+/// because a blank column reads as a bug.
+#[must_use]
+pub fn person(value: &Value) -> Option<Person> {
+    let login = value.get("login").and_then(Value::as_str)?.to_owned();
+    let display = value
+        .get("display")
+        .and_then(Value::as_str)
+        .filter(|text| !text.trim().is_empty())
+        .unwrap_or(&login)
+        .to_owned();
+
+    Some(Person {
+        uid: identifier(value.get("uid")).unwrap_or_default(),
+        display,
+        email: value
+            .get("email")
+            .and_then(Value::as_str)
+            .filter(|text| !text.is_empty())
+            .map(ToOwned::to_owned),
+        dismissed: value
+            .get("dismissed")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        external: value
+            .get("external")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        login,
     })
 }
 

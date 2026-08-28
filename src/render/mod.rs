@@ -13,6 +13,7 @@
 //! a diff in review rather than as a surprise in someone's pipeline.
 
 pub mod board;
+pub mod dict;
 pub mod entity;
 pub mod image;
 pub mod markdown;
@@ -22,6 +23,7 @@ pub mod style;
 pub mod table;
 pub mod text;
 pub mod untrusted;
+pub mod user;
 
 use std::str::FromStr;
 

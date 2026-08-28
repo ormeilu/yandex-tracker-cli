@@ -1,0 +1,4 @@
+[
+  {"self":"https://api.tracker.yandex.net/v3/resolutions/1","id":1,"key":"fixed","version":1,"name":"Решен","description":"Fixed resolution","order":10},
+  {"self":"https://api.tracker.yandex.net/v3/resolutions/2","id":2,"key":"wontFix","version":1,"name":"Не будет исправлено","description":"Won't fix resolution","order":20}
+]

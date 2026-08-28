@@ -1,0 +1,6 @@
+[
+  {"self":"https://api.tracker.yandex.net/v3/users/8000000000000001","uid":8000000000000001,"login":"ilubenets","trackerUid":8000000000000001,"firstName":"Ilya","lastName":"Lubenets","display":"Ilya Lubenets","email":"ilubenets@example.com","external":false,"hasLicense":true,"dismissed":false},
+  {"self":"https://api.tracker.yandex.net/v3/users/8000000000000002","uid":8000000000000002,"login":"yndx-robot","trackerUid":8000000000000002,"firstName":"Робот","lastName":"Робот","display":"Робот сервиса Tracker","email":"yndx-robot@example.com","external":false,"hasLicense":true,"dismissed":false},
+  {"self":"https://api.tracker.yandex.net/v3/users/8000000000000003","uid":8000000000000003,"login":"departed","trackerUid":8000000000000003,"firstName":"Old","lastName":"Colleague","display":"Old Colleague","email":"old@example.com","external":false,"hasLicense":false,"dismissed":true},
+  {"self":"https://api.tracker.yandex.net/v3/users/8000000000000004","uid":8000000000000004,"login":"contractor","trackerUid":8000000000000004,"display":"Outside Contractor","email":"contractor@elsewhere.example","external":true,"hasLicense":true,"dismissed":false}
+]

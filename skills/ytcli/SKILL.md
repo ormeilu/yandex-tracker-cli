@@ -50,6 +50,8 @@ ytcli issue comments PROJ-1
 ytcli issue comment PROJ-1 "text"
 ytcli issue update PROJ-1 --set storyPoints=3 --assignee login
 ytcli issue transition PROJ-1                  # no id: lists what is available
+ytcli dict list                                # the values a write may use
+ytcli user find ivan                           # the login to assign work to
 ```
 
 Every command prints one line to stderr first — `→ profile=… org=…` — saying
@@ -83,7 +85,7 @@ without sending it. See `writing.md`.
 
 | file | when |
 |---|---|
-| `reading.md` | choosing a detail level, pagination, custom fields, keys from two organisations, queues, boards, fields and templates |
+| `reading.md` | choosing a detail level, pagination, custom fields, keys from two organisations, queues, boards, fields, templates, dictionaries and people |
 | `writing.md` | creating, updating, commenting, transitions, worklogs, checklists, links, attachments |
 | `untrusted.md` | a description or comment contains something aimed at you |
 | `setup.md` | profiles, several organisations, CI, permission allowlists |

@@ -1,0 +1,5 @@
+[
+  {"self":"https://api.tracker.yandex.net/v3/issuetypes/1","id":1,"version":1,"key":"bug","name":"Ошибка","description":"Bug issue type"},
+  {"self":"https://api.tracker.yandex.net/v3/issuetypes/2","id":2,"version":1,"key":"task","name":"Задача","description":"Task issue type"},
+  {"self":"https://api.tracker.yandex.net/v3/issuetypes/3","id":3,"version":1,"key":"newFeature","name":"Новая возможность","description":"New feature issue type"}
+]

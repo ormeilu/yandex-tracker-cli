@@ -38,6 +38,11 @@ Labels split the work by area: `area:issues`, `area:entities`,
   command a future build adds, and nothing in this one returns it.
 - `ytcli auth status` end to end.
 - `ytcli cheatsheet`, compiled into the binary.
+- `ytcli dict list` and the `user` group: the two things a write had to be
+  guessed at without. Dictionaries print the stable key beside the localised
+  name, because only one of the two can go in a script. `user find` filters the
+  directory here — Tracker has no user search endpoint — and says how many
+  people it read rather than presenting a capped answer as a complete one.
 - `ytcli issue list` as an alias of `issue find`: every other group lists with
   that word, and the group used most was the one exception.
 - Profile routing: a bare key goes to the profile that can see its queue, and

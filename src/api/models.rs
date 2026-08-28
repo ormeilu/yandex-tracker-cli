@@ -17,6 +17,52 @@ pub struct User {
     pub display: Option<String>,
 }
 
+/// One entry of an organisation-wide dictionary: an issue type, a priority, a
+/// status or a resolution.
+///
+/// All four endpoints answer with the same shape, so one type covers them.
+///
+/// `key` and `name` are not interchangeable and the difference is the reason
+/// this is worth listing at all: `name` comes back in the organisation's own
+/// language — a Russian organisation answers `Ошибка` — while `key` is the
+/// stable English handle a write has to use.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DictEntry {
+    pub key: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Where Tracker sorts it. Priorities and resolutions have one; issue types
+    /// do not.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub order: Option<i64>,
+    /// A status's category — `new`, `inProgress`, `paused`, `done`, `cancelled`.
+    /// Only statuses carry it, and it is what makes a status list readable
+    /// without knowing the workflow.
+    #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+}
+
+/// A person, in full.
+///
+/// Distinct from [`User`] on purpose: that one is a *reference* to somebody,
+/// the shape a login arrives in on an issue, and it is deliberately small
+/// because it appears in every answer. This one is the directory record, and
+/// only the user commands return it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Person {
+    pub login: String,
+    pub uid: String,
+    pub display: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+    /// Left the organisation. Still assignable in old issues, which is why the
+    /// listing says so rather than hiding them.
+    pub dismissed: bool,
+    /// Somebody outside the organisation with access to it.
+    pub external: bool,
+}
+
 /// How two issues relate. Rendered on every issue view, because "what blocks
 /// this" is the question an agent asks right after "what is this".
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

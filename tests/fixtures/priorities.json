@@ -1,0 +1,5 @@
+[
+  {"self":"https://api.tracker.yandex.net/v3/priorities/1","id":1,"key":"trivial","version":1,"name":"Незначительный","description":"Trivial priority","order":10},
+  {"self":"https://api.tracker.yandex.net/v3/priorities/3","id":3,"key":"normal","version":1,"name":"Средний","description":"Normal priority","order":30},
+  {"self":"https://api.tracker.yandex.net/v3/priorities/4","id":4,"key":"critical","version":1,"name":"Критичный","description":"Critical priority","order":40}
+]

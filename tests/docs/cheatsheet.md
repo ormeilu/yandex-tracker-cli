@@ -197,3 +197,53 @@ PROJ  Product
 lead: ilubenets   default type: task   default priority: normal
 
 ```
+
+```console
+$ ytcli dict list --kind types
+→ profile=test org=12345 (from YTCLI_PROFILE)
+types
+bug                  Ошибка
+task                 Задача
+newFeature           Новая возможность
+shown 3 of 3
+
+```
+
+```console
+$ ytcli dict list --kind statuses
+→ profile=test org=12345 (from YTCLI_PROFILE)
+statuses
+open                 Открыт                           new
+inProgress           В работе                         inProgress
+closed               Закрыт                           done
+shown 3 of 3
+
+```
+
+```console
+$ ytcli user list
+→ profile=test org=12345 (from YTCLI_PROFILE)
+ilubenets                    Ilya Lubenets                  ilubenets@example.com          active
+yndx-robot                   Робот сервиса Tracker          yndx-robot@example.com         active
+departed                     Old Colleague                  old@example.com                dismissed
+contractor                   Outside Contractor             contractor@elsewhere.example   external
+shown 4 of 4
+
+```
+
+```console
+$ ytcli user get ilubenets
+→ profile=test org=12345 (from YTCLI_PROFILE)
+ilubenets  Ilya Lubenets
+email: ilubenets@example.com   uid: 8000000000000001
+state: active
+
+```
+
+```console
+$ ytcli user find ilubenets
+→ profile=test org=12345 (from YTCLI_PROFILE)
+ilubenets                    Ilya Lubenets                  ilubenets@example.com          active
+shown 1 of 4
+
+```

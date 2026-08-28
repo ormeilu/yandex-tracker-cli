@@ -716,3 +716,61 @@ ytcli completions bash > /usr/local/etc/bash_completion.d/ytcli
 ```
 
 Writes to stdout; where it belongs is your shell's business, not ours.";
+
+pub const DICT_LIST: &str = "\
+List the values an issue can take.
+
+```
+ytcli dict list
+ytcli dict list --kind priorities
+ytcli dict list --kind statuses
+```
+
+All four dictionaries by default — types, priorities, statuses, resolutions —
+because the question behind this command is usually asked once, before a write,
+and four small lists in one answer cost less than four commands.
+
+**Quote the key, not the name.** `name` comes back in the organisation's own
+language, so a Russian organisation answers `Ошибка` where the key is `bug`, and
+only the key is stable enough to put in a script.
+
+These are organisation-wide. A queue narrows them, and `queue get` says which
+type and priority its issues start with.";
+
+pub const USER_LIST: &str = "\
+List the people in the organisation.
+
+```
+ytcli user list
+ytcli user list --limit 100 --page 2
+```
+
+Paged like every other listing here, and it ends with `shown N of M`. `STATE`
+is the column to read before assigning anything: a dismissed account still owns
+every issue it was ever given, so it is listed rather than hidden.";
+
+pub const USER_GET: &str = "\
+Show one person.
+
+```
+ytcli user get ilubenets
+ytcli user get 8000000000000001
+```
+
+Takes a login or a uid. `me` is not one of them — Tracker has no such user, and
+`ytcli auth status` is the command that answers who you are.";
+
+pub const USER_FIND: &str = "\
+Find people by login, name or email.
+
+```
+ytcli user find ivan
+ytcli user find @example.com --scan 5000
+```
+
+Matched case-insensitively against all three fields.
+
+Tracker has no user search endpoint, so this reads the directory and filters it
+here. `--scan` is what that costs, made visible: it caps how many people are
+read before the command stops, and a search that stopped early says so on
+stderr rather than presenting a partial answer as a complete one.";

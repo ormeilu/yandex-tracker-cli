@@ -42,6 +42,11 @@ async fn tracker_answers(harness: &Harness) {
         ("/v3/boards", "boards.json"),
         ("/v3/boards/6", "board.json"),
         ("/v3/boards/9/sprints", "sprints.json"),
+        ("/v3/issuetypes", "issuetypes.json"),
+        ("/v3/priorities", "priorities.json"),
+        ("/v3/statuses", "statuses.json"),
+        ("/v3/resolutions", "resolutions.json"),
+        ("/v3/users/ilubenets", "user.json"),
     ] {
         Mock::given(method("GET"))
             .and(path(route))
@@ -61,6 +66,41 @@ async fn tracker_answers(harness: &Harness) {
         )
         .mount(&harness.server)
         .await;
+
+    entity_answers(harness).await;
+
+    Mock::given(method("GET"))
+        .and(path("/v3/boards/6/sprints"))
+        .respond_with(ResponseTemplate::new(400).set_body_json(serde_json::json!({
+            "errors": {},
+            "errorMessages": ["A board of this type cannot have sprints."],
+            "statusCode": 400
+        })))
+        .mount(&harness.server)
+        .await;
+
+    // The directory reports its size in a header, like every other listing.
+    Mock::given(method("GET"))
+        .and(path("/v3/users"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(fixture("users.json"))
+                .append_header("X-Total-Count", "4"),
+        )
+        .mount(&harness.server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/v3/issues/_count"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!(2)))
+        .mount(&harness.server)
+        .await;
+}
+
+/// Projects, portfolios and goals, which are searched rather than fetched and
+/// are told apart by the body of the search rather than by its path.
+async fn entity_answers(harness: &Harness) {
+    let json = |name: &str| ResponseTemplate::new(200).set_body_json(fixture(name));
 
     // The entity endpoints are typed and POST for everything, so the searches
     // are told apart by their body: an unfiltered listing sends `{}`, and
@@ -122,21 +162,6 @@ async fn tracker_answers(harness: &Harness) {
 
     // A kanban board refuses the sprint question. The documented case pins how
     // that reads, because passing Tracker's own words through is the behaviour.
-    Mock::given(method("GET"))
-        .and(path("/v3/boards/6/sprints"))
-        .respond_with(ResponseTemplate::new(400).set_body_json(serde_json::json!({
-            "errors": {},
-            "errorMessages": ["A board of this type cannot have sprints."],
-            "statusCode": 400
-        })))
-        .mount(&harness.server)
-        .await;
-
-    Mock::given(method("POST"))
-        .and(path("/v3/issues/_count"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!(2)))
-        .mount(&harness.server)
-        .await;
 }
 
 #[tokio::test]
