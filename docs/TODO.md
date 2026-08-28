@@ -4,23 +4,34 @@ Planned work lives in **[GitHub issues](https://github.com/ormeilu/yandex-tracke
 not in this file. Anything new — a bug, an idea, a change of mind — goes there,
 so there is one list rather than two that disagree.
 
-- [Milestone v1](https://github.com/ormeilu/yandex-tracker-cli/milestone/1) — read
-  and write issues, queues, projects, goals, attachments; every distribution
-  channel; the agent skill.
-- [Milestone v2](https://github.com/ormeilu/yandex-tracker-cli/milestone/2) —
-  worklogs, checklists, portfolios, administration. Everything v1.x leaves out,
-  rather than a next point release: v1 stays open for the whole 1.x line.
-- [Milestone v3](https://github.com/ormeilu/yandex-tracker-cli/milestone/3) — what
-  the API offers and the tool does not: the dictionaries and people that make a
+**A milestone is named after the release that carries it**, and is closed when
+that release is tagged. The names drifted once — milestones called `v1`…`v4`
+against versions `0.1.0`…`0.6.0`, which read as major versions and were not — so
+they were renamed to the versions they actually shipped in. An issue blocked on
+something outside this repository sits on **no** milestone: a schedule it cannot
+meet is how the drift started.
+
+- [0.2.0](https://github.com/ormeilu/yandex-tracker-cli/milestone/1) — read and
+  write issues, queues, projects, goals, attachments; every distribution
+  channel; the agent skill. Shipped across 0.1.0 and 0.2.0.
+- [0.3.0](https://github.com/ormeilu/yandex-tracker-cli/milestone/2) — worklogs,
+  checklists, portfolios, administration.
+- [0.5.0](https://github.com/ormeilu/yandex-tracker-cli/milestone/3) — what the
+  API offered and the tool did not: the dictionaries and people that make a
   write guessable rather than a guess, issue history, moving an issue between
   queues, editing what was already written, and writes for the
-  project-management entities.
-- [Milestone v4](https://github.com/ormeilu/yandex-tracker-cli/milestone/4) — the
-  endpoints a survey of the API found unused, and the query language written down
-  against a live Tracker rather than from memory.
-- [Milestone Yandex Wiki](https://github.com/ormeilu/yandex-tracker-cli/milestone/5)
-  — whether the other half of an organisation's writing belongs behind this
-  binary at all. Research first; the answer may be no.
+  project-management entities. Shipped across 0.4.0 and 0.5.0.
+- [0.6.0](https://github.com/ormeilu/yandex-tracker-cli/milestone/4) — the
+  endpoints a survey of the API found unused, and the query language written
+  down against a live Tracker rather than from memory.
+- [0.7.0](https://github.com/ormeilu/yandex-tracker-cli/milestone/6) — the rest
+  of the Tracker API: components, link types, queue access, and the writes a
+  sweep found missing. **1.0.0 waits on this**, because a tool that claims a
+  version 1 for a Tracker CLI should not still make a caller guess at what a
+  component field takes.
+- [Yandex Wiki](https://github.com/ormeilu/yandex-tracker-cli/milestone/5) —
+  whether the other half of an organisation's writing belongs behind this binary
+  at all. Not a version: research first, and the answer may be no.
 - [`kind:question`](https://github.com/ormeilu/yandex-tracker-cli/labels/kind%3Aquestion)
   — open design questions, filed so they are not re-litigated from scratch.
 
@@ -53,7 +64,7 @@ Labels split the work by area: `area:issues`, `area:entities`,
   name, because only one of the two can go in a script. `user find` filters the
   directory here — Tracker has no user search endpoint — and says how many
   people it read rather than presenting a capped answer as a complete one.
-- Milestone v4: `skills/ytcli/yql.md`, every query on it sent to a real Tracker
+- Milestone 0.6.0: `skills/ytcli/yql.md`, every query on it sent to a real Tracker
   before it was written down — which is how `StoryPoints` turned out not to be a
   filter name while `"Story Points"` is. `field get` says what a field accepts,
   naming the command that lists the values when they live elsewhere.
