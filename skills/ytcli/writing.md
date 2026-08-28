@@ -46,6 +46,15 @@ ytcli project place 655… --into 644…       # or --out
 ytcli queue create -k OPS -n Operations --like PROJ --yes
 ```
 
+```bash
+ytcli issue move PROJ-1 --to OPS --yes     # --keep-fields to carry the rest
+```
+
+`issue move` needs `--yes` for the same reason `queue create` does, not because
+it touches several issues: the key changes. `PROJ-1` becomes `OPS-N`, every
+reference to the old key becomes a redirect, and no request moves it back. Say
+the new key back to the user — nothing they were holding still addresses it.
+
 `queue create` needs `--yes` even for one queue: a key is claimed once, Tracker
 deletes a queue by hiding it, and the key stays spent. `--like` copies the issue
 types, workflows and defaults from a queue that already works.

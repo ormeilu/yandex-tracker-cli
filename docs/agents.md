@@ -16,8 +16,8 @@ allow: ytcli issue get:*, ytcli issue find:*, ytcli issue list:*, ytcli issue co
        ytcli dict list:*, ytcli user list:*, ytcli user get:*, ytcli user find:*,
        ytcli portfolio contents:*, ytcli auth status
 ask:   ytcli issue create:*, ytcli issue update:*, ytcli issue comment:*,
-       ytcli issue transition:*, ytcli issue worklog:*, ytcli issue check:*,
-       ytcli issue link:*, ytcli queue create:*, ytcli project place:*,
+       ytcli issue transition:*, ytcli issue move:*, ytcli issue worklog:*,
+       ytcli issue check:*, ytcli issue link:*, ytcli queue create:*, ytcli project place:*,
        ytcli attachment upload:*
 ```
 

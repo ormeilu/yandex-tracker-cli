@@ -100,6 +100,22 @@ pub enum IssueCommand {
     /// Link or unlink issues. Every verb here writes.
     #[command(subcommand, long_about = crate::cli::help::md(crate::cli::help::ISSUE_LINK))]
     Link(LinkCommand),
+    /// Move an issue to another queue. Its key changes, and nothing undoes it.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_MOVE))]
+    Move {
+        key: String,
+        /// Queue to move it into.
+        #[arg(long, short = 't')]
+        to: String,
+        /// Carry over fields the target queue does not define. Without this,
+        /// Tracker drops them.
+        #[arg(long)]
+        keep_fields: bool,
+        /// Start the issue at the target workflow's first status instead of
+        /// keeping the one it has.
+        #[arg(long)]
+        initial_status: bool,
+    },
     /// Move an issue through a workflow transition.
     #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_TRANSITION))]
     Transition {
@@ -219,6 +235,12 @@ pub async fn run(command: &IssueCommand, session: &Session) -> ExitCode {
         IssueCommand::Links { key } => links(key, session).await,
         IssueCommand::Comments { key } => comments(key, session).await,
         IssueCommand::Changelog { key, limit } => changelog(key, *limit, session).await,
+        IssueCommand::Move {
+            key,
+            to,
+            keep_fields,
+            initial_status,
+        } => move_issue(key, to, *keep_fields, *initial_status, session).await,
         IssueCommand::Create {
             queue,
             summary,
@@ -1269,6 +1291,58 @@ async fn transition_cmd(target: &str, transition: Option<&str>, session: &Sessio
     match client.execute_transition(key, transition, &body).await {
         Ok(()) => {
             emit(&format!("{key} {transition}\n"));
+            ExitCode::Success
+        }
+        Err(error) => {
+            let code = error.exit_code();
+            report(&error, code)
+        }
+    }
+}
+
+/// Send an issue to another queue.
+///
+/// Gated with `always_confirm` rather than the ordinary single-issue path: the
+/// key changes, every reference to the old one is left pointing at a redirect,
+/// and no request puts it back. That is irreversible in kind, like claiming a
+/// queue key, not merely at scale.
+async fn move_issue(
+    target: &str,
+    queue: &str,
+    keep_fields: bool,
+    initial_status: bool,
+    session: &Session,
+) -> ExitCode {
+    let (client, key) = match session.client_for(target).await {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let key = key.as_str();
+
+    let body = serde_json::json!({
+        "queue": queue,
+        "moveAllFields": keep_fields,
+        "initialStatus": initial_status,
+    });
+    let targets = [key.to_owned()];
+    let intent = Intent {
+        action: &format!("move {key} to {queue}, changing its key"),
+        targets: &targets,
+        body: &body,
+        always_confirm: true,
+    };
+    if let Gate::Stop(code) = check(&intent, session) {
+        return code;
+    }
+
+    match client
+        .move_issue(key, queue, keep_fields, initial_status)
+        .await
+    {
+        Ok(issue) => {
+            // The new key is the whole result: nothing else the caller holds
+            // still addresses this issue.
+            emit(&format!("{key} → {}\n", issue.key));
             ExitCode::Success
         }
         Err(error) => {

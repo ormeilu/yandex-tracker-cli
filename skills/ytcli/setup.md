@@ -123,6 +123,7 @@ allowlist is worth having. For Claude Code, in `.claude/settings.json`:
       "Bash(ytcli issue update:*)",
       "Bash(ytcli issue comment:*)",
       "Bash(ytcli issue transition:*)",
+      "Bash(ytcli issue move:*)",
       "Bash(ytcli issue worklog:*)",
       "Bash(ytcli issue check:*)",
       "Bash(ytcli issue link:*)",

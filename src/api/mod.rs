@@ -570,6 +570,34 @@ impl Client {
             .unwrap_or_default())
     }
 
+    /// Move an issue to another queue.
+    ///
+    /// The issue keeps its identity and loses its name: `PROJ-42` becomes
+    /// `OTHER-17`, and there is no request that undoes it. Tracker drops fields
+    /// the target queue does not define unless `moveAllFields` says otherwise,
+    /// so that choice is the caller's rather than a default we picked for them.
+    pub async fn move_issue(
+        &self,
+        key: &str,
+        queue: &str,
+        keep_fields: bool,
+        initial_status: bool,
+    ) -> Result<Issue, ApiError> {
+        let path = format!(
+            "/v3/issues/{key}/_move?queue={queue}&moveAllFields={keep_fields}&initialStatus={initial_status}"
+        );
+        let (raw, _) = self
+            .send_value(
+                reqwest::Method::POST,
+                &path,
+                Some(&serde_json::json!({})),
+                &format!("move {key} to {queue}"),
+            )
+            .await?;
+
+        parse::issue(&raw).ok_or_else(|| ApiError::NotFound(format!("issue {key} after the move")))
+    }
+
     /// What changed on an issue, newest last.
     ///
     /// Tracker pages this with an opaque cursor rather than page numbers, and

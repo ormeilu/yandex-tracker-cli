@@ -389,6 +389,27 @@ ytcli issue link delete PROJ-1 987654
 The id is the link's own, printed by `ytcli issue links` — not the key of the
 issue at the other end.";
 
+pub const ISSUE_MOVE: &str = "\
+Move an issue to another queue.
+
+```
+ytcli issue move PROJ-1 --to OPS --yes
+ytcli issue move PROJ-1 --to OPS --keep-fields --yes
+ytcli issue move PROJ-1 --to OPS --dry-run
+```
+
+**The key changes.** `PROJ-1` becomes `OPS-N`, every link and every note that
+referred to the old key now refers to a redirect, and no request moves it back
+to the key it had. That is why `--yes` is required for a single issue here,
+where an ordinary update is not.
+
+Tracker drops fields the target queue does not define. `--keep-fields` carries
+them across instead. `--initial-status` restarts the issue at the beginning of
+the target queue's workflow rather than keeping the status it has, which
+matters when the two workflows do not share one.
+
+The new key is printed, and is the only thing that still addresses the issue.";
+
 pub const ISSUE_TRANSITION: &str = "\
 Move an issue through a workflow transition.
 

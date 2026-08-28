@@ -7,7 +7,7 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use predicates::prelude::*;
-use wiremock::matchers::{body_json, method, path};
+use wiremock::matchers::{body_json, method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
 mod harness;
@@ -347,6 +347,7 @@ async fn no_write_verb_reaches_the_network_under_dry_run() {
         vec!["issue", "update", "PROJ-1", "--set", "storyPoints=3"],
         vec!["issue", "comment", "PROJ-1", "text"],
         vec!["issue", "transition", "PROJ-1", "close"],
+        vec!["issue", "move", "PROJ-1", "--to", "OPS"],
         vec!["attachment", "upload", "PROJ-1", &path],
     ];
 
@@ -368,4 +369,79 @@ async fn no_write_verb_reaches_the_network_under_dry_run() {
             args.join(" ")
         );
     }
+}
+
+/// The key changes and nothing puts it back, so a single issue needs `--yes`
+/// here where an ordinary update does not.
+#[tokio::test]
+async fn moving_one_issue_still_needs_yes() {
+    let harness = Harness::new().await;
+
+    harness
+        .run(&["issue", "move", "PROJ-1", "--to", "OPS"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("cannot be undone"));
+
+    assert!(
+        harness.server.received_requests().await.unwrap().is_empty(),
+        "a refused move must send nothing"
+    );
+}
+
+/// What the caller gets back is the new key: nothing they were holding still
+/// addresses the issue.
+#[tokio::test]
+async fn a_move_reports_the_key_the_issue_now_has() {
+    let harness = Harness::new().await;
+    Mock::given(method("POST"))
+        .and(path("/v3/issues/PROJ-1/_move"))
+        .and(query_param("queue", "OPS"))
+        .and(query_param("moveAllFields", "false"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "key": "OPS-17",
+            "summary": "Attachments are lost on move",
+            "queue": {"key": "OPS"}
+        })))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness
+        .run(&["issue", "move", "PROJ-1", "--to", "OPS", "--yes"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert_eq!(stdout, "PROJ-1 → OPS-17\n");
+}
+
+/// Fields the target queue does not define are dropped by Tracker unless the
+/// caller says otherwise, so the flag has to reach the request.
+#[tokio::test]
+async fn keep_fields_is_passed_through_to_tracker() {
+    let harness = Harness::new().await;
+    Mock::given(method("POST"))
+        .and(path("/v3/issues/PROJ-1/_move"))
+        .and(query_param("moveAllFields", "true"))
+        .and(query_param("initialStatus", "true"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "key": "OPS-17",
+            "summary": "Attachments are lost on move"
+        })))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&[
+            "issue",
+            "move",
+            "PROJ-1",
+            "--to",
+            "OPS",
+            "--keep-fields",
+            "--initial-status",
+            "--yes",
+        ])
+        .assert()
+        .success();
 }
