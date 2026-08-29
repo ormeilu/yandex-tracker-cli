@@ -667,6 +667,56 @@ async fn automation_survives_a_section_it_may_not_read() {
     );
 }
 
+/// The two halves of "who may do what", and why one command prints both.
+///
+/// No fixture can establish this: that `permissions` answers with roles and
+/// `access` answers with the people those roles come out as is a claim about
+/// Tracker, and the whole shape of the command rests on it. The organisation
+/// this runs against refuses both halves on some of its queues and allows both
+/// on others, which is also the refusal path being exercised for real.
+#[tokio::test]
+#[ignore = "needs real credentials"]
+async fn access_resolves_the_roles_that_permissions_only_names() {
+    let client = client();
+    let queues = client.queues().await.expect("queues");
+
+    let mut refusals = 0;
+    for queue in &queues {
+        let Ok(access) = client.queue_access(&queue.key).await else {
+            refusals += 1;
+            continue;
+        };
+
+        // Roles live on the rule side only. If Tracker ever starts answering
+        // `access` with roles too, the second table is claiming something it
+        // cannot deliver and the `YOU` column is a guess.
+        assert!(
+            access.access.iter().all(|entry| entry.roles.is_empty()),
+            "access answered with roles: it is not a resolved list of people"
+        );
+        assert!(
+            access
+                .permissions
+                .iter()
+                .any(|entry| !entry.roles.is_empty()),
+            "permissions answered without a single role"
+        );
+        assert!(
+            access.you.is_some(),
+            "the token could not name its own user"
+        );
+        return;
+    }
+
+    // Not a pass by default: every queue refusing is a fact about the token,
+    // and it is asserted rather than allowed to look like a verified answer.
+    assert_eq!(
+        refusals,
+        queues.len(),
+        "no queue answered and none was counted as refused"
+    );
+}
+
 /// Two small listings that used to be unreachable.
 ///
 /// Both answer 200 and both are empty in the organisation this runs against, so

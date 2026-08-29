@@ -1,0 +1,44 @@
+{
+  "self": "https://api.tracker.yandex.net/v3/queues/PROJ/permissions",
+  "version": 3,
+  "create": {
+    "self": "https://api.tracker.yandex.net/v3/queues/PROJ/permissions/create",
+    "users": [
+      {"self": "https://api.tracker.yandex.net/v3/users/1120000000000001", "id": "1120000000000001", "display": "Ada Lovelace", "passportUid": 1120000000000001},
+      {"self": "https://api.tracker.yandex.net/v3/users/1120000000000002", "id": "1120000000000002", "display": "Grace Hopper", "passportUid": 1120000000000002}
+    ],
+    "roles": [
+      {"self": "https://api.tracker.yandex.net/v3/roles/queue-lead", "id": "queue-lead", "display": "Владелец очереди"}
+    ]
+  },
+  "read": {
+    "self": "https://api.tracker.yandex.net/v3/queues/PROJ/permissions/read",
+    "roles": [
+      {"self": "https://api.tracker.yandex.net/v3/roles/access", "id": "access", "display": "Доступ"},
+      {"self": "https://api.tracker.yandex.net/v3/roles/follower", "id": "follower", "display": "Наблюдатель"}
+    ]
+  },
+  "write": {
+    "self": "https://api.tracker.yandex.net/v3/queues/PROJ/permissions/write",
+    "users": [
+      {"self": "https://api.tracker.yandex.net/v3/users/1120000000000001", "id": "1120000000000001", "display": "Ada Lovelace", "passportUid": 1120000000000001}
+    ],
+    "groups": [
+      {"self": "https://api.tracker.yandex.net/v3/groups/42", "id": "42", "display": "Storage team"}
+    ],
+    "roles": [
+      {"self": "https://api.tracker.yandex.net/v3/roles/queue-lead", "id": "queue-lead", "display": "Владелец очереди"},
+      {"self": "https://api.tracker.yandex.net/v3/roles/assignee", "id": "assignee", "display": "Исполнитель"},
+      {"self": "https://api.tracker.yandex.net/v3/roles/author", "id": "author", "display": "Автор"}
+    ]
+  },
+  "grant": {
+    "self": "https://api.tracker.yandex.net/v3/queues/PROJ/permissions/grant",
+    "users": [
+      {"self": "https://api.tracker.yandex.net/v3/users/1120000000000002", "id": "1120000000000002", "display": "Grace Hopper", "passportUid": 1120000000000002}
+    ],
+    "roles": [
+      {"self": "https://api.tracker.yandex.net/v3/roles/queue-lead", "id": "queue-lead", "display": "Владелец очереди"}
+    ]
+  }
+}

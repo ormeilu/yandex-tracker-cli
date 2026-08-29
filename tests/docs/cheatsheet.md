@@ -201,6 +201,27 @@ shown 2 of 2 for PROJ
 ```
 
 ```console
+$ ytcli queue access PROJ
+→ profile=test org=12345 (from YTCLI_PROFILE)
+permissions
+create         queue-lead                         2: Ada Lovelace, Grace Hopp…
+read           access, follower                   -
+write          group:Storage team, queue-lead, a… 1: Ada Lovelace
+grant          queue-lead                         1: Grace Hopper
+shown 4 of 4 for PROJ
+a role is decided per issue: `assignee` is whoever that issue names
+
+access
+create         yes   4: Ada Lovelace, Grace Hopper, Alan Turing,…
+read           yes   4: Ada Lovelace, Grace Hopper, Alan Turing,…
+write          no    1: Ada Lovelace
+writeNoAssign  no    2: Ada Lovelace, Alan Turing
+grant          no    1: Grace Hopper
+shown 5 of 5 for PROJ
+
+```
+
+```console
 $ ytcli queue automation PROJ
 → profile=test org=12345 (from YTCLI_PROFILE)
 macros

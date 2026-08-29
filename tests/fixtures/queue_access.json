@@ -1,0 +1,101 @@
+{
+  "self": "https://api.tracker.yandex.net/v3/queues/PROJ/access",
+  "version": 3,
+  "create": {
+    "self": "https://api.tracker.yandex.net/v3/queues/PROJ/access/create",
+    "users": [
+      {
+        "self": "https://api.tracker.yandex.net/v3/users/1120000000000001",
+        "id": "1120000000000001",
+        "display": "Ada Lovelace",
+        "passportUid": 1120000000000001
+      },
+      {
+        "self": "https://api.tracker.yandex.net/v3/users/1120000000000002",
+        "id": "1120000000000002",
+        "display": "Grace Hopper",
+        "passportUid": 1120000000000002
+      },
+      {
+        "self": "https://api.tracker.yandex.net/v3/users/1120000000000003",
+        "id": "1120000000000003",
+        "display": "Alan Turing",
+        "passportUid": 1120000000000003
+      },
+      {
+        "self": "https://api.tracker.yandex.net/v3/users/8000000000000001",
+        "id": "8000000000000001",
+        "display": "Ilya Lubenets",
+        "passportUid": 8000000000000001
+      }
+    ]
+  },
+  "read": {
+    "self": "https://api.tracker.yandex.net/v3/queues/PROJ/access/read",
+    "users": [
+      {
+        "self": "https://api.tracker.yandex.net/v3/users/1120000000000001",
+        "id": "1120000000000001",
+        "display": "Ada Lovelace",
+        "passportUid": 1120000000000001
+      },
+      {
+        "self": "https://api.tracker.yandex.net/v3/users/1120000000000002",
+        "id": "1120000000000002",
+        "display": "Grace Hopper",
+        "passportUid": 1120000000000002
+      },
+      {
+        "self": "https://api.tracker.yandex.net/v3/users/1120000000000003",
+        "id": "1120000000000003",
+        "display": "Alan Turing",
+        "passportUid": 1120000000000003
+      },
+      {
+        "self": "https://api.tracker.yandex.net/v3/users/8000000000000001",
+        "id": "8000000000000001",
+        "display": "Ilya Lubenets",
+        "passportUid": 8000000000000001
+      }
+    ]
+  },
+  "writeNoAssign": {
+    "self": "https://api.tracker.yandex.net/v3/queues/PROJ/access/writeNoAssign",
+    "users": [
+      {
+        "self": "https://api.tracker.yandex.net/v3/users/1120000000000001",
+        "id": "1120000000000001",
+        "display": "Ada Lovelace",
+        "passportUid": 1120000000000001
+      },
+      {
+        "self": "https://api.tracker.yandex.net/v3/users/1120000000000003",
+        "id": "1120000000000003",
+        "display": "Alan Turing",
+        "passportUid": 1120000000000003
+      }
+    ]
+  },
+  "write": {
+    "self": "https://api.tracker.yandex.net/v3/queues/PROJ/access/write",
+    "users": [
+      {
+        "self": "https://api.tracker.yandex.net/v3/users/1120000000000001",
+        "id": "1120000000000001",
+        "display": "Ada Lovelace",
+        "passportUid": 1120000000000001
+      }
+    ]
+  },
+  "grant": {
+    "self": "https://api.tracker.yandex.net/v3/queues/PROJ/access/grant",
+    "users": [
+      {
+        "self": "https://api.tracker.yandex.net/v3/users/1120000000000002",
+        "id": "1120000000000002",
+        "display": "Grace Hopper",
+        "passportUid": 1120000000000002
+      }
+    ]
+  }
+}

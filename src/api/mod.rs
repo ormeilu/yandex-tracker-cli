@@ -884,6 +884,85 @@ impl Client {
             .unwrap_or_default())
     }
 
+    /// Who may do what in a queue.
+    ///
+    /// Two endpoints saying two different things. `permissions` is the rule as
+    /// somebody configured it — named people, groups and *roles*; `access` is
+    /// the list of people it comes out as. A role like "assignee" resolves per
+    /// issue, so only the second answers "am I one of them" on its own.
+    ///
+    /// Both are refused together in the organisation this was checked against —
+    /// one right governs the pair — but they are separate endpoints, and a
+    /// section refused is still an answer while the other one stands.
+    pub async fn queue_access(&self, key: &str) -> Result<QueueAccess, ApiError> {
+        let mut unreadable = Vec::new();
+        let mut refused = None;
+
+        let mut section = |name: &'static str, result: Result<Value, ApiError>| match result {
+            Ok(value) => Permission::parse_all(&value),
+            Err(error) => {
+                unreadable.push(Unreadable {
+                    section: name,
+                    // Tracker does say why here — "you have no right to view the
+                    // queue's access rights" — but our 403 flattens that into a
+                    // sentence that also blames the organisation header, which
+                    // is the wrong suspect for this endpoint.
+                    reason: match error {
+                        ApiError::Forbidden => {
+                            format!(
+                                "{name} are readable only by those who may see queue rights (403)"
+                            )
+                        }
+                        ref other => other.to_string(),
+                    },
+                });
+                refused.get_or_insert(error);
+                Vec::new()
+            }
+        };
+
+        let permissions = section(
+            "permissions",
+            self.get_value(
+                &format!("/v3/queues/{key}/permissions"),
+                &format!("permissions of queue {key}"),
+            )
+            .await,
+        );
+        let access = section(
+            "access",
+            self.get_value(
+                &format!("/v3/queues/{key}/access"),
+                &format!("access of queue {key}"),
+            )
+            .await,
+        );
+
+        if unreadable.len() == 2 {
+            return Err(match refused {
+                // Both sections missing means the queue is, and saying so about
+                // the queue reads better than about the first endpoint tried.
+                Some(ApiError::NotFound(_)) | None => ApiError::NotFound(format!("queue {key}")),
+                Some(other) => other,
+            });
+        }
+
+        // Whose rights these are compared against. A failure here loses the
+        // `you` column and nothing else, so it is not worth failing the command
+        // that did answer.
+        let you = match self.myself().await {
+            Ok(user) => Some(user.id),
+            Err(_) => None,
+        };
+
+        Ok(QueueAccess {
+            permissions,
+            access,
+            you,
+            unreadable,
+        })
+    }
+
     /// One of the four organisation-wide dictionaries.
     ///
     /// Small and unpaged — the largest of the four is statuses, in the dozens —
@@ -1772,6 +1851,68 @@ pub struct LinkType {
     pub inward: Option<String>,
 }
 
+impl Permission {
+    /// Every operation in the answer, in a fixed order.
+    ///
+    /// Tracker's own order is whatever the JSON object happened to have, and
+    /// the order of these columns is a contract. `create` before `read` before
+    /// the two kinds of `write` before `grant` runs from the least to the most
+    /// a right lets somebody do; anything Tracker adds later lands after them
+    /// rather than silently between them.
+    fn parse_all(value: &Value) -> Vec<Self> {
+        const ORDER: [&str; 5] = ["create", "read", "write", "writeNoAssign", "grant"];
+
+        let Some(object) = value.as_object() else {
+            return Vec::new();
+        };
+
+        let known = ORDER
+            .iter()
+            .filter_map(|name| object.get(*name).map(|entry| Self::parse(name, entry)));
+        let rest = object
+            .iter()
+            .filter(|(name, entry)| !ORDER.contains(&name.as_str()) && entry.is_object())
+            // `self` and `version` are the answer's own metadata, not
+            // operations, and they are objects nowhere — but the filter above
+            // is about names, so they are named here too.
+            .filter(|(name, _)| !matches!(name.as_str(), "self" | "version"))
+            .map(|(name, entry)| Self::parse(name, entry));
+
+        known.chain(rest).collect()
+    }
+
+    fn parse(operation: &str, value: &Value) -> Self {
+        let holders = |member: &str| {
+            value
+                .get(member)
+                .and_then(Value::as_array)
+                .map(|entries| entries.iter().filter_map(Holder::parse).collect())
+                .unwrap_or_default()
+        };
+        Self {
+            operation: operation.to_owned(),
+            users: holders("users"),
+            groups: holders("groups"),
+            roles: holders("roles"),
+        }
+    }
+}
+
+impl Holder {
+    fn parse(value: &Value) -> Option<Self> {
+        let id = id_of(value)?;
+        Some(Self {
+            display: value
+                .get("display")
+                .and_then(Value::as_str)
+                // A holder with no display is still a holder; the id is a worse
+                // name than the display and a better one than nothing.
+                .map_or_else(|| id.clone(), ToOwned::to_owned),
+            id,
+        })
+    }
+}
+
 impl LinkType {
     fn parse(value: &Value) -> Option<Self> {
         let text = |member: &str| {
@@ -1854,6 +1995,41 @@ pub struct Automation {
     /// sections out of three is a useful answer, and failing the whole command
     /// because of the third would throw them away.
     pub unreadable: Vec<Unreadable>,
+}
+
+/// Who may do what in a queue: the rules, and the people they come out as.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct QueueAccess {
+    /// The rule per operation: named holders and roles.
+    pub permissions: Vec<Permission>,
+    /// The people per operation, with the roles already resolved.
+    pub access: Vec<Permission>,
+    /// The id of the user the token belongs to, when it could be read. What
+    /// makes "who is allowed" into "am I allowed".
+    pub you: Option<String>,
+    pub unreadable: Vec<Unreadable>,
+}
+
+/// One operation, and everybody who holds it.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Permission {
+    /// `create`, `read`, `write`, `writeNoAssign`, `grant`.
+    pub operation: String,
+    pub users: Vec<Holder>,
+    /// Documented, and absent from every queue this was checked against — so
+    /// parsed, printed when present, and claimed about no further than that.
+    pub groups: Vec<Holder>,
+    /// `queue-lead`, `assignee`, `author`, `follower`, `access`. A role is not
+    /// a set of people: which issue is being touched decides who is in it.
+    pub roles: Vec<Holder>,
+}
+
+/// Somebody or something that holds a right.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Holder {
+    pub id: String,
+    /// Tracker's own wording, in the organisation's language.
+    pub display: String,
 }
 
 /// One section that could not be read, and why.

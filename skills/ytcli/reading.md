@@ -98,6 +98,7 @@ ytcli field get storyPoints          # what one field accepts, before --set gues
 ytcli component list -q PROJ         # names the components field takes, per queue
 ytcli link types                     # the write vocabulary, beside the type ids
 ytcli queue local-fields PROJ        # fields the queue owns; field get cannot see these
+ytcli queue access PROJ              # who may do what here, and whether you are one
 ytcli template list --kind comment   # issue templates by default
 ytcli portfolio contents 655…        # the portfolios and projects inside one
 ytcli issue worklogs PROJ-1          # time logged, with the total

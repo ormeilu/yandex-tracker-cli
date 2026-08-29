@@ -51,6 +51,12 @@ pub enum QueueCommand {
         /// Queue key, e.g. PROJ.
         key: String,
     },
+    /// Show who may do what in this queue.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::QUEUE_ACCESS))]
+    Access {
+        /// Queue key, e.g. PROJ.
+        key: String,
+    },
     /// List the fields this queue defines itself.
     #[command(name = "local-fields", long_about = crate::cli::help::md(crate::cli::help::QUEUE_LOCAL_FIELDS))]
     LocalFields {
@@ -82,20 +88,9 @@ pub async fn run(command: &QueueCommand, session: &Session) -> ExitCode {
             }
         },
         QueueCommand::Get { key } => match client.queue(key).await {
-            Ok(settings) => {
-                let rendered = match session.render.format {
-                    Format::Text => Ok(queue::settings(&settings, &session.render)),
-                    Format::JsonRaw => machine(&settings, Format::Json),
-                    other => machine(&settings, other),
-                };
-                match rendered {
-                    Ok(text) => {
-                        emit(&text);
-                        ExitCode::Success
-                    }
-                    Err(error) => report(&error, ExitCode::Failure),
-                }
-            }
+            Ok(settings) => render_one(&settings, session, |settings| {
+                queue::settings(settings, &session.render)
+            }),
             Err(error) => {
                 let code = error.exit_code();
                 report(&error, code)
@@ -125,21 +120,19 @@ pub async fn run(command: &QueueCommand, session: &Session) -> ExitCode {
                 report(&error, code)
             }
         },
-        QueueCommand::Automation { key } => match client.queue_automation(key).await {
-            Ok(automation) => {
-                let rendered = match session.render.format {
-                    Format::Text => Ok(queue::automation(key, &automation, &session.render)),
-                    Format::JsonRaw => machine(&automation, Format::Json),
-                    other => machine(&automation, other),
-                };
-                match rendered {
-                    Ok(text) => {
-                        emit(&text);
-                        ExitCode::Success
-                    }
-                    Err(error) => report(&error, ExitCode::Failure),
-                }
+        QueueCommand::Access { key } => match client.queue_access(key).await {
+            Ok(access) => render_one(&access, session, |access| {
+                queue::access(key, access, &session.render)
+            }),
+            Err(error) => {
+                let code = error.exit_code();
+                report(&error, code)
             }
+        },
+        QueueCommand::Automation { key } => match client.queue_automation(key).await {
+            Ok(automation) => render_one(&automation, session, |automation| {
+                queue::automation(key, automation, &session.render)
+            }),
             Err(error) => {
                 let code = error.exit_code();
                 report(&error, code)
@@ -180,6 +173,27 @@ fn render<T: serde::Serialize>(
         // shape with uglier names.
         Format::JsonRaw => machine(&value, Format::Json),
         other => machine(&value, other),
+    };
+
+    match rendered {
+        Ok(text) => {
+            emit(&text);
+            ExitCode::Success
+        }
+        Err(error) => report(&error, ExitCode::Failure),
+    }
+}
+
+/// The same, for a command whose answer is one thing rather than a list.
+fn render_one<T: serde::Serialize>(
+    value: &T,
+    session: &Session,
+    as_text: impl Fn(&T) -> String,
+) -> ExitCode {
+    let rendered = match session.render.format {
+        Format::Text => Ok(as_text(value)),
+        Format::JsonRaw => machine(value, Format::Json),
+        other => machine(value, other),
     };
 
     match rendered {

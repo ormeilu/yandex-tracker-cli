@@ -13,6 +13,7 @@ allow: ytcli issue get:*, ytcli issue find:*, ytcli issue list:*, ytcli issue co
        ytcli issue links:*, ytcli issue remotelinks:*,
        ytcli queue list, ytcli queue get:*, ytcli queue fields:*,
        ytcli queue versions:*, ytcli queue tags:*, ytcli queue automation:*,
+       ytcli queue access:*,
        ytcli queue local-fields:*,
        ytcli board list, ytcli board get:*, ytcli board sprints:*, ytcli sprint list,
        ytcli field list, ytcli field get:*, ytcli template list:*,

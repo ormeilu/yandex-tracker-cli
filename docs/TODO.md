@@ -72,6 +72,13 @@ Labels split the work by area: `area:issues`, `area:entities`,
   `queue automation` reports macros, autoactions and triggers, and says which
   section it was refused rather than counting it zero. `sprint list` and
   `queue local-fields` close the two listings that had no way in.
+- Milestone 0.7.0 so far: `link types` prints the vocabulary a write takes beside
+  the type ids it is not — a distinction that turned out to be encoded backwards
+  in the parser, the fixture and a unit test at once. `queue access` answers who
+  may do what in a queue, in two tables because Tracker gives two answers: the
+  rule, roles and all, and the people that rule resolves to. Only the second can
+  say whether the caller is one of them, and it says `?` rather than `no` when
+  the token could not name its own user.
 - `ytcli issue list` as an alias of `issue find`: every other group lists with
   that word, and the group used most was the one exception.
 - Profile routing: a bare key goes to the profile that can see its queue, and

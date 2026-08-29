@@ -79,6 +79,9 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
                                         issues with nobody touching them. Triggers need
                                         queue-owner rights; a refused section says so
                                         instead of counting zero
+  ytcli queue access PROJ               who may create, read, write and grant here,
+                                        and whether you are one of them. Roles resolve
+                                        per issue, so only the people list can say
   ytcli queue tags PROJ                 tags are per queue, not organisation-wide
   ytcli queue create -k OPS -n Operations --like PROJ --yes
                                         copies issue types, workflows and defaults from

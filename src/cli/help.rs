@@ -1016,6 +1016,37 @@ is not there, or the token cannot see it — and is reported as the error it is.
 Read-only. Creating any of the three is an admin interface configured once, not
 a command line.";
 
+pub const QUEUE_ACCESS: &str = "\
+Show who may do what in this queue.
+
+```
+ytcli queue access PROJ
+```
+
+The answer to the question behind every 403 this tool can return: not whether
+you were refused, but who is allowed and whether you are one of them.
+
+Two sections, because Tracker answers with two different things. **permissions**
+is the rule as somebody configured it — named people, and *roles* like
+`queue-lead`, `assignee`, `author`, `follower`. **access** is the list of people
+that rule comes out as, which is why only it carries a `YOU` column: a role is
+decided per issue, so `assignee` is a set nobody can resolve without saying
+which issue.
+
+`YOU` is `yes`, `no`, or `?` when the user behind the token could not be read.
+`?` is not `no`.
+
+Reading queue rights is itself a right, and a queue that refuses says so instead
+of printing an empty table — \"nobody holds this\" and \"you may not see who
+does\" are different answers. Both sections refused is reported as the error it
+is.
+
+User lists are counted first and then truncated to the width of the terminal;
+`--format json` carries every name.
+
+Read-only. Granting a right is an administrative decision with no undo, and a
+command line is the wrong place to make one.";
+
 pub const QUEUE_VERSIONS: &str = "\
 List the versions a queue defines.
 

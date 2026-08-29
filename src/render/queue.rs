@@ -2,7 +2,10 @@
 
 use std::fmt::Write as _;
 
-use crate::api::{Automation, Component, FieldSpec, Queue, QueueField, QueueSettings, Template};
+use crate::api::{
+    Automation, Component, FieldSpec, Holder, Permission, Queue, QueueAccess, QueueField,
+    QueueSettings, Template, Unreadable,
+};
 use crate::render::Context;
 use crate::render::style::Palette;
 use crate::render::table::{Column, render, tally};
@@ -410,7 +413,13 @@ fn macros_section(queue: &str, automation: &Automation, ctx: &Context) -> String
         &rows,
         ctx,
     ));
-    out.push_str(&closing(queue, "macros", rows.len(), automation, ctx));
+    out.push_str(&closing(
+        queue,
+        "macros",
+        rows.len(),
+        &automation.unreadable,
+        ctx,
+    ));
     out
 }
 
@@ -444,7 +453,13 @@ fn autoactions_section(queue: &str, automation: &Automation, ctx: &Context) -> S
         &rows,
         ctx,
     ));
-    out.push_str(&closing(queue, "autoactions", rows.len(), automation, ctx));
+    out.push_str(&closing(
+        queue,
+        "autoactions",
+        rows.len(),
+        &automation.unreadable,
+        ctx,
+    ));
     out
 }
 
@@ -476,7 +491,13 @@ fn triggers_section(queue: &str, automation: &Automation, ctx: &Context) -> Stri
         &rows,
         ctx,
     ));
-    out.push_str(&closing(queue, "triggers", rows.len(), automation, ctx));
+    out.push_str(&closing(
+        queue,
+        "triggers",
+        rows.len(),
+        &automation.unreadable,
+        ctx,
+    ));
     out
 }
 
@@ -489,14 +510,10 @@ fn closing(
     queue: &str,
     section: &str,
     count: usize,
-    automation: &Automation,
+    unreadable: &[Unreadable],
     ctx: &Context,
 ) -> String {
-    match automation
-        .unreadable
-        .iter()
-        .find(|refusal| refusal.section == section)
-    {
+    match unreadable.iter().find(|refusal| refusal.section == section) {
         Some(refusal) => {
             let paint = ctx.painter();
             format!(
@@ -509,6 +526,156 @@ fn closing(
         }
         None => counted(queue, count, ctx),
     }
+}
+
+/// Who may do what in a queue.
+///
+/// Two tables because the two answers are not the same one twice. The first is
+/// the rule, roles and all; the second is the people it comes out as, and only
+/// the second can say whether the caller is among them.
+#[must_use]
+pub fn access(queue: &str, access: &QueueAccess, ctx: &Context) -> String {
+    let mut out = String::with_capacity(320);
+    out.push_str(&permissions_section(queue, access, ctx));
+    out.push('\n');
+    out.push_str(&access_section(queue, access, ctx));
+    out
+}
+
+/// The rule as somebody configured it.
+fn permissions_section(queue: &str, access: &QueueAccess, ctx: &Context) -> String {
+    let rows: Vec<Vec<String>> = access
+        .permissions
+        .iter()
+        .map(|entry| {
+            vec![
+                entry.operation.clone(),
+                granted_to(entry),
+                holders(&entry.users),
+            ]
+        })
+        .collect();
+
+    let mut out = heading("permissions", ctx);
+    out.push_str(&render(
+        &[
+            Column::whole("OPERATION", 14, Palette::key()),
+            Column::new("ROLES", 34, anstyle::Style::new()),
+            Column::new("USERS", 28, anstyle::Style::new()),
+        ],
+        &rows,
+        ctx,
+    ));
+    out.push_str(&closing(
+        queue,
+        "permissions",
+        rows.len(),
+        &access.unreadable,
+        ctx,
+    ));
+
+    // Without this the table looks like the whole answer, and a caller who is
+    // in none of its user lists concludes they are locked out — while being the
+    // assignee of every issue they care about.
+    if rows.iter().any(|row| row[1] != "-") {
+        let paint = ctx.painter();
+        let _ = writeln!(
+            out,
+            "{}",
+            paint.paint(
+                "a role is decided per issue: `assignee` is whoever that issue names",
+                Palette::label()
+            )
+        );
+    }
+    out
+}
+
+/// The people the rule comes out as.
+fn access_section(queue: &str, access: &QueueAccess, ctx: &Context) -> String {
+    let rows: Vec<Vec<String>> = access
+        .access
+        .iter()
+        .map(|entry| {
+            vec![
+                entry.operation.clone(),
+                holds(entry, access.you.as_deref()).to_owned(),
+                holders(&entry.users),
+            ]
+        })
+        .collect();
+
+    let mut out = heading("access", ctx);
+    out.push_str(&render(
+        &[
+            Column::whole("OPERATION", 14, Palette::key()),
+            Column::by_value("YOU", 5, |held| match held {
+                "yes" => Palette::ok(),
+                "no" => Palette::warn(),
+                _ => Palette::label(),
+            }),
+            Column::new("USERS", 44, anstyle::Style::new()),
+        ],
+        &rows,
+        ctx,
+    ));
+    out.push_str(&closing(
+        queue,
+        "access",
+        rows.len(),
+        &access.unreadable,
+        ctx,
+    ));
+    out
+}
+
+/// Whether the token's own user holds an operation.
+///
+/// `?` is not `no`. It means the user behind the token could not be read, and
+/// answering "no" to a question that was never asked is the failure this whole
+/// command is against.
+fn holds(permission: &Permission, you: Option<&str>) -> &'static str {
+    match you {
+        Some(id) if permission.users.iter().any(|holder| holder.id == id) => "yes",
+        Some(_) => "no",
+        None => "?",
+    }
+}
+
+/// Roles, and groups where a queue names any.
+///
+/// Groups share the column because they are the same kind of answer — a right
+/// held by something other than a named person — and no queue reachable from
+/// here has one to widen a column for.
+fn granted_to(permission: &Permission) -> String {
+    // Groups lead because the column truncates and the roles are the
+    // predictable half: `queue-lead, assignee, author` says less about a
+    // particular queue than one named group does.
+    let mut names: Vec<String> = permission
+        .groups
+        .iter()
+        .map(|group| format!("group:{}", group.display))
+        .collect();
+    names.extend(permission.roles.iter().map(|role| role.id.clone()));
+
+    if names.is_empty() {
+        "-".to_owned()
+    } else {
+        names.join(", ")
+    }
+}
+
+/// A count, then as many names as fit.
+///
+/// The count leads because the column truncates: a cell cut off mid-name would
+/// otherwise hide how many more there were, and `--format json` is the way to
+/// the rest.
+fn holders(list: &[Holder]) -> String {
+    if list.is_empty() {
+        return "-".to_owned();
+    }
+    let names: Vec<&str> = list.iter().map(|holder| holder.display.as_str()).collect();
+    format!("{}: {}", list.len(), names.join(", "))
 }
 
 fn active(flag: bool) -> &'static str {

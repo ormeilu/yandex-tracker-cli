@@ -487,3 +487,167 @@ async fn local_fields_say_what_they_accept() {
     assert!(stdout.contains("ytcli user list"), "{stdout}");
     assert!(stdout.ends_with("shown 2 of 2 for PROJ\n"), "{stdout}");
 }
+
+/// Two endpoints, two different answers. `permissions` names roles, `access`
+/// names people, and collapsing them into one table would lose the distinction
+/// the command exists to show.
+#[tokio::test]
+async fn access_separates_the_rule_from_the_people_it_comes_out_as() {
+    let harness = Harness::new().await;
+    for (route, body) in [
+        ("/v3/queues/PROJ/permissions", "queue_permissions.json"),
+        ("/v3/queues/PROJ/access", "queue_access.json"),
+    ] {
+        Mock::given(method("GET"))
+            .and(path(route))
+            .respond_with(ResponseTemplate::new(200).set_body_json(fixture(body)))
+            .mount(&harness.server)
+            .await;
+    }
+    Mock::given(method("GET"))
+        .and(path("/v3/myself"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("user.json")))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness.run(&["queue", "access", "PROJ"]).assert().success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    // Roles belong to the rule; only the resolved side lists writeNoAssign.
+    assert!(stdout.contains("queue-lead"), "{stdout}");
+    assert!(stdout.contains("writeNoAssign"), "{stdout}");
+    // A group holds a right the way a role does, so it shares that column.
+    assert!(stdout.contains("group:Storage team"), "{stdout}");
+    // Counted before truncated: a cell cut off mid-name must not hide how many.
+    assert!(stdout.contains("4: Ada Lovelace"), "{stdout}");
+    assert!(stdout.contains("shown 4 of 4 for PROJ"), "{stdout}");
+    assert!(stdout.contains("shown 5 of 5 for PROJ"), "{stdout}");
+    // Without this line, a caller in none of the user lists reads the table as
+    // "locked out" while being the assignee of every issue they care about.
+    assert!(stdout.contains("decided per issue"), "{stdout}");
+}
+
+/// The question behind every 403: not whether you were refused, but whether you
+/// are one of the people who would not be.
+#[tokio::test]
+async fn access_says_which_operations_are_yours() {
+    let harness = Harness::new().await;
+    for (route, body) in [
+        ("/v3/queues/PROJ/permissions", "queue_permissions.json"),
+        ("/v3/queues/PROJ/access", "queue_access.json"),
+    ] {
+        Mock::given(method("GET"))
+            .and(path(route))
+            .respond_with(ResponseTemplate::new(200).set_body_json(fixture(body)))
+            .mount(&harness.server)
+            .await;
+    }
+    // Alan Turing: in create, read and writeNoAssign, and in neither write nor
+    // grant.
+    Mock::given(method("GET"))
+        .and(path("/v3/myself"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "uid": 1_120_000_000_000_003i64,
+            "login": "aturing",
+            "display": "Alan Turing"
+        })))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness.run(&["queue", "access", "PROJ"]).assert().success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    // Only the second table has a `YOU` column, and both tables name the same
+    // operations — so the first `grant` line is the wrong one to read.
+    let resolved = stdout
+        .split("\naccess\n")
+        .nth(1)
+        .expect("an access section");
+    let yours = |operation: &str| {
+        resolved
+            .lines()
+            .find(|line| line.starts_with(operation))
+            .unwrap_or_default()
+            .to_owned()
+    };
+    assert!(yours("writeNoAssign").contains("yes"), "{stdout}");
+    assert!(yours("grant").contains("no"), "{stdout}");
+}
+
+/// `?` is not `no`. A caller whose own user could not be read has not been told
+/// they are excluded, and saying so would be the mistake this command is against.
+#[tokio::test]
+async fn access_admits_when_it_does_not_know_who_you_are() {
+    let harness = Harness::new().await;
+    for (route, body) in [
+        ("/v3/queues/PROJ/permissions", "queue_permissions.json"),
+        ("/v3/queues/PROJ/access", "queue_access.json"),
+    ] {
+        Mock::given(method("GET"))
+            .and(path(route))
+            .respond_with(ResponseTemplate::new(200).set_body_json(fixture(body)))
+            .mount(&harness.server)
+            .await;
+    }
+    Mock::given(method("GET"))
+        .and(path("/v3/myself"))
+        .respond_with(ResponseTemplate::new(403).set_body_json(serde_json::json!({"errors": {}})))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness.run(&["queue", "access", "PROJ"]).assert().success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert!(stdout.contains('?'), "{stdout}");
+    assert!(!stdout.contains("no"), "{stdout}");
+}
+
+/// Reading queue rights is itself a right. One section refused leaves the other
+/// standing, and says why rather than tallying zero.
+#[tokio::test]
+async fn a_refused_access_section_says_so_instead_of_counting_zero() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v3/queues/PROJ/permissions"))
+        .respond_with(ResponseTemplate::new(403).set_body_json(serde_json::json!({"errors": {}})))
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v3/queues/PROJ/access"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("queue_access.json")))
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v3/myself"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("user.json")))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness.run(&["queue", "access", "PROJ"]).assert().success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert!(
+        stdout.contains("those who may see queue rights"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("shown 5 of 5 for PROJ"), "{stdout}");
+    assert!(!stdout.contains("shown 0 of 0"), "{stdout}");
+}
+
+/// Both refused is not a partial answer, and a queue that is not there is
+/// reported as the queue rather than as the first endpoint tried.
+#[tokio::test]
+async fn a_queue_with_no_readable_rights_is_an_error() {
+    let harness = Harness::new().await;
+    for route in ["/v3/queues/NOPE/permissions", "/v3/queues/NOPE/access"] {
+        Mock::given(method("GET"))
+            .and(path(route))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&harness.server)
+            .await;
+    }
+
+    let output = harness.run(&["queue", "access", "NOPE"]).assert().code(4);
+    let stderr = String::from_utf8(output.get_output().stderr.clone()).expect("utf-8");
+    assert!(stderr.contains("queue NOPE not found"), "{stderr}");
+}
