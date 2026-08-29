@@ -101,6 +101,7 @@ ytcli queue get PROJ                 # the type and priority a new issue starts 
 ytcli queue versions PROJ            # what an issue's fixVersions points at
 ytcli board list                     # id, name, column count
 ytcli board sprints 6                # a kanban board is refused, in Tracker's words
+ytcli issue timers                   # timers running here; no request is made
 ytcli sprint list                    # every sprint, with the board each belongs to
 ytcli sprint list --planning         # the one to plan into: nearest draft, else running
 ytcli sprint get 21                  # its dates, and how many of its issues are resolved

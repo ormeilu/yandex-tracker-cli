@@ -81,6 +81,22 @@ pub fn to_iso8601(input: &str) -> Result<String, String> {
     }
 }
 
+/// Whole minutes as the ISO 8601 duration Tracker takes.
+///
+/// Rounded to the minute, because that is the resolution a worklog is read at,
+/// and never to zero: a timer that ran for forty seconds recorded nothing at
+/// all would be a surprise, and Tracker has no use for `PT0M`.
+#[must_use]
+pub fn from_minutes(minutes: i64) -> String {
+    let minutes = minutes.max(1);
+    let (hours, rest) = (minutes / 60, minutes % 60);
+    match (hours, rest) {
+        (0, minutes) => format!("PT{minutes}M"),
+        (hours, 0) => format!("PT{hours}H"),
+        (hours, minutes) => format!("PT{hours}H{minutes}M"),
+    }
+}
+
 /// Render an ISO 8601 duration the way it was typed: `PT1H30M` becomes `1h 30m`.
 ///
 /// Anything unrecognised is returned as it came. A duration we cannot read is
@@ -158,5 +174,24 @@ mod tests {
     fn something_unreadable_is_passed_through_not_hidden() {
         assert_eq!(human("nonsense"), "nonsense");
         assert_eq!(human("P"), "P");
+    }
+}
+
+#[cfg(test)]
+mod minutes {
+    use super::*;
+
+    #[test]
+    fn minutes_become_hours_and_minutes() {
+        assert_eq!(from_minutes(90), "PT1H30M");
+        assert_eq!(from_minutes(45), "PT45M");
+        assert_eq!(from_minutes(120), "PT2H");
+    }
+
+    /// A short timer records something rather than nothing.
+    #[test]
+    fn nothing_at_all_is_still_a_minute() {
+        assert_eq!(from_minutes(0), "PT1M");
+        assert_eq!(from_minutes(-5), "PT1M");
     }
 }

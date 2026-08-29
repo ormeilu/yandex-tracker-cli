@@ -12,6 +12,7 @@
 pub mod cache;
 pub mod paths;
 pub mod store;
+pub mod timers;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};

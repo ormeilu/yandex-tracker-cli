@@ -240,6 +240,11 @@ const UNRUNNABLE: &[(&str, &str)] = &[
     ("issue worklogs", "no recorded worklog fixture yet"),
     ("issue checklist", "no recorded checklist fixture yet"),
     ("issue worklog", "a write"),
+    ("issue timer", "a write, and it keeps state between runs"),
+    (
+        "issue timers",
+        "reports whatever the machine running the docs happens to be timing",
+    ),
     ("issue check", "a write"),
     ("issue link", "a write"),
     ("portfolio place", "a write"),

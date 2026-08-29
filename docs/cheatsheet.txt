@@ -86,6 +86,12 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
                                         names every key before any of them change
   ytcli issue worklogs PROJ-1           time logged, with the total
   ytcli issue checklist PROJ-1          lines, boxes and ids
+  ytcli issue timers                    timers running on this machine; reads no
+                                        request at all — Tracker has no notion of
+                                        "started working"
+  ytcli issue timer start PROJ-1        also: stop [-m text], cancel. Only `stop`
+                                        reaches Tracker, and the timer is dropped
+                                        only once the worklog is accepted
   ytcli issue worklog add PROJ-1 1h30m -m "text"     also: worklog delete KEY ID
   ytcli issue check add PROJ-1 "text"   also: check tick|untick|delete KEY ID
   ytcli issue link add PROJ-1 relates PROJ-7         also: link delete KEY LINKID

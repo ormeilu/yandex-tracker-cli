@@ -250,14 +250,34 @@ impl Session {
     ///    them. Without a default queue it is refused: there is nothing to
     ///    complete it with, and a number is not a key.
     pub async fn client_for(&self, target: &str) -> Result<(crate::api::Client, String), ExitCode> {
+        let (client, key, _) = self.routed(target).await?;
+        Ok((client, key))
+    }
+
+    /// [`Self::client_for`], and the name of the profile that answered.
+    ///
+    /// The name is what a person recognises; the organisation the client
+    /// carries is what two profiles onto the same Tracker have in common. A
+    /// command that has to remember something about "where this went" wants
+    /// both.
+    pub async fn routed(
+        &self,
+        target: &str,
+    ) -> Result<(crate::api::Client, String, String), ExitCode> {
         let target = &self.expanded(target)?;
+        let active = || {
+            self.resolved
+                .as_ref()
+                .map_or_else(|| "default".to_owned(), |resolved| resolved.name.clone())
+        };
         let Some((profile, key)) = target.split_once('/') else {
             if let Some(owner) = self.owner_of(target).await? {
                 let client = self.client_with(&owner)?;
                 self.announce(&owner);
-                return Ok((client, target.to_owned()));
+                let name = owner.name.clone();
+                return Ok((client, target.to_owned(), name));
             }
-            return Ok((self.client()?, target.to_owned()));
+            return Ok((self.client()?, target.to_owned(), active()));
         };
 
         // A slash with nothing useful around it is a typo, not a qualifier.
@@ -276,7 +296,7 @@ impl Session {
 
         let client = self.client_with(&resolved)?;
         self.announce(&resolved);
-        Ok((client, key.to_owned()))
+        Ok((client, key.to_owned(), resolved.name))
     }
 
     /// The profile that can see the queue this key belongs to.

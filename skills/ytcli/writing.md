@@ -57,6 +57,7 @@ ytcli issue transition PROJ-1 close -r fixed       # closing usually needs one
 ytcli issue transition PROJ-1 closed              # by status: the id is found
 ytcli issue transition PROJ-1 PROJ-2 --to close -r fixed --yes   # one request
 ytcli issue worklog add PROJ-1 1h30m -m "pairing"
+ytcli issue timer start PROJ-1             # stop|cancel; only stop writes
 ytcli issue worklog edit PROJ-1 ID -d 2h   # pass whichever of -d/-m is wrong
 ytcli issue check add PROJ-1 "write the migration"   # tick|untick|delete by id
 ytcli issue link add PROJ-1 relates PROJ-7

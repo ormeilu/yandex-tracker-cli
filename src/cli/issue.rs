@@ -119,6 +119,12 @@ pub enum IssueCommand {
     /// Show the checklist of an issue.
     #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_CHECKLIST))]
     Checklist { key: String },
+    /// Show the timers running on this machine. Reads nothing from Tracker.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_TIMERS))]
+    Timers,
+    /// Start, stop or drop a timer. `stop` records a worklog.
+    #[command(subcommand, long_about = crate::cli::help::md(crate::cli::help::ISSUE_TIMER))]
+    Timer(TimerCommand),
     /// Record or remove time spent. Every verb here writes.
     #[command(subcommand, long_about = crate::cli::help::md(crate::cli::help::ISSUE_WORKLOG))]
     Worklog(WorklogCommand),
@@ -168,6 +174,31 @@ pub enum IssueCommand {
         #[arg(long)]
         no_wait: bool,
     },
+}
+
+/// A timer, which is local until it stops.
+///
+/// Tracker has no "started working" — only "worked this long" — so the start is
+/// kept on this machine and turned into a worklog on `stop`. The whole group
+/// writes, even the two verbs that only touch a local file: a host allowlists by
+/// prefix, and a group holding both a read and a write cannot be allowed
+/// without allowing the write. Reading is `issue timers`.
+#[derive(Debug, Subcommand)]
+pub enum TimerCommand {
+    /// Start timing an issue.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::TIMER_START))]
+    Start { key: String },
+    /// Stop timing it, and record the elapsed time as a worklog.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::TIMER_STOP))]
+    Stop {
+        key: String,
+        /// What the time went on.
+        #[arg(long, short = 'm')]
+        comment: Option<String>,
+    },
+    /// Forget a running timer without recording anything.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::TIMER_CANCEL))]
+    Cancel { key: String },
 }
 
 /// Writing to a worklog.
@@ -396,6 +427,8 @@ pub async fn run(command: &IssueCommand, session: &Session) -> ExitCode {
         }
         IssueCommand::Worklogs { key } => worklogs(key, session).await,
         IssueCommand::Checklist { key } => checklist(key, session).await,
+        IssueCommand::Timers => timers(session),
+        IssueCommand::Timer(command) => timer(command, session).await,
         IssueCommand::Worklog(command) => worklog_write(command, session).await,
         IssueCommand::Check(command) => check_write(command, session).await,
         IssueCommand::Link(command) => link_write(command, session).await,
@@ -1359,6 +1392,186 @@ fn finish(rendered: Result<String, crate::render::RenderError>) -> ExitCode {
             ExitCode::Success
         }
         Err(error) => report(&error, ExitCode::Failure),
+    }
+}
+
+/// Show what is being timed on this machine.
+///
+/// A read, and a read of a local file: no request is made, which is why it is
+/// spelled `timers` and not `timer status`.
+fn timers(session: &Session) -> ExitCode {
+    let store =
+        crate::config::timers::Timers::load(&crate::config::timers::path_for(&session.config_file));
+    let running = store.all();
+    let now = jiff::Timestamp::now();
+
+    let rendered = match session.render.format {
+        Format::Text => Ok(text::timers(&running, now, &session.render)),
+        Format::JsonRaw => machine(&running, Format::Json),
+        other => machine(&running, other),
+    };
+    finish(rendered)
+}
+
+async fn timer(command: &TimerCommand, session: &Session) -> ExitCode {
+    match command {
+        TimerCommand::Start { key } => timer_start(key, session).await,
+        TimerCommand::Stop { key, comment } => timer_stop(key, comment.as_deref(), session).await,
+        TimerCommand::Cancel { key } => timer_cancel(key, session).await,
+    }
+}
+
+/// Where the timers are kept, and what is in them.
+///
+/// The key is routed first even though nothing is sent: `42` has to become
+/// `PROJ-42` and `work/PROJ-1` has to name its organisation, or the timer is
+/// filed under something the caller will never say again.
+async fn timer_store(
+    target: &str,
+    session: &Session,
+) -> Result<
+    (
+        crate::api::Client,
+        String,
+        String,
+        crate::config::timers::Timers,
+        std::path::PathBuf,
+    ),
+    ExitCode,
+> {
+    let (client, key, profile) = session.routed(target).await?;
+    let path = crate::config::timers::path_for(&session.config_file);
+    let store = crate::config::timers::Timers::load(&path);
+    Ok((client, key, profile, store, path))
+}
+
+async fn timer_start(target: &str, session: &Session) -> ExitCode {
+    let (client, key, profile, mut store, path) = match timer_store(target, session).await {
+        Ok(parts) => parts,
+        Err(code) => return code,
+    };
+
+    let now = jiff::Timestamp::now();
+    if let Err(running) = store.start(client.org(), &profile, &key, now) {
+        return report(
+            &format!(
+                "{key} has been timed since {} — stop it, or cancel it",
+                running.started
+            ),
+            ExitCode::ConfirmationRequired,
+        );
+    }
+    if let Err(error) = store.save(&path) {
+        return report(
+            &format!("could not record the timer: {error}"),
+            ExitCode::Failure,
+        );
+    }
+
+    emit(&format!("{key} timer started\n"));
+    ExitCode::Success
+}
+
+async fn timer_stop(target: &str, comment: Option<&str>, session: &Session) -> ExitCode {
+    let (client, key, _, mut store, path) = match timer_store(target, session).await {
+        Ok(parts) => parts,
+        Err(code) => return code,
+    };
+
+    let Some(entry) = store.get(client.org(), &key).cloned() else {
+        return report(&no_timer(&store, client.org(), &key), ExitCode::NotFound);
+    };
+
+    let elapsed = jiff::Timestamp::now()
+        .since(entry.started)
+        .unwrap_or_default();
+    let iso = crate::api::duration::from_minutes(elapsed.get_minutes());
+
+    let mut body = serde_json::json!({ "duration": iso, "start": entry.started.to_string() });
+    if let Some(comment) = comment {
+        body["comment"] = serde_json::json!(comment);
+    }
+    let targets = [key.clone()];
+    let intent = Intent {
+        action: &format!("record {} on {key}", crate::api::duration::human(&iso)),
+        targets: &targets,
+        body: &body,
+        always_confirm: false,
+    };
+    if let Gate::Stop(code) = check(&intent, session) {
+        return code;
+    }
+
+    // The timer is forgotten only once Tracker has the worklog. The other order
+    // loses the time it was keeping, which is the one thing this must not do.
+    match client.add_worklog(&key, &body).await {
+        Ok(entry) => {
+            store.take(client.org(), &key);
+            if let Err(error) = store.save(&path) {
+                let mut err = anstream::stderr();
+                let _ = writeln!(
+                    err,
+                    "the worklog was recorded; the timer file was not: {error}"
+                );
+            }
+            emit(&format!(
+                "{key} worklog {} {}\n",
+                entry.id,
+                crate::api::duration::human(&entry.duration)
+            ));
+            ExitCode::Success
+        }
+        Err(error) => {
+            let code = error.exit_code();
+            let outcome = report(&error, code);
+            let mut err = anstream::stderr();
+            let _ = writeln!(err, "the timer is still running; nothing was lost");
+            outcome
+        }
+    }
+}
+
+async fn timer_cancel(target: &str, session: &Session) -> ExitCode {
+    let (client, key, _, mut store, path) = match timer_store(target, session).await {
+        Ok(parts) => parts,
+        Err(code) => return code,
+    };
+
+    let Some(entry) = store.take(client.org(), &key) else {
+        return report(&no_timer(&store, client.org(), &key), ExitCode::NotFound);
+    };
+    if let Err(error) = store.save(&path) {
+        return report(
+            &format!("could not update the timers: {error}"),
+            ExitCode::Failure,
+        );
+    }
+
+    // How long it had been running, because dropping a number silently is how
+    // somebody discovers afterwards that they lost an afternoon.
+    let elapsed = jiff::Timestamp::now()
+        .since(entry.started)
+        .unwrap_or_default();
+    let iso = crate::api::duration::from_minutes(elapsed.get_minutes());
+    emit(&format!(
+        "{key} timer cancelled — {} not recorded\n",
+        crate::api::duration::human(&iso)
+    ));
+    ExitCode::Success
+}
+
+/// Why there is no timer to stop, in the words that help.
+///
+/// "No timer running" is true and useless when it is running in the other
+/// organisation, which is exactly the case somebody hits after switching
+/// profiles.
+fn no_timer(store: &crate::config::timers::Timers, org: &str, key: &str) -> String {
+    match store.elsewhere(org, key) {
+        Some(entry) => format!(
+            "no timer for {key} here; one is running through profile {} — stop it there",
+            entry.profile
+        ),
+        None => format!("no timer running for {key}"),
     }
 }
 

@@ -9,7 +9,7 @@ That property is what makes a static allowlist worth having:
 
 ```
 allow: ytcli issue get:*, ytcli issue find:*, ytcli issue list:*, ytcli issue count:*,
-       ytcli issue worklogs:*, ytcli issue checklist:*, ytcli issue changelog:*,
+       ytcli issue worklogs:*, ytcli issue checklist:*, ytcli issue timers:*, ytcli issue changelog:*,
        ytcli issue links:*, ytcli issue remotelinks:*,
        ytcli queue list, ytcli queue get:*, ytcli queue fields:*,
        ytcli queue versions:*, ytcli queue tags:*, ytcli queue automation:*,
@@ -23,7 +23,7 @@ allow: ytcli issue get:*, ytcli issue find:*, ytcli issue list:*, ytcli issue co
        ytcli portfolio contents:*, ytcli auth status
 ask:   ytcli issue create:*, ytcli issue update:*, ytcli issue comment:*,
        ytcli issue transition:*, ytcli issue move:*, ytcli issue worklog:*,
-       ytcli issue check:*, ytcli issue link:*, ytcli queue create:*, ytcli project place:*,
+       ytcli issue check:*, ytcli issue timer:*, ytcli issue link:*, ytcli queue create:*, ytcli project place:*,
        ytcli attachment upload:*, ytcli attachment delete:*
 ```
 

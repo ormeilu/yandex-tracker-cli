@@ -11,7 +11,7 @@ use crate::api::models::{
     Change, ChecklistItem, Comment, Issue, Link, Page, RemoteLink, User, Worklog,
 };
 use crate::render::style::Palette;
-use crate::render::table::Column;
+use crate::render::table::{Column, render as table, tally};
 use crate::render::{Context, untrusted};
 
 fn who(user: Option<&User>) -> &str {
@@ -637,6 +637,43 @@ pub(crate) fn quoted_block(
             label(&format!("(+{withheld} more lines: --full)"))
         );
     }
+}
+
+/// The timers running on this machine.
+///
+/// Elapsed rather than started is the column people read, so it is the one that
+/// is painted; the start is kept beside it because "since when" is the question
+/// a forgotten timer raises. Oldest first, from the store.
+#[must_use]
+pub fn timers(
+    entries: &[&crate::config::timers::Entry],
+    now: jiff::Timestamp,
+    ctx: &Context,
+) -> String {
+    let columns = [
+        Column::whole("KEY", 14, Palette::key()),
+        Column::new("PROFILE", 16, Palette::label()),
+        Column::whole("ELAPSED", 10, Palette::warn()),
+        Column::whole("SINCE", 22, anstyle::Style::new()),
+    ];
+    let rows: Vec<Vec<String>> = entries
+        .iter()
+        .map(|entry| {
+            let elapsed = now.since(entry.started).unwrap_or_default();
+            vec![
+                entry.key.clone(),
+                entry.profile.clone(),
+                crate::api::duration::human(&crate::api::duration::from_minutes(
+                    elapsed.get_minutes(),
+                )),
+                entry.started.to_string(),
+            ]
+        })
+        .collect();
+
+    let mut out = table(&columns, &rows, ctx);
+    out.push_str(&tally(entries.len(), Some(entries.len() as u64), None, ctx));
+    out
 }
 
 /// Render the transitions available from the current status.

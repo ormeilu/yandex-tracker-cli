@@ -341,3 +341,146 @@ async fn a_worklog_edit_that_changes_nothing_is_refused() {
 
     assert!(harness.server.received_requests().await.unwrap().is_empty());
 }
+
+/// The whole mechanism: a start kept locally, turned into a worklog on stop.
+///
+/// `start` and `cancel` send nothing at all, which is why they can be answered
+/// without a Tracker fixture.
+#[tokio::test]
+async fn a_timer_starts_locally_and_stops_as_a_worklog() {
+    let harness = Harness::new().await;
+    Mock::given(method("POST"))
+        .and(path("/v3/issues/PROJ-1/worklog"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({
+            "id": 7,
+            "duration": "PT1M",
+            "createdBy": {"id": "1", "login": "ilubenets"},
+            "start": "2026-08-29T09:00:00.000+0000"
+        })))
+        .expect(1)
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&["issue", "timer", "start", "PROJ-1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("timer started"));
+
+    // Nothing was sent to start it.
+    assert!(
+        harness
+            .server
+            .received_requests()
+            .await
+            .expect("recorded")
+            .is_empty()
+    );
+
+    harness
+        .run(&["issue", "timers"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("PROJ-1"))
+        .stdout(predicate::str::contains("shown 1 of 1"));
+
+    harness
+        .run(&["issue", "timer", "stop", "PROJ-1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("PROJ-1 worklog 7"));
+
+    // Stopped means gone: the same timer must not be recorded twice.
+    harness
+        .run(&["issue", "timers"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("shown 0 of 0"));
+}
+
+/// Starting over a running timer would throw away the time it had collected,
+/// which is the one thing the command exists to keep.
+#[tokio::test]
+async fn starting_a_timer_twice_is_refused() {
+    let harness = Harness::new().await;
+
+    harness
+        .run(&["issue", "timer", "start", "PROJ-1"])
+        .assert()
+        .success();
+    harness
+        .run(&["issue", "timer", "start", "PROJ-1"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("has been timed since"));
+}
+
+/// Cancelling says how long it had been running: dropping a number in silence
+/// is how somebody finds out afterwards that they lost an afternoon.
+#[tokio::test]
+async fn cancelling_records_nothing_and_says_what_was_dropped() {
+    let harness = Harness::new().await;
+
+    harness
+        .run(&["issue", "timer", "start", "PROJ-1"])
+        .assert()
+        .success();
+    harness
+        .run(&["issue", "timer", "cancel", "PROJ-1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("not recorded"));
+
+    assert!(
+        harness
+            .server
+            .received_requests()
+            .await
+            .expect("recorded")
+            .is_empty()
+    );
+}
+
+/// A refused worklog must leave the clock running, or the time is lost to an
+/// error the caller could otherwise have retried.
+#[tokio::test]
+async fn a_failed_stop_keeps_the_timer() {
+    let harness = Harness::new().await;
+    Mock::given(method("POST"))
+        .and(path("/v3/issues/PROJ-1/worklog"))
+        .respond_with(ResponseTemplate::new(422).set_body_json(serde_json::json!({
+            "errors": {}, "errorMessages": ["nope"], "statusCode": 422
+        })))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&["issue", "timer", "start", "PROJ-1"])
+        .assert()
+        .success();
+    harness
+        .run(&["issue", "timer", "stop", "PROJ-1"])
+        .assert()
+        .code(5)
+        .stderr(predicate::str::contains("still running"));
+
+    harness
+        .run(&["issue", "timers"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("shown 1 of 1"));
+}
+
+/// Nothing to stop is an answer; "no timer running" while one runs in the other
+/// organisation is a true sentence that sends somebody looking in the wrong
+/// place.
+#[tokio::test]
+async fn stopping_what_was_never_started_says_so() {
+    let harness = Harness::new().await;
+
+    harness
+        .run(&["issue", "timer", "stop", "PROJ-1"])
+        .assert()
+        .code(4)
+        .stderr(predicate::str::contains("no timer running for PROJ-1"));
+}
