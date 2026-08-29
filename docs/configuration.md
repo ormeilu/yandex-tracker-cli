@@ -1,308 +1,121 @@
 # Configuration
 
-## Accounts and profiles are different things
+Everything here is optional except the first login. The tool works with one
+account, one organisation and no config file beyond what `ytcli auth login`
+writes for you.
 
-An **account** holds a credential. A **profile** is an organisation seen through
-an account, plus display defaults.
+## Accounts and profiles
 
-Keeping them apart is not pedantry — the real world is many-to-many in both
-directions. The same login is often an admin in one organisation and an ordinary
-member in another; the same organisation is often reached through two identities,
-one with rights you would rather not hand to an automation.
-
-```toml
-# ~/.config/ytcli/config.toml
-default_profile = "work"
-
-[accounts.admin]
-description = "admin identity"
-
-[accounts.personal]
-description = "everyday login"
-
-[profiles.work]           # organisation, through the admin account
-account = "admin"
-org_id = "12345"
-org_kind = "cloud"
-default_queue = "PROJ"
-
-[profiles.work-readonly]  # same organisation, restricted identity
-account = "personal"
-org_id = "12345"
-org_kind = "cloud"
-
-[profiles.my]             # different organisation, same identity
-account = "personal"
-org_id = "98765"
-org_kind = "yandex360"
-```
-
-`org_kind` picks the header that carries the organisation id: `cloud` sends
-`X-Cloud-Org-Id`, `yandex360` sends `X-Org-Id`. They are not interchangeable —
-the wrong one is a 403 that looks like a permissions problem.
-
-## Credentials
-
-You need two things: an OAuth token and an organisation id.
-
-**Token** — create an application at [oauth.yandex.ru/client/new](https://oauth.yandex.ru/client/new),
-choose "For API access or debugging", grant `tracker:write` (or `tracker:read`
-to stay read-only), then open
-`https://oauth.yandex.ru/authorize?response_type=token&client_id=<ClientID>`
-and sign in. The token comes back in the address bar and looks like `y0__xAbc…`.
-
-Use the same domain for both steps. `oauth.yandex.com` serves the same thing,
-but it is a separate origin with its own cookies, so the browser may be signed
-in there as a different account or none at all — and an application created
-under one account and authorised under another yields a working token for the
-wrong person. `ytcli auth status` naming somebody unexpected is usually this.
-
-**Organisation id** — [tracker.yandex.ru/admin/orgs](https://tracker.yandex.ru/admin/orgs)
-lists every organisation you belong to, with its id and its kind. A Yandex 360
-organisation has a numeric id; a Yandex Cloud organisation has one made of
-letters and digits.
-
-Full reference: [Tracker API access](https://yandex.ru/support/tracker/en/api-ref/access).
-
-`ytcli` prints these steps itself when you need them — on a first login, on a
-rejected token, on an organisation it cannot reach.
+An **account** holds a credential; a **profile** is an organisation seen through
+an account. One login can reach several organisations, and one organisation can
+be reached through several logins — so the two are separate.
 
 ```bash
 ytcli auth login
 ```
 
-In a terminal that walks you through it one question at a time — account, token
-(entered as a password, so it never reaches the scrollback or your shell
-history), organisation, profile name, and a default queue picked from the queues
-the token can actually see.
-
-Anything you already know can be passed as a flag, and only the rest is asked
-for:
+In a terminal it walks you through each step and takes the token as a password,
+so it never lands in your scrollback or shell history. Pass what you already
+know and only the rest is asked for:
 
 ```bash
-ytcli auth login --account admin --org-id 12345 --queue PROJ
+ytcli auth login --account work --org-id 12345 --queue PROJ
 ```
 
-Outside a terminal — CI, a script, a pipe — the flags are all there is: the token
-is read from stdin and a missing `--account` is an error rather than a prompt
-that would hang.
+You need an OAuth token
+([how to get one](https://yandex.ru/support/tracker/en/api-ref/access)) and an
+organisation id
+([tracker.yandex.ru/admin/orgs](https://tracker.yandex.ru/admin/orgs) lists
+yours). `ytcli` prints both sets of steps itself when you need them.
 
-Either way it does the whole path: it prompts for the token (or reads stdin
-when piped), checks it against the API, stores it in the OS keychain — macOS
+It checks the token against the API, stores it in the OS keychain — macOS
 Keychain, Windows Credential Manager, Secret Service on Linux — and writes the
-account and profile into the config file.
+profile for you. The token is never written to a config file, never passed as an
+argument, and no command prints it back.
 
-`--org-kind` is detected when omitted. The two flavours use different headers and
-the wrong one answers 403, which reads like a permissions problem rather than a
-configuration mistake; one extra request at login saves that afternoon.
+`--org-kind` is detected if you do not know it: the two organisation flavours
+use different headers, and the wrong one answers 403 in a way that looks like a
+permissions problem. `--dry-run` checks the token and reports what would be
+written without touching anything.
 
-Add `--dry-run` to check a token and see what would be written without changing
-anything. Add a second organisation for the same login by running it again with
-a different `--org-id` and `--profile`.
+## The config file
 
-Log in once per **account**; every profile naming it is then usable.
+That leaves `~/.config/ytcli/config.toml` looking like this. Hand-edit it
+freely: `auth login` preserves your comments and only touches the keys it owns.
 
-There is no plaintext fallback. If no keychain is available the command fails and
-says so, rather than quietly writing a token to a file that a stray `git add -A`
-would pick up. There is also no command that prints a stored token back: a tool
-whose main consumer is an agent should not offer that as a feature.
+```toml
+default_profile = "work"
 
-For CI, where no keychain exists, `YTCLI_TOKEN` and `YTCLI_ORG_ID` take over.
+[accounts.work]
+description = "admin identity"
 
-**`YTCLI_TOKEN` applies to every account at once.** It is checked before the
-keychain and is not per profile, so with more than one profile configured it
-makes them all the same identity: `auth status` will show two profiles with two
-account names, one person, and the same queues under both. That is right in CI
-and almost never right on a laptop.
+[profiles.work]
+account = "work"
+org_id = "12345"
+org_kind = "cloud"      # cloud -> X-Cloud-Org-Id, yandex360 -> X-Org-Id
+default_queue = "PROJ"
 
-It is easy to have set without meaning to. A shell that sources `.env` on
-entering a directory — the oh-my-zsh `dotenv` plugin does exactly that — will
-export it inside any checkout that keeps a token there for tests, and nowhere
-else, so the same command behaves differently in two directories.
-
-`auth status` answers where everything came from: the config file it read and
-how that path was chosen, the `YTCLI_*` variables in the environment **by name**
-— never by value, since one of them holds a token — and, per profile, whether
-the credential came `(from keychain)` or `(from YTCLI_TOKEN)`. When more than
-one profile is configured and the environment is standing in for the keychain,
-it says so once at the end as well.
-
-### If macOS keeps asking for your password
-
-The Keychain grants "Always Allow" to the *exact binary* it was asked about, and
-identifies it by its code signature. A release downloaded from GitHub is signed
-once and keeps its approval; a binary you build yourself is ad-hoc signed by the
-linker, so its signature changes on every `cargo install` and the Keychain
-correctly treats the new one as an application it has never seen.
-
-This is not a quirk of ytcli. `gh` is ad-hoc signed too, and asks again after a
-`brew upgrade` for the same reason; you just do not rebuild it several times an
-hour.
-
-**Expect one prompt per account, not one per run.** Tokens are stored one
-keychain item per account, and each item is approved separately — two accounts
-means two dialogs the first time a given binary asks. Press *Always Allow* on
-each; both then stay silent for every later run of that same binary.
-
-*Always Allow* is recorded against the binary's code identity, so it survives
-rebuilds only if that identity is stable. A copy installed from crates.io or
-Homebrew is a different identity from one you built and signed yourself: keeping
-both around means approving each of them once.
-
-If you build ytcli yourself, give it a stable signature once:
-
-```sh
-just signing-identity   # once per machine: a self-signed code-signing cert
-just local-install      # builds, installs, and signs with it
+[profiles.work.display]
+limit = 25
+description_lines = 10
+extra_fields = ["sprint", "storyPoints"]
 ```
 
-`just local-install` prints the designated requirement it signed with. One that
-names a certificate — `identifier ytcli and certificate leaf = H"…"` — survives
-rebuilds; one built with a bare `cargo install` names a hash of the bytes
-instead, and every rebuild is then a new application to the Keychain.
+With `default_queue` set, a bare issue number is completed from it: `ytcli issue
+get 42` and `ytcli issue get PROJ-42` name the same issue, which is what
+somebody reading a board and typing a key by hand actually has in front of them.
 
-`ytcli auth status --active-only` reads one profile, and so touches one item,
-which is the cheaper question when you only want to know about the profile in
-play.
+## Per repository
 
-The certificate is trusted for code signing and nothing else, and the private
-key is usable by `codesign` alone. Remove it with
-`security delete-certificate -c ytcli-dev`.
-
-Within a single command the token is read once, however many profiles share the
-account, so a dialog per profile is not something you should see.
-
-## Where the config lives
-
-`~/.config/ytcli/config.toml` on Linux, `~/Library/Application Support/ytcli/`
-on macOS, `%APPDATA%\ytcli\` on Windows. `--config PATH` or `YTCLI_CONFIG`
-override it, which is how a container or a test points at a config without
-rewriting every command line.
-
-## Which profile is active
-
-Highest wins:
-
-1. `--profile NAME`
-2. `YTCLI_PROFILE`
-3. the nearest `.tracker.toml`, walking up from the working directory
-4. `default_profile`
-
-One command changes the stored default, and nothing else does:
-
-```bash
-ytcli auth use work
-```
-
-It reads no token and sends no request — switching profiles is a local edit —
-and it refuses a profile that does not exist, because a default pointing at
-nothing breaks every later command with a worse message.
-
-**Every command says which profile answered**, once, on stderr:
-
-```
-→ profile=work org=1234567 (from config default_profile)
-```
-
-stdout never carries it, so pipes and parsers are unaffected. It is there
-because an answer from the wrong organisation looks exactly like an answer from
-the right one.
-
-## Pinning a repository
-
-`.tracker.toml`, committed, no secrets:
+In a repository, commit a `.tracker.toml`:
 
 ```toml
 profile = "work"
 queue = "PROJ"
 ```
 
-Found the way git finds `.git`. Anyone working in the checkout — including an
-agent that was handed the directory and no other context — reaches the right
-organisation with no setup.
+Anyone — or any agent — working in that checkout now talks to the right
+organisation with no global state to get wrong. To change the stored default
+instead, `ytcli auth use work`: a local edit that reads no token and sends no
+request.
 
-`ytcli auth status` is what to run when something is wrong. It checks **every**
-profile, not just the active one — "it works with my other login" is the usual
-next question — and reports where the active choice came from:
+## Which profile is in play
 
-```
-profile work (from /home/me/src/app/.tracker.toml)  [active]
-  account: admin   org: 12345 (Cloud)   queue: PROJ
-  token: ok   user: ilubenets (Ilya Lubenets)
-  queues: 12   projects: 4   goals: 2   my open issues: 7
-  projects: Storage rework (12), Billing (13), +2 more
-  queues: PROJ, INFRA, DESIGN
-profile my
-  account: personal   org: 98765 (Yandex360)
-  token: missing
-```
+Highest wins:
 
-The counts cost a handful of requests per profile, which is right for a
-diagnostic and wrong for a hot path: `--brief` skips them, `--active-only` skips
-the other profiles. The exit code follows the active profile, or reports failure
-when no profile worked at all.
+1. `--profile NAME`
+2. `YTCLI_PROFILE`
+3. `.tracker.toml` in the working directory or above it
+4. the configured default
 
-When a token is rejected or an organisation is not found, the output includes the
-steps for getting the right value — creating an OAuth application is not
-something anyone guesses.
+Every command says which of these answered, on stderr, so "it used the wrong
+organisation" is a question with an answer rather than a guess. With more than
+one profile configured, a bare `PROJ-1` is routed to the profile that can
+actually see that queue rather than to the default one — two profiles in
+*different* organisations sharing a queue key is refused rather than guessed at,
+and `work/PROJ-1` says which outright.
 
-## When two profiles share a queue key
-
-Queue keys are unique inside an organisation, not across them. Two cases hide
-behind one symptom, and they are not the same:
-
-**Two accounts, one organisation.** `LMS-12` is one issue seen through two
-logins. Either profile fetches it, and nothing is ambiguous.
-
-**Two organisations.** `LMS-12` names two different issues, and no default can
-be right. This is refused rather than guessed at, and the message names both
-candidates:
+## CI and containers
 
 ```bash
-ytcli issue get LMS-12          # refused: which LMS?
-ytcli issue get work/LMS-12     # always accepted
+export YTCLI_TOKEN=…      # checked before the keychain is opened at all
+export YTCLI_ORG_ID=…
 ```
 
-Short of that collision, **the key picks the profile**. A queue only one profile
-can see is fetched through that profile, whatever the default is:
+With `YTCLI_TOKEN` set, no keychain is touched, so a runner with no Secret
+Service and no Keychain is not a problem. Without it there is no plaintext
+fallback: tokens live in the OS keychain or the command fails and says so.
 
-```
-$ ytcli issue get LMS-11
-→ profile=work org=1234567 (from the only profile that sees LMS)
-```
+`YTCLI_TOKEN` is **not per account**. It is checked before the keychain and used
+for whichever profile is in play, so with more than one profile configured it
+makes them all the same identity. `ytcli auth status` marks every profile it
+read that way and warns once at the end — a shell that sources `.env` on
+entering a directory sets it without anyone deciding to.
 
-The alternative was a 403 from the default profile, which reads like a rights
-problem and is a routing mistake.
+## Everything else
 
-Which profile sees which queue is remembered beside the config, from what
-`auth status` and `auth login` already had to fetch. When a queue is unknown and
-more than one profile is configured, each is asked once — one request per
-profile — and the answer is kept. The keychain may ask for each account the
-first time that happens.
-
-`--profile` is exempt from all of it. It is an instruction for one command
-rather than a standing default, so it is obeyed as given, 403 and all.
-
-## Display defaults
-
-Every default is overridable per profile:
-
-```toml
-[profiles.work.display]
-limit = 25              # rows per page
-max = 500               # ceiling for --all
-description_lines = 10  # before the --full hint
-extra_fields = ["sprint", "storyPoints"]
-format = "text"         # when stdout is not a terminal
-images = true           # draw image attachments where the terminal can
-```
-
-`images` is on by default and costs nothing where it cannot be used: without a
-terminal that draws — a pipe, an agent, `--format json` — the attachments are
-not even requested, so `issue get` still makes the two calls it always made.
-`--no-images` turns it off for one command.
-
-`extra_fields` is ordered, and that order is preserved on output. Custom fields
-differ per queue, so the compact view counts them rather than dumping them; these
-are the ones you have decided are worth the space. Find their keys with
-`ytcli queue fields PROJ`.
+- `YTCLI_CONFIG` points at another config file; `--config PATH` does it for one
+  command.
+- `ytcli auth list` shows the accounts and profiles and whether a token is
+  stored for each. There is no command that prints a stored token.
+- `ytcli auth logout --account NAME` forgets one.
