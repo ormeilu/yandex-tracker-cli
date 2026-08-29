@@ -141,7 +141,7 @@ jobs:
           else
             tar czf "$name.tar.gz" "$name"
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: binary-${{ matrix.target }}
           path: |
@@ -166,7 +166,7 @@ jobs:
           target: ${{ matrix.target }}
           args: --release --locked --out dist
           manylinux: auto
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wheel-${{ matrix.os }}-${{ matrix.target }}
           path: dist/*.whl
@@ -178,12 +178,12 @@ jobs:
     # pipeline, and neither is one that can only be tested by publishing.
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           pattern: binary-*
           merge-multiple: true
           path: dist
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/*.tar.gz
@@ -199,7 +199,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           pattern: wheel-*
           merge-multiple: true
@@ -217,7 +217,7 @@ jobs:
       TAP_DEPLOY_KEY: ${{ secrets.TAP_DEPLOY_KEY }}
       TAP_REPO: git@github.com:ormeilu/homebrew-tap.git
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           pattern: binary-*
           merge-multiple: true

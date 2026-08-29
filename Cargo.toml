@@ -4,7 +4,7 @@
 # binary and the library keep the short name: `cargo install yandex-tracker-cli`
 # puts `ytcli` on the path, the same trade `uvx --from` already makes.
 name = "yandex-tracker-cli"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2024"
 rust-version = "1.90"
 description = "Token-efficient Yandex Tracker CLI for humans and AI agents"
@@ -46,7 +46,7 @@ keyring = { version = "4.1.6", features = [
   "windows-native-keyring-store",
   "zbus-secret-service-keyring-store",
 ] }
-owo-colors = "4.3.0"
+owo-colors = "4.4.0"
 reqwest = { version = "0.13.4", default-features = false, features = ["json", "charset", "http2", "rustls", "multipart", "stream"] }
 rpassword = "7.5.4"
 serde = { version = "1.0.229", features = ["derive"] }
@@ -57,7 +57,7 @@ tabled = { version = "0.21.0", default-features = false, features = ["std", "ans
 termimad = "0.35.2"
 # Already in the tree through the TLS stack; a direct dependency here costs
 # nothing in the binary and saves hand-rolling an encoder for two protocols.
-base64 = "0.22.1"
+base64 = "0.23.1"
 thiserror = "2.0.20"
 tokio = { version = "1.53.1", features = ["rt", "macros", "fs", "time"] }
 toml_edit = "0.25.13"

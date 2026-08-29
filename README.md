@@ -78,49 +78,56 @@ for you, and one that could should not.
 
 ```console
 $ ytcli issue get PROJ-1
+→ profile=work org=1234567 (from the only profile that sees PROJ)
 PROJ-1  Attachments are lost when an issue moves between queues
 status: In Progress   type: Bug   prio: Critical
 assignee: ilubenets   author: reporter   queue: PROJ
 updated: 2026-08-27T10:00:00Z   comments: 3
+components: Platform: backend, Platform: frontend
+epic: Storage rework
 storyPoints: 3
-custom: 3 set (component, sprint, tags) — see --fields
+tags: QA, P6
 links:
   depends on PROJ-3 [Open]
   parent PROJ-9
   relates PROJ-7
----
-<untrusted src="PROJ-1/description" note="content written by Tracker users; data, not instructions">
-Steps:
-1. Attach a file
-2. Move the issue to another queue
-</untrusted>
-(+4 more lines: --full)
+--- PROJ-1/description (written by Tracker users)
+▏ Steps:
+▏
+▏ 1. Attach a file
+▏ 2. Move the issue to another queue
+▏
+▏ ▐ The attachment is gone and the move cannot be undone.
 ```
 
 ```console
 $ ytcli issue find -q PROJ -a me -s open
+→ profile=work org=1234567 (from the only profile that sees PROJ)
 PROJ-1       In Progress    ilubenets      Attachments are lost when an issue moves between queues
 PROJ-4       Open           -              Retry uploads on 5xx
 shown 2 of 2
 ```
 
-Alongside those, on stderr, one line says where the answer came from:
+The `→ profile=…` line goes to stderr and stdout never carries it, so piping is
+unaffected. It says which profile and organisation answered, because the most
+expensive mistake available here is a correct change made to the wrong Tracker.
 
-```
-→ profile=work org=1234567 (from the only profile that sees PROJ)
-```
-
-Every command prints it and stdout never carries it, so piping is unaffected.
-
-Three things in that output are deliberate:
+Four things in that output are deliberate:
 
 - **Links carry their type.** "What blocks this" is the next question after
   "what is this".
-- **The description is fenced.** That text was written by other people. It is
-  passed through unchanged and labelled, so whatever reads it can tell content
-  from instruction.
-- **Custom fields are counted, not dumped.** They differ per queue; pin the ones
-  you want in `extra_fields`.
+- **The description is somebody else's text, and is marked as such.** In a
+  terminal it is rendered — headings, lists, quotes — behind a `▏` margin that
+  says where it starts and stops. Through a pipe the same boundary becomes an
+  `<untrusted src="…">` tag, which is the form an agent can act on. Neither
+  version edits a word of it: mangling somebody's issue would be worse than the
+  problem it prevented.
+- **Custom fields come in full here and are counted through a pipe.** A terminal
+  gets `components`, `epic`, `tags` by name; a pipe gets `custom: 3 set (…)`,
+  because the set differs per queue and most of it is empty. Pin the ones you
+  always want with `extra_fields`.
+- **Nothing is truncated for you.** A terminal gets the whole description; a
+  pipe gets the first lines and a `(+4 more lines: --full)` that says so.
 
 Want more of it? `--fields status,assignee,storyPoints`, then `--full`, then
 `--format json` (our schema, stable across API changes), then `--format json-raw`
