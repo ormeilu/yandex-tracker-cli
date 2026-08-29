@@ -51,6 +51,10 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   ytcli issue find --yql 'Queue: PROJ AND Status: Open'   read-only search language
   ytcli issue count -q PROJ -s open     one number, the cheapest question here
   ytcli issue create -q PROJ -s "title" [-d text] [--assignee login]
+                                        -d - reads the body from stdin;
+                                        --description-file PATH reads it from a
+                                        file. Also on `issue update`, where it
+                                        replaces the description in full
   ytcli issue update PROJ-1 --set storyPoints=3 --assignee login
   ytcli issue update PROJ-1 PROJ-2 --set storyPoints=3 --yes
                                         same change to several; --yes required.

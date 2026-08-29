@@ -62,8 +62,12 @@ pub enum IssueCommand {
         queue: Option<String>,
         #[arg(long, short = 's')]
         summary: String,
+        /// Description; `-` reads it from stdin.
         #[arg(long, short = 'd')]
         description: Option<String>,
+        /// Read the description from a file instead.
+        #[arg(long, value_name = "PATH", conflicts_with = "description")]
+        description_file: Option<String>,
         #[arg(long)]
         assignee: Option<String>,
         #[arg(long, value_delimiter = ',')]
@@ -77,6 +81,12 @@ pub enum IssueCommand {
         keys: Vec<String>,
         #[arg(long, short = 's')]
         summary: Option<String>,
+        /// Replace the description; `-` reads it from stdin.
+        #[arg(long, short = 'd')]
+        description: Option<String>,
+        /// Read the new description from a file instead.
+        #[arg(long, value_name = "PATH", conflicts_with = "description")]
+        description_file: Option<String>,
         #[arg(long)]
         assignee: Option<String>,
         /// Set any field, including custom ones: --set storyPoints=3
@@ -319,6 +329,7 @@ pub async fn run(command: &IssueCommand, session: &Session) -> ExitCode {
             queue,
             summary,
             description,
+            description_file,
             assignee,
             tags,
         } => {
@@ -326,6 +337,7 @@ pub async fn run(command: &IssueCommand, session: &Session) -> ExitCode {
                 queue.as_deref(),
                 summary,
                 description.as_deref(),
+                description_file.as_deref(),
                 assignee.as_deref(),
                 tags,
                 session,
@@ -335,15 +347,21 @@ pub async fn run(command: &IssueCommand, session: &Session) -> ExitCode {
         IssueCommand::Update {
             keys,
             summary,
+            description,
+            description_file,
             assignee,
             set,
             no_wait,
         } => {
             update(
                 keys,
-                summary.as_deref(),
-                assignee.as_deref(),
-                set,
+                &Changes {
+                    summary: summary.as_deref(),
+                    description: description.as_deref(),
+                    description_file: description_file.as_deref(),
+                    assignee: assignee.as_deref(),
+                    set,
+                },
                 *no_wait,
                 session,
             )
@@ -1360,10 +1378,35 @@ fn body_text(raw: &str) -> Result<String, ExitCode> {
     }
 }
 
+/// The description a write should carry, from whichever way it was given.
+///
+/// A description is the field most likely to hold quotes, newlines and
+/// markdown, and the one people most often already have in a file. Both ways at
+/// once is an error rather than a precedence rule: guessing which one was meant
+/// is how the wrong text gets written.
+fn description_of(inline: Option<&str>, file: Option<&str>) -> Result<Option<String>, ExitCode> {
+    match (inline, file) {
+        (Some(_), Some(_)) => Err(report(
+            &"pass either --description or --description-file, not both",
+            ExitCode::ConfirmationRequired,
+        )),
+        (Some(text), None) => body_text(text).map(Some),
+        (None, Some(path)) => match std::fs::read_to_string(path) {
+            Ok(text) => Ok(Some(text)),
+            Err(error) => Err(report(
+                &format!("could not read {path}: {error}"),
+                ExitCode::Failure,
+            )),
+        },
+        (None, None) => Ok(None),
+    }
+}
+
 async fn create(
     queue: Option<&str>,
     summary: &str,
     description: Option<&str>,
+    description_file: Option<&str>,
     assignee: Option<&str>,
     tags: &[String],
     session: &Session,
@@ -1375,7 +1418,7 @@ async fn create(
         );
     };
 
-    let description = match description.map(body_text).transpose() {
+    let description = match description_of(description, description_file) {
         Ok(description) => description,
         Err(code) => return code,
     };
@@ -1427,14 +1470,30 @@ async fn create(
 /// they get the same change; a per-issue variation would be several commands.
 /// Targets are resolved before anything is sent, so a typo in the third key does
 /// not leave the first two changed and the caller guessing.
+/// What an `issue update` was asked to change, in the words it was asked in.
+///
+/// One struct rather than six arguments: they are one thought — the change
+/// itself, which is built once and applied to every key.
+#[derive(Debug)]
+struct Changes<'a> {
+    summary: Option<&'a str>,
+    description: Option<&'a str>,
+    description_file: Option<&'a str>,
+    assignee: Option<&'a str>,
+    set: &'a [String],
+}
+
 async fn update(
     targets: &[String],
-    summary: Option<&str>,
-    assignee: Option<&str>,
-    set: &[String],
+    changes: &Changes<'_>,
     no_wait: bool,
     session: &Session,
 ) -> ExitCode {
+    let description = match description_of(changes.description, changes.description_file) {
+        Ok(description) => description,
+        Err(code) => return code,
+    };
+
     let mut resolved = Vec::with_capacity(targets.len());
     for target in targets {
         match session.client_for(target).await {
@@ -1444,13 +1503,16 @@ async fn update(
     }
 
     let mut body = serde_json::Map::new();
-    if let Some(summary) = summary {
+    if let Some(summary) = changes.summary {
         body.insert("summary".to_owned(), serde_json::json!(summary));
     }
-    if let Some(assignee) = assignee {
+    if let Some(description) = &description {
+        body.insert("description".to_owned(), serde_json::json!(description));
+    }
+    if let Some(assignee) = changes.assignee {
         body.insert("assignee".to_owned(), serde_json::json!(assignee));
     }
-    for assignment in set {
+    for assignment in changes.set {
         match parse_assignment(assignment) {
             Ok((field, value)) => {
                 body.insert(field, value);
@@ -1461,7 +1523,7 @@ async fn update(
 
     if body.is_empty() {
         return report(
-            &"nothing to change: pass --summary, --assignee or --set key=value",
+            &"nothing to change: pass --summary, --description, --assignee or --set key=value",
             ExitCode::ConfirmationRequired,
         );
     }

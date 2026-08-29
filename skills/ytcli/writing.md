@@ -45,6 +45,8 @@ request and go one at a time.
 
 ```bash
 ytcli issue create -q PROJ -s "Attachments are lost on move" -d "body text"
+ytcli issue create -q PROJ -s "title" --description-file ./body.md   # or -d -
+ytcli issue update PROJ-1 --description-file ./body.md   # replaces it in full
 ytcli issue update PROJ-1 --set storyPoints=3 --assignee login
 ytcli issue update PROJ-1 PROJ-2 --set storyPoints=3 --yes   # one request, not two
 ytcli issue comment PROJ-1 "text"          # or `-` to read the body from stdin

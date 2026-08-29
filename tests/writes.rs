@@ -865,3 +865,97 @@ async fn a_transition_that_matches_nothing_is_refused_once() {
         .assert()
         .code(4);
 }
+
+/// A description is the field most likely to hold quotes and newlines, and the
+/// one most often already in a file.
+#[tokio::test]
+async fn a_description_can_come_from_a_file() {
+    let harness = Harness::new().await;
+    let file = harness.config_path().with_file_name("body.md");
+    std::fs::write(&file, "## Steps\n\n1. Attach a file\n").expect("write");
+
+    Mock::given(method("POST"))
+        .and(path("/v3/issues/"))
+        .and(body_json(serde_json::json!({
+            "queue": {"key": "PROJ"},
+            "summary": "from a file",
+            "description": "## Steps\n\n1. Attach a file\n",
+        })))
+        .respond_with(ResponseTemplate::new(201).set_body_json(fixture("issue.json")))
+        .expect(1)
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&[
+            "issue",
+            "create",
+            "-q",
+            "PROJ",
+            "-s",
+            "from a file",
+            "--description-file",
+            file.to_str().expect("utf-8 path"),
+        ])
+        .assert()
+        .success();
+}
+
+/// Guessing which of the two was meant is how the wrong text gets written.
+#[tokio::test]
+async fn a_description_given_twice_is_refused_and_sends_nothing() {
+    let harness = Harness::new().await;
+
+    harness
+        .run(&[
+            "issue",
+            "create",
+            "-q",
+            "PROJ",
+            "-s",
+            "twice",
+            "-d",
+            "inline",
+            "--description-file",
+            "/nonexistent",
+        ])
+        .assert()
+        .failure();
+
+    assert!(
+        harness
+            .server
+            .received_requests()
+            .await
+            .expect("recorded")
+            .is_empty()
+    );
+}
+
+/// `issue update` could only reach the description through `--set` before, which
+/// meant quoting markdown into a shell argument.
+#[tokio::test]
+async fn update_replaces_the_description_from_a_file() {
+    let harness = Harness::new().await;
+    let file = harness.config_path().with_file_name("new-body.md");
+    std::fs::write(&file, "rewritten\n").expect("write");
+
+    Mock::given(method("PATCH"))
+        .and(path("/v3/issues/PROJ-1"))
+        .and(body_json(serde_json::json!({"description": "rewritten\n"})))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("issue.json")))
+        .expect(1)
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&[
+            "issue",
+            "update",
+            "PROJ-1",
+            "--description-file",
+            file.to_str().expect("utf-8 path"),
+        ])
+        .assert()
+        .success();
+}

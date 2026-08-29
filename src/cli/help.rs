@@ -214,8 +214,15 @@ Create an issue.
 ```
 ytcli issue create -q PROJ -s \"Attachments are lost on move\"
 ytcli issue create -q PROJ -s \"title\" -d \"body\" --assignee login --tags QA,P6
+ytcli issue create -q PROJ -s \"title\" --description-file ./body.md
+ytcli issue create -q PROJ -s \"title\" -d -        # the body from stdin
 ytcli issue create -q PROJ -s \"title\" --dry-run
 ```
+
+A description is the field most likely to hold quotes, newlines and markdown, so
+it can come from a file or from stdin rather than from an argument. Both at once
+is an error, not a precedence rule: guessing which was meant is how the wrong
+text gets written.
 
 Prints the profile and organisation it is about to write to before it writes.
 `--dry-run` shows the request body and sends nothing.
@@ -230,7 +237,12 @@ ytcli issue update PROJ-1 --assignee login
 ytcli issue update PROJ-1 --set storyPoints=3
 ytcli issue update PROJ-1 PROJ-2 --set storyPoints=3 --yes
 ytcli issue update PROJ-1 --set 'summary=\"3\"' --dry-run
+ytcli issue update PROJ-1 --description-file ./body.md
 ```
+
+`--description` replaces the description in full — Tracker keeps no history of
+what was there — and takes `-` for stdin; `--description-file` reads it from a
+file instead.
 
 `--set` takes any field, custom ones included. A value that parses as JSON is
 sent as JSON, so `--set storyPoints=3` sends the number 3; quote it to mean the
