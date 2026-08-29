@@ -46,6 +46,57 @@ fn cheatsheet_can_be_narrowed_to_one_topic() {
         .stdout(predicate::str::contains("## auth").not());
 }
 
+/// The binary routinely arrives detached from its repository, and for whoever
+/// ends up holding it `--help` is the whole surface of the project.
+#[test]
+fn the_long_help_says_where_the_docs_and_the_bug_tracker_are() {
+    ytcli()
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "https://ormeilu.github.io/yandex-tracker-cli/",
+        ))
+        .stdout(predicate::str::contains(
+            "https://github.com/ormeilu/yandex-tracker-cli/issues",
+        ));
+}
+
+/// Somebody who asked for the short help asked for less, not for less of a
+/// different thing: `-h` keeps the size it had.
+#[test]
+fn the_short_help_carries_no_links() {
+    ytcli()
+        .arg("-h")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("github.io").not());
+}
+
+/// The cheatsheet is what an agent reaches for instead of opening a file, which
+/// makes it where it would look for whatever the sheet did not cover.
+#[test]
+fn the_cheatsheet_carries_the_links_too() {
+    ytcli()
+        .args(["cheatsheet", "more"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "https://github.com/ormeilu/yandex-tracker-cli/issues",
+        ));
+}
+
+/// The mistake this line exists for: `#` numbers a list in Yandex wiki markup
+/// and heads a section in Markdown, and Tracker stores Markdown.
+#[test]
+fn the_cheatsheet_says_which_markup_a_description_is() {
+    ytcli()
+        .arg("cheatsheet")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("not Yandex wiki markup"));
+}
+
 #[test]
 fn unknown_cheatsheet_topic_fails_loudly() {
     ytcli()

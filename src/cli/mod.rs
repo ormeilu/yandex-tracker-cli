@@ -40,6 +40,9 @@ use crate::render::{Audience, Context, Format};
 /// Token-efficient Yandex Tracker CLI for humans and AI agents.
 #[derive(Debug, Parser)]
 #[command(name = "ytcli", version, about, long_about = help::md(help::ROOT))]
+// On the long help only, so `-h` stays the size it is: somebody who asked for
+// the short form asked for less, not for less of a different thing.
+#[command(after_long_help = help::LINKS)]
 #[command(propagate_version = true)]
 // Help is rendered markdown, and clap's own wrapping counts escape codes as
 // characters — it would cut a table in half and break an example mid-flag.

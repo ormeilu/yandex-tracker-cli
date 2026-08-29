@@ -79,6 +79,30 @@ makes the read half safe to allowlist.
 `comment edit` replaces the body rather than adding to it: pass the whole text,
 and expect the previous wording to be gone — Tracker keeps no history of it.
 
+## Descriptions and comments are Markdown
+
+Both are stored as [Yandex Flavored Markdown][yfm], a superset of Markdown — not
+as the wiki markup Yandex Wiki and Tracker's older editor use. The two disagree
+in exactly the place that costs the most:
+
+| what you want   | write        | **not**        |
+| --------------- | ------------ | -------------- |
+| heading         | `## Heading` | `== Heading`   |
+| numbered list   | `1. first`   | `# first`      |
+| bulleted list   | `- item`     | `* item` works |
+| bold, italic    | `**b**` `_i_` | `!!b!!`       |
+| link            | `[text](url)` | `((url text))` |
+| code            | backticks, and ``` for a block | |
+
+**A `#` that starts a line is a heading, not a list marker.** That is the one
+worth remembering: in wiki markup `#` numbers a list, so a numbered list written
+the wiki way becomes a page of top-level headings. It renders without an error
+and without an exit code — the cost lands on whoever opens the issue.
+
+Comments follow the same rules as descriptions.
+
+[yfm]: https://yandex.ru/support/tracker/en/user/markup
+
 ```bash
 ytcli issue move PROJ-1 --to OPS --yes     # --keep-fields to carry the rest
 ytcli issue move PROJ-1 PROJ-2 --to OPS --yes    # one request, one tally

@@ -30,6 +30,20 @@ pub fn md(source: &str) -> String {
     crate::render::markdown::render(source, crate::cli::terminal_width().clamp(40, 92))
 }
 
+/// Where to go when the help runs out.
+///
+/// The binary routinely arrives detached from its repository — `uv tool
+/// install`, `cargo install`, a Homebrew formula, an archive dropped on the
+/// `PATH` — and for whoever ends up holding it, `--help` is the whole surface
+/// of the project. Three lines is what it costs to leave a way out of it.
+///
+/// Plain text rather than markdown: these are meant to be copied, and a
+/// renderer that decides to underline or reflow a URL makes that worse.
+pub const LINKS: &str = "\
+Docs:   https://ormeilu.github.io/yandex-tracker-cli/
+Source: https://github.com/ormeilu/yandex-tracker-cli
+Bugs:   https://github.com/ormeilu/yandex-tracker-cli/issues";
+
 pub const ROOT: &str = "\
 Yandex Tracker from the command line, sized for agents.
 
@@ -295,6 +309,11 @@ A description is the field most likely to hold quotes, newlines and markdown, so
 it can come from a file or from stdin rather than from an argument. Both at once
 is an error, not a precedence rule: guessing which was meant is how the wrong
 text gets written.
+
+Descriptions and comments are Markdown — Yandex Flavored Markdown, a superset of
+it — and **not** the wiki markup Yandex Wiki uses. A `#` starting a line is a
+heading, not a list marker; number a list with `1.` and head a section with `##`.
+The wrong one renders without an error, so nothing but the reader will say so.
 
 Prints the profile and organisation it is about to write to before it writes.
 `--dry-run` shows the request body and sends nothing.

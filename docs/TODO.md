@@ -29,6 +29,12 @@ meet is how the drift started.
   sweep found missing; then a study of another Tracker CLI, which added bars,
   a timer, `sprint get`, transition by status and two ways to stop fighting the
   shell. Shipped across 0.7.0 and 1.0.0.
+- After 1.0.0, from issues filed by people using it: `--help` and
+  `ytcli cheatsheet more` carry the docs, source and bug-tracker URLs, because a
+  binary installed through `uv`, `cargo` or a tap arrives detached from its
+  repository and `--help` is then the whole project; and the skill says which
+  markup a description is written in — Markdown, not the Yandex wiki markup
+  whose `#` numbers a list.
 - **1.0.0** — no new surface of its own. It is the version that says the surface
   is finished: every endpoint a survey of the API found is reachable, the output
   shape has been stable for several releases, and what was deliberately left out
