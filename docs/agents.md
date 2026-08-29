@@ -15,7 +15,7 @@ allow: ytcli issue get:*, ytcli issue find:*, ytcli issue list:*, ytcli issue co
        ytcli queue versions:*, ytcli queue tags:*, ytcli queue automation:*,
        ytcli queue access:*, ytcli bulk status:*,
        ytcli queue local-fields:*,
-       ytcli board list, ytcli board get:*, ytcli board sprints:*, ytcli sprint list,
+       ytcli board list, ytcli board get:*, ytcli board sprints:*, ytcli sprint list, ytcli sprint get:*,
        ytcli field list, ytcli field get:*, ytcli template list:*,
        ytcli dict list:*, ytcli component list:*, ytcli link types,
        ytcli user list:*, ytcli user get:*, ytcli user find:*,

@@ -1,0 +1,11 @@
+{
+  "self": "https://api.tracker.yandex.net/v3/sprints/21",
+  "id": 21,
+  "version": 1435288720018,
+  "name": "Sprint 1",
+  "board": {"self": "https://api.tracker.yandex.net/v3/boards/6", "id": "6", "display": "Storage"},
+  "status": "in_progress",
+  "archived": false,
+  "startDate": "2026-08-17",
+  "endDate": "2026-08-28"
+}

@@ -51,6 +51,7 @@ async fn tracker_answers(harness: &Harness) {
         ),
         ("/v3/queues/PROJ/localFields", "queue_local_fields.json"),
         ("/v3/sprints", "all_sprints.json"),
+        ("/v3/sprints/21", "sprint.json"),
         ("/v3/queues/PROJ/autoactions", "queue_autoactions.json"),
         ("/v3/queues/PROJ/triggers", "queue_triggers.json"),
         ("/v3/fields", "fields.json"),
@@ -243,6 +244,10 @@ const UNRUNNABLE: &[(&str, &str)] = &[
     ("issue link", "a write"),
     ("portfolio place", "a write"),
     ("project place", "a write"),
+    (
+        "sprint get",
+        "how far through a sprint is depends on today's date",
+    ),
     ("attachment list", "no recorded attachment fixture yet"),
     (
         "attachment show",

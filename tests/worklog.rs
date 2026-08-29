@@ -147,7 +147,11 @@ async fn a_checklist_shows_its_boxes_and_what_is_done() {
 
     assert!(stdout.contains("41 [x] migrate the audio tracks"));
     assert!(stdout.contains("42 [ ] review @ilubenets due 2026-09-01"));
-    assert!(stdout.ends_with("shown 2 of 2 for PROJ-1 — 1 done\n"));
+    // Piped: the numbers, and nothing drawn. The bar is for a terminal.
+    assert!(
+        stdout.ends_with("shown 2 of 2 for PROJ-1 — 1 of 2 done\n"),
+        "{stdout}"
+    );
 }
 
 /// Ticking prints the list as it now stands, so the result needs no second call.

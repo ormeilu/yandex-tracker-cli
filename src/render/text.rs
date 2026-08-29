@@ -427,8 +427,15 @@ pub fn checklist(key: &str, items: &[ChecklistItem], ctx: &Context) -> String {
 
     for item in items {
         // The box is the state, and it is the first thing on the line so a
-        // column of them can be read at a glance.
-        let box_ = if item.checked { "[x]" } else { "[ ]" };
+        // column of them can be read at a glance. A terminal gets the glyph a
+        // person reads faster; a pipe keeps the three characters every script
+        // that ever grepped this output was written against.
+        let box_ = match (item.checked, ctx.is_human()) {
+            (true, true) => "\u{2713}",
+            (false, true) => "\u{25cb}",
+            (true, false) => "[x]",
+            (false, false) => "[ ]",
+        };
         let assignee = match item.assignee.as_ref() {
             Some(user) => format!(" @{}", who(Some(user))),
             None => String::new(),
@@ -449,17 +456,17 @@ pub fn checklist(key: &str, items: &[ChecklistItem], ctx: &Context) -> String {
     }
 
     let done = items.iter().filter(|item| item.checked).count();
+    // The tally already carried both numbers; all that was missing was the bar.
+    // `done of total` replaces `{done} done` rather than being added to it: two
+    // ways of saying the same thing on one line is one too many.
     let _ = writeln!(
         out,
-        "{}",
+        "{} — {} done",
         paint.paint(
-            &format!(
-                "shown {} of {} for {key} — {done} done",
-                items.len(),
-                items.len()
-            ),
+            &format!("shown {} of {} for {key}", items.len(), items.len()),
             Palette::label()
-        )
+        ),
+        crate::render::bar::ratio(done as u64, items.len() as u64, ctx),
     );
     out
 }

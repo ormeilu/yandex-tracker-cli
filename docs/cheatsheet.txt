@@ -143,6 +143,12 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   ytcli board list                      id, name, column count, estimate field
   ytcli board get 6                     the columns, in the order the board works in
   ytcli sprint list                     every sprint, with the board each belongs to
+  ytcli sprint list --planning          only the one to plan into: nearest draft,
+                                        else the running sprint
+  ytcli sprint get 21                   dates and issues, each as `N of M`; a
+                                        terminal draws a bar in front of the
+                                        numbers, a pipe never does. --no-issues
+                                        skips the two counts
   ytcli board sprints ID                a kanban board is refused, in Tracker's words:
                                         "no sprints" and "cannot have sprints" differ
 

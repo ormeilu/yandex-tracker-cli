@@ -125,6 +125,7 @@ allowlist is worth having. For Claude Code, in `.claude/settings.json`:
       "Bash(ytcli board get:*)",
       "Bash(ytcli board sprints:*)",
       "Bash(ytcli sprint list:*)",
+      "Bash(ytcli sprint get:*)",
       "Bash(ytcli project list:*)",
       "Bash(ytcli project get:*)",
       "Bash(ytcli portfolio list:*)",

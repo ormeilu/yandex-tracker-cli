@@ -1185,6 +1185,18 @@ impl Client {
             .unwrap_or_default())
     }
 
+    /// `GET /v3/sprints/{id}` — one sprint.
+    ///
+    /// How far through it is takes two counts on top of this, which is why it
+    /// is a command of its own rather than a column in the listing: in a
+    /// listing it would be two requests per row.
+    pub async fn sprint(&self, id: &str) -> Result<Sprint, ApiError> {
+        let raw = self
+            .get_value(&format!("/v3/sprints/{id}"), &format!("sprint {id}"))
+            .await?;
+        Sprint::parse(&raw).ok_or_else(|| ApiError::NotFound(format!("sprint {id}")))
+    }
+
     /// Every sprint in the organisation.
     ///
     /// `board sprints ID` needs the board first, and a sprint name is a thing

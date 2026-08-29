@@ -71,6 +71,97 @@ pub fn board(board: &Board, ctx: &Context) -> String {
     out
 }
 
+/// The glyph for a sprint's state.
+///
+/// Three states and three shapes, in a terminal only: a filled circle is
+/// running, a half-filled one is planned, an empty one is neither. A pipe keeps
+/// the word Tracker gave, because that is what a caller filters on.
+fn state(status: Option<&str>, ctx: &Context) -> String {
+    let word = status.unwrap_or("-");
+    if !ctx.is_human() {
+        return word.to_owned();
+    }
+
+    let (glyph, style) = match status {
+        Some("in_progress") => ("\u{25cf}", Palette::ok()),
+        Some("draft" | "planned") => ("\u{25d0}", Palette::warn()),
+        _ => ("\u{25cb}", Palette::label()),
+    };
+    format!("{} {word}", ctx.painter().paint(glyph, style))
+}
+
+/// One sprint, and how far through it is.
+///
+/// Two ratios, because a sprint that is four days from its end with half its
+/// issues open is a different situation from one that has just started, and a
+/// list of dates makes the reader do that arithmetic themselves.
+///
+/// `counts` is `(resolved, total)`, and absent when the issues were not asked
+/// for: two counts are two requests, and a caller who only wanted the dates
+/// should not pay for them.
+#[must_use]
+pub fn sprint(sprint: &Sprint, counts: Option<(u64, u64)>, today: &str, ctx: &Context) -> String {
+    let mut out = String::with_capacity(240);
+    let paint = ctx.painter();
+    let label = |text: &str| paint.paint(text, Palette::label());
+
+    let _ = writeln!(
+        out,
+        "{}  {}",
+        paint.paint(&sprint.id, Palette::key()),
+        sprint.name
+    );
+    let _ = writeln!(
+        out,
+        "{} {}   {} {}",
+        label("status:"),
+        state(sprint.status.as_deref(), ctx),
+        label("board:"),
+        sprint.board.as_deref().unwrap_or("-"),
+    );
+
+    let start = sprint.start.as_deref().unwrap_or("-");
+    let end = sprint.end.as_deref().unwrap_or("-");
+    let _ = write!(out, "{} {start} \u{2192} {end}", label("dates:"));
+    if let Some((elapsed, length)) = days(sprint.start.as_deref(), sprint.end.as_deref(), today) {
+        let _ = write!(
+            out,
+            "   {} days",
+            crate::render::bar::ratio(elapsed, length, ctx)
+        );
+    }
+    let _ = writeln!(out);
+
+    if let Some((resolved, total)) = counts {
+        let _ = writeln!(
+            out,
+            "{} {} resolved",
+            label("issues:"),
+            crate::render::bar::ratio(resolved, total, ctx)
+        );
+    }
+
+    out
+}
+
+/// Days elapsed of days planned, from the dates as Tracker writes them.
+///
+/// Both ends are counted, so a one-day sprint is one day long rather than zero.
+/// A sprint that has run over its end date reports more elapsed than planned,
+/// and the bar caps itself; pretending otherwise would hide the thing worth
+/// noticing.
+fn days(start: Option<&str>, end: Option<&str>, today: &str) -> Option<(u64, u64)> {
+    let start: jiff::civil::Date = start?.parse().ok()?;
+    let end: jiff::civil::Date = end?.parse().ok()?;
+    let today: jiff::civil::Date = today.parse().ok()?;
+
+    let length = (end - start).get_days().checked_add(1)?;
+    let elapsed = (today - start).get_days().checked_add(1)?;
+    u64::try_from(length)
+        .ok()
+        .map(|length| (u64::try_from(elapsed).unwrap_or(0), length))
+}
+
 /// Every sprint in the organisation, with the board each belongs to.
 ///
 /// The board column is the difference from [`sprints`]: two boards each having

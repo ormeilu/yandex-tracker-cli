@@ -183,6 +183,14 @@ shown 3 of 3 (1 custom)
 ```
 
 ```console
+$ ytcli sprint list --planning
+→ profile=test org=12345 (from YTCLI_PROFILE)
+22       Sprint 1                   Infrastructure       planned      2026-08-31   2026-09-11
+shown 1 of 1
+
+```
+
+```console
 $ ytcli sprint list
 → profile=test org=12345 (from YTCLI_PROFILE)
 21       Sprint 1                   Storage              in_progress  2026-08-17   2026-08-28

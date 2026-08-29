@@ -709,12 +709,36 @@ List every sprint in the organisation.
 
 ```
 ytcli sprint list
+ytcli sprint list --planning
 ```
+
+`--planning` narrows the listing to the one sprint to put new work into: the
+nearest draft, or the running sprint when nothing is drafted. Not the running
+one by default — work planned now belongs to the next sprint, and the running
+one is what people are already doing.
 
 `board sprints 6` needs the board first. A sprint name is a thing people say
 without knowing which board it belongs to, so this lists them all with the board
 named on each — two boards each having a `Sprint 1` is normal, and the board
 column is what tells them apart.";
+
+pub const SPRINT_GET: &str = "\
+Show one sprint: its dates, and how far through it is.
+
+```
+ytcli sprint get 104
+ytcli sprint get 104 --no-issues
+```
+
+Two ratios, because a sprint four days from its end with half its issues open is
+a different situation from one that has just started, and a pair of dates makes
+the reader do that arithmetic themselves. In a terminal each is drawn as a bar;
+in a pipe it is the same two numbers with nothing drawn around them.
+
+The issue ratio costs two counts — the sprint's issues, and those still without
+a resolution — so `--no-issues` is there for a caller who only wanted the dates.
+A sprint whose issues cannot be counted still prints: the dates were read, and
+losing them to report a failed count would answer less than was already known.";
 
 pub const QUEUE_LOCAL_FIELDS: &str = "\
 List the fields this queue defines itself.
