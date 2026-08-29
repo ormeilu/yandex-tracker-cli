@@ -1603,6 +1603,13 @@ pub struct Transition {
     pub name: String,
     /// The status the issue lands in.
     pub to: Option<String>,
+    /// That status's key, which unlike `to` is the same in every organisation.
+    ///
+    /// Transition ids are per workflow — `close`, `closed` and `close_issue`
+    /// are all real — so this is what lets a caller ask for a *status* and have
+    /// the id found for them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub to_key: Option<String>,
 }
 
 impl Transition {
@@ -1617,6 +1624,11 @@ impl Transition {
             to: value
                 .get("to")
                 .and_then(|to| to.get("display").or_else(|| to.get("key")))
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned),
+            to_key: value
+                .get("to")
+                .and_then(|to| to.get("key"))
                 .and_then(Value::as_str)
                 .map(ToOwned::to_owned),
         })

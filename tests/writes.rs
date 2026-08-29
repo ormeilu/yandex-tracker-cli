@@ -803,3 +803,65 @@ async fn moving_several_issues_without_yes_names_all_of_them() {
             .is_empty()
     );
 }
+
+/// Transition ids are per workflow; a status key is the same everywhere. A
+/// caller who has the status gets the id found for them, and only after the
+/// direct attempt failed — the ordinary path stays one request.
+#[tokio::test]
+async fn a_target_status_is_resolved_to_the_transition_that_reaches_it() {
+    let harness = Harness::new().await;
+    Mock::given(method("POST"))
+        .and(path("/v3/issues/PROJ-1/transitions/closed/_execute"))
+        .respond_with(ResponseTemplate::new(404))
+        .expect(1)
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v3/issues/PROJ-1/transitions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+            {"id": "close", "display": "Close", "to": {"key": "closed", "display": "Closed"}}
+        ])))
+        .expect(1)
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v3/issues/PROJ-1/transitions/close/_execute"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+        .expect(1)
+        .mount(&harness.server)
+        .await;
+
+    let output = harness
+        .run(&["issue", "transition", "PROJ-1", "closed"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    // The id that worked, so the next call can skip the second request.
+    assert!(stdout.contains("PROJ-1 close"), "{stdout}");
+}
+
+/// A word that is neither an id nor a reachable status is still a refusal, and
+/// the same request is not sent twice to produce it.
+#[tokio::test]
+async fn a_transition_that_matches_nothing_is_refused_once() {
+    let harness = Harness::new().await;
+    Mock::given(method("POST"))
+        .and(path("/v3/issues/PROJ-1/transitions/nonsense/_execute"))
+        .respond_with(ResponseTemplate::new(404))
+        .expect(1)
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v3/issues/PROJ-1/transitions"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+            {"id": "close", "display": "Close", "to": {"key": "closed", "display": "Closed"}}
+        ])))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&["issue", "transition", "PROJ-1", "nonsense"])
+        .assert()
+        .code(4);
+}

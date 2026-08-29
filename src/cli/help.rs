@@ -529,6 +529,7 @@ Move an issue through a workflow transition.
 ```
 ytcli issue transition PROJ-1
 ytcli issue transition PROJ-1 close
+ytcli issue transition PROJ-1 closed              # the status; the id is found
 ytcli issue transition PROJ-1 close --resolution fixed
 ytcli issue transition PROJ-1 close -r wontFix --set comment=\"not this quarter\"
 ytcli issue transition PROJ-1 PROJ-2 --to close -r fixed --yes
@@ -536,6 +537,12 @@ ytcli issue transition PROJ-1 PROJ-2 --to close -r fixed --yes
 
 Without an id it lists what is available from the current status, which is the
 only reliable way to learn the ids: they are defined per workflow, not globally.
+
+A target status is accepted where an id is — `closed` as well as `close`, by key
+or by the name Tracker displays. The id is tried first, so the ordinary call is
+still one request; only when that fails is the workflow asked what reaches that
+status. The id that worked is what gets printed, so the next call can skip the
+second request.
 
 A transition can require fields, and closing usually requires a resolution:
 without one Tracker refuses with the names of the fields it wanted, in the

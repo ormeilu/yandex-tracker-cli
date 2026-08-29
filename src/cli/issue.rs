@@ -1806,21 +1806,15 @@ async fn transition_cmd(
         let Some((client, _)) = resolved.first() else {
             return ExitCode::Success;
         };
-        return match client.bulk_transition(&keys, &transition, &body).await {
-            Ok(started) => awaited(client, started, no_wait, session).await,
-            Err(error) => {
-                let code = error.exit_code();
-                report(&error, code)
-            }
-        };
+        return bulk_transition(client, &keys, &transition, &body, no_wait, session).await;
     }
 
     let mut done = 0_u64;
     for (client, key) in &resolved {
-        match client.execute_transition(key, &transition, &body).await {
-            Ok(()) => {
+        match transition_once(client, key, &transition, &body).await {
+            Ok(used) => {
                 done += 1;
-                emit(&format!("{key} {transition}\n"));
+                emit(&format!("{key} {used}\n"));
             }
             Err(error) => {
                 let code = error.exit_code();
@@ -1831,7 +1825,14 @@ async fn transition_cmd(
                         &session.render,
                     ));
                 }
-                return rejected_for_fields(&error, &body, code);
+                // Two different failures, two different hints: Tracker either
+                // wanted fields it did not get, or does not have this
+                // transition at all from where the issue stands.
+                return if matches!(error, crate::api::error::ApiError::NotFound(_)) {
+                    no_such_transition(&error, code)
+                } else {
+                    rejected_for_fields(&error, &body, code)
+                };
             }
         }
     }
@@ -1844,6 +1845,99 @@ async fn transition_cmd(
         ));
     }
     ExitCode::Success
+}
+
+/// One workflow step for every issue in the list, in one request.
+async fn bulk_transition(
+    client: &crate::api::Client,
+    keys: &[String],
+    transition: &str,
+    body: &serde_json::Value,
+    no_wait: bool,
+    session: &Session,
+) -> ExitCode {
+    let mut outcome = client.bulk_transition(keys, transition, body).await;
+    // The same second chance the single-issue path gets, resolved once against
+    // the first key: every issue in a bulk change takes the same step, so there
+    // is one id to find.
+    if outcome.is_err()
+        && let Some(first) = keys.first()
+        && let Some(found) = named_transition(client, first, transition).await
+    {
+        outcome = client.bulk_transition(keys, &found, body).await;
+    }
+
+    match outcome {
+        Ok(started) => awaited(client, started, no_wait, session).await,
+        Err(error) => {
+            let code = error.exit_code();
+            no_such_transition(&error, code)
+        }
+    }
+}
+
+/// Perform a transition, taking either a transition id or a target status.
+///
+/// Transition ids are defined per workflow — `close`, `closed` and
+/// `close_issue` are all real — while a status key is the same everywhere and
+/// is what a caller reading `status_key` already has. The direct attempt is
+/// made first, so the ordinary path is still one request; only after it fails
+/// is Tracker asked what this issue's workflow offers.
+///
+/// Returns the id that actually worked, which is what gets printed: a caller
+/// who asked by status should be told the id, so the next call can skip the
+/// second request.
+async fn transition_once(
+    client: &crate::api::Client,
+    key: &str,
+    wanted: &str,
+    body: &serde_json::Value,
+) -> Result<String, crate::api::error::ApiError> {
+    let first = match client.execute_transition(key, wanted, body).await {
+        Ok(()) => return Ok(wanted.to_owned()),
+        Err(error) => error,
+    };
+
+    let Some(found) = named_transition(client, key, wanted).await else {
+        return Err(first);
+    };
+    client.execute_transition(key, &found, body).await?;
+    Ok(found)
+}
+
+/// The id of the transition a caller meant, when what they gave was not one.
+///
+/// `None` when nothing matches, and also when the match is the string that was
+/// already tried: repeating a request that just failed would turn one refusal
+/// into two and change nothing.
+async fn named_transition(client: &crate::api::Client, key: &str, wanted: &str) -> Option<String> {
+    let transitions = client.transitions(key).await.ok()?;
+    let same = |value: Option<&str>| value.is_some_and(|value| value.eq_ignore_ascii_case(wanted));
+
+    let found = transitions.iter().find(|transition| {
+        same(Some(&transition.id))
+            || same(transition.to_key.as_deref())
+            || same(transition.to.as_deref())
+            || same(Some(&transition.name))
+    })?;
+
+    (found.id != wanted).then(|| found.id.clone())
+}
+
+/// Report a transition Tracker would not take, and say where the ids come from.
+///
+/// The list is a request away and the command that prints it is one word, so
+/// the hint names it rather than spending a request to inline it into an error.
+fn no_such_transition(error: &crate::api::error::ApiError, code: ExitCode) -> ExitCode {
+    let outcome = report(error, code);
+    let mut err = anstream::stderr();
+    let _ = writeln!(
+        err,
+        "`ytcli issue transition KEY` lists the transitions available from the status an issue \
+         is in; ids are defined per workflow, so a status key is only accepted when this \
+         workflow has a transition that reaches it"
+    );
+    outcome
 }
 
 /// Report a refused transition, and say how to supply what it wanted.

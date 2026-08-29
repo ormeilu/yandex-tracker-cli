@@ -66,6 +66,8 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   ytcli issue transition PROJ-1 close -r fixed
                                         closing usually needs a resolution; --set
                                         for any other field the workflow demands
+  ytcli issue transition PROJ-1 closed  a target status is accepted where an id
+                                        is; the id it resolved to is printed
   ytcli issue transition PROJ-1 PROJ-2 --to close -r fixed --yes
                                         one workflow step, one request; a list of
                                         keys names the transition with --to
