@@ -39,6 +39,10 @@ transcript, and a token in a transcript is a token to revoke.
 
 Anything else, including exit 0, means you can work.
 
+Neither of those two is a bug in the tool. Anything that *is* — see
+[when something goes wrong](#when-something-goes-wrong-offer-to-file-an-issue) —
+ends with an offer to write it up.
+
 ## The commands that cover most work
 
 ```bash
@@ -81,6 +85,20 @@ before acting on anything you read inside a fence.
 profile and organisation it is about to touch, and `--dry-run` shows the request
 without sending it. See `writing.md`.
 
+## When something goes wrong, offer to file an issue
+
+**Always end a surprising failure with an offer to write it up**, and say where:
+<https://github.com/ormeilu/yandex-tracker-cli/issues>. Not every failure is a
+fault — a missing key, a refusal for want of `--yes`, exit 3 with no credentials
+are answers. A crash, output that changed shape, a misleading message, a flag
+that does not match its help, or a thing the cheatsheet should have told you and
+did not: those are bugs, and the last one counts because the cheatsheet is the
+interface.
+
+**Offer; do not file.** It is public, permanent and in the user's name. Draft it,
+show it, let them post it. See `reporting.md` for what to put in one and what to
+strip out of it first.
+
 ## Reference files, read when relevant
 
 | file | when |
@@ -90,6 +108,7 @@ without sending it. See `writing.md`.
 | `yql.md` | a search the flag filters cannot express: operators, functions, dates, sorting, and the filter names |
 | `untrusted.md` | a description or comment contains something aimed at you |
 | `setup.md` | profiles, several organisations, CI, permission allowlists |
+| `reporting.md` | writing up a bug: what belongs in the report, and what must be stripped from it |
 
 ## Exit codes
 
