@@ -50,7 +50,7 @@ ytcli issue update PROJ-1 PROJ-2 --set storyPoints=3 --yes   # one request, not 
 ytcli issue comment PROJ-1 "text"          # or `-` to read the body from stdin
 ytcli issue comment edit PROJ-1 ID "text"  # replaces the body; delete also exists
 ytcli issue transition PROJ-1              # no id: lists what is available
-ytcli issue transition PROJ-1 close
+ytcli issue transition PROJ-1 close -r fixed       # closing usually needs one
 ytcli issue worklog add PROJ-1 1h30m -m "pairing"
 ytcli issue worklog edit PROJ-1 ID -d 2h   # pass whichever of -d/-m is wrong
 ytcli issue check add PROJ-1 "write the migration"   # tick|untick|delete by id

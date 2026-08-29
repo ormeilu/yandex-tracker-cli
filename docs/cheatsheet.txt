@@ -62,6 +62,9 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   ytcli issue comment edit PROJ-1 ID "text"   replaces the body; also: comment delete
   ytcli issue worklog edit PROJ-1 ID -d 2h    also: -m "text"; pass what is wrong
   ytcli issue transition PROJ-1         omit the id to list what is available
+  ytcli issue transition PROJ-1 close -r fixed
+                                        closing usually needs a resolution; --set
+                                        for any other field the workflow demands
   ytcli issue move PROJ-1 --to OPS --yes    the key changes and nothing undoes it;
                                         --keep-fields carries what OPS does not define
   ytcli issue worklogs PROJ-1           time logged, with the total

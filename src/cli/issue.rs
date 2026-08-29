@@ -140,6 +140,12 @@ pub enum IssueCommand {
         key: String,
         /// Transition id; omit to list what is available.
         transition: Option<String>,
+        /// Resolution to close with. `dict list --kind resolutions` lists them.
+        #[arg(long, short = 'r')]
+        resolution: Option<String>,
+        /// Any other field the transition needs: --set comment=text
+        #[arg(long = "set", value_name = "KEY=VALUE")]
+        set: Vec<String>,
     },
 }
 
@@ -341,8 +347,20 @@ pub async fn run(command: &IssueCommand, session: &Session) -> ExitCode {
                 ExitCode::ConfirmationRequired,
             ),
         },
-        IssueCommand::Transition { key, transition } => {
-            transition_cmd(key, transition.as_deref(), session).await
+        IssueCommand::Transition {
+            key,
+            transition,
+            resolution,
+            set,
+        } => {
+            transition_cmd(
+                key,
+                transition.as_deref(),
+                resolution.as_deref(),
+                set,
+                session,
+            )
+            .await
         }
         IssueCommand::Worklogs { key } => worklogs(key, session).await,
         IssueCommand::Checklist { key } => checklist(key, session).await,
@@ -1636,7 +1654,13 @@ async fn comment(target: &str, raw: &str, session: &Session) -> ExitCode {
 ///
 /// That is the common case for a caller who does not know the workflow, and it
 /// is a read: listing must not require the write gate.
-async fn transition_cmd(target: &str, transition: Option<&str>, session: &Session) -> ExitCode {
+async fn transition_cmd(
+    target: &str,
+    transition: Option<&str>,
+    resolution: Option<&str>,
+    set: &[String],
+    session: &Session,
+) -> ExitCode {
     let (client, key) = match session.client_for(target).await {
         Ok(pair) => pair,
         Err(code) => return code,
@@ -1660,7 +1684,23 @@ async fn transition_cmd(target: &str, transition: Option<&str>, session: &Sessio
         };
     };
 
-    let body = serde_json::json!({});
+    // A transition can require fields, and a workflow that closes an issue
+    // almost always requires a resolution. Without these the command could not
+    // reach half the statuses in an ordinary queue.
+    let mut fields = serde_json::Map::new();
+    if let Some(resolution) = resolution {
+        fields.insert("resolution".to_owned(), serde_json::json!(resolution));
+    }
+    for assignment in set {
+        match parse_assignment(assignment) {
+            Ok((field, value)) => {
+                fields.insert(field, value);
+            }
+            Err(error) => return report(&error, ExitCode::ConfirmationRequired),
+        }
+    }
+
+    let body = serde_json::Value::Object(fields);
     let targets = [key.to_owned()];
     let intent = Intent {
         action: &format!("move {key} through `{transition}`"),
@@ -1679,7 +1719,24 @@ async fn transition_cmd(target: &str, transition: Option<&str>, session: &Sessio
         }
         Err(error) => {
             let code = error.exit_code();
-            report(&error, code)
+            let wants_fields = body.as_object().is_some_and(serde_json::Map::is_empty)
+                && matches!(error, crate::api::error::ApiError::Rejected { .. });
+            let outcome = report(&error, code);
+
+            // Tracker names the fields it wanted, in the organisation's own
+            // language and by their display names — which are not what `--set`
+            // takes. Its sentence is passed through as written, and what is
+            // added after it is the part it cannot know: how to supply them
+            // here.
+            if wants_fields {
+                let mut err = anstream::stderr();
+                let _ = writeln!(
+                    err,
+                    "this transition wants fields: pass them with --resolution or --set key=value \
+                     (`ytcli dict list --kind resolutions` names the resolutions)"
+                );
+            }
+            outcome
         }
     }
 }

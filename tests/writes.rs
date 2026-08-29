@@ -204,6 +204,83 @@ async fn transition_with_an_id_executes_it() {
         .stdout(predicate::str::contains("PROJ-1 close"));
 }
 
+/// Closing an issue usually requires a resolution, and until this the command
+/// could not supply one — half the statuses in an ordinary queue were out of
+/// reach through this tool.
+#[tokio::test]
+async fn a_transition_carries_the_fields_it_is_given() {
+    let harness = Harness::new().await;
+    Mock::given(method("POST"))
+        .and(path("/v3/issues/PROJ-1/transitions/close/_execute"))
+        .and(body_json(serde_json::json!({
+            "resolution": "wontFix",
+            "comment": "not this quarter",
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+        .expect(1)
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&[
+            "issue",
+            "transition",
+            "PROJ-1",
+            "close",
+            "-r",
+            "wontFix",
+            "--set",
+            "comment=not this quarter",
+        ])
+        .assert()
+        .success();
+}
+
+/// Tracker names the fields it wanted in the organisation's language and by
+/// their display names, which are not what `--set` takes. Its words are kept;
+/// the way to act on them is added.
+#[tokio::test]
+async fn a_transition_refused_for_want_of_a_field_says_how_to_supply_one() {
+    let harness = Harness::new().await;
+    Mock::given(method("POST"))
+        .and(path("/v3/issues/PROJ-1/transitions/close/_execute"))
+        .respond_with(ResponseTemplate::new(422).set_body_json(serde_json::json!({
+            "errorMessages": ["Вы должны указать значения для полей Резолюция."],
+            "statusCode": 422,
+        })))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&["issue", "transition", "PROJ-1", "close"])
+        .assert()
+        .code(5)
+        .stderr(predicate::str::contains("Резолюция"))
+        .stderr(predicate::str::contains("--resolution"));
+}
+
+/// The hint is for the caller who passed nothing. One who did pass fields and
+/// was still refused is being told something else, and repeating the advice
+/// would bury it.
+#[tokio::test]
+async fn a_transition_that_was_given_fields_is_not_told_to_pass_fields() {
+    let harness = Harness::new().await;
+    Mock::given(method("POST"))
+        .and(path("/v3/issues/PROJ-1/transitions/close/_execute"))
+        .respond_with(ResponseTemplate::new(422).set_body_json(serde_json::json!({
+            "errorMessages": ["резолюция nope не существует."],
+            "statusCode": 422,
+        })))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&["issue", "transition", "PROJ-1", "close", "-r", "nope"])
+        .assert()
+        .code(5)
+        .stderr(predicate::str::contains("--resolution").not());
+}
+
 /// A create that timed out must not be retried: a duplicate issue is worse than
 /// a clear failure.
 #[tokio::test]

@@ -521,10 +521,19 @@ Move an issue through a workflow transition.
 ```
 ytcli issue transition PROJ-1
 ytcli issue transition PROJ-1 close
+ytcli issue transition PROJ-1 close --resolution fixed
+ytcli issue transition PROJ-1 close -r wontFix --set comment=\"not this quarter\"
 ```
 
 Without an id it lists what is available from the current status, which is the
-only reliable way to learn the ids: they are defined per workflow, not globally.";
+only reliable way to learn the ids: they are defined per workflow, not globally.
+
+A transition can require fields, and closing usually requires a resolution:
+without one Tracker refuses with the names of the fields it wanted, in the
+organisation's own language. `--resolution` is the one everybody needs;
+`--set key=value` covers the rest, and takes field keys the way `issue update`
+does — `ytcli dict list --kind resolutions` names the resolutions, and
+`ytcli queue fields PROJ` the rest.";
 
 pub const QUEUE_LIST: &str = "\
 List the queues this profile can see.
