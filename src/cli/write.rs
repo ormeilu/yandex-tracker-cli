@@ -87,13 +87,35 @@ pub fn check(intent: &Intent<'_>, session: &Session) -> Gate {
     Gate::Proceed
 }
 
-/// Parse a `key=value` pair from `--set`.
+/// Parse a `key=value` or `key:=json` pair from `--set`.
 ///
-/// The value is read as JSON when it parses as one, so `--set storyPoints=3`
-/// sends a number and `--set tags=["a","b"]` sends an array; anything else is a
-/// string. Guessing from the queue's field metadata instead would cost a request
-/// on every update to answer a question the caller already knows.
+/// `key=value` guesses: the value is read as JSON when it parses as one, so
+/// `--set storyPoints=3` sends a number and `--set tags=["a","b"]` sends an
+/// array, and anything else is a string. Guessing from the queue's field
+/// metadata instead would cost a request on every update to answer a question
+/// the caller already knows.
+///
+/// The cost of the guess is that a summary which happens to look like a number
+/// becomes one. `key:=json` is the way to say what was meant: the value is JSON
+/// and only JSON, so `--set 'summary:="3"'` writes the string and invalid JSON
+/// is a refusal rather than a silent fall back to text.
 pub fn parse_assignment(raw: &str) -> Result<(String, serde_json::Value), String> {
+    // `:=` only counts when it comes first: `--set summary=a:=b` is a value
+    // containing a colon, not a JSON assignment with an odd key.
+    if let Some((key, value)) = raw.split_once(":=")
+        && !key.contains('=')
+    {
+        if key.is_empty() {
+            return Err(format!("empty field name in `{raw}`"));
+        }
+        return match serde_json::from_str(value) {
+            Ok(parsed) => Ok((key.to_owned(), parsed)),
+            Err(error) => Err(format!(
+                "`{raw}` says JSON with `:=` and is not valid JSON: {error}"
+            )),
+        };
+    }
+
     let Some((key, value)) = raw.split_once('=') else {
         return Err(format!("expected key=value, got `{raw}`"));
     };
@@ -145,6 +167,36 @@ mod tests {
         assert_eq!(
             parse_assignment("summary=a=b"),
             Ok(("summary".to_owned(), serde_json::json!("a=b")))
+        );
+    }
+
+    /// The escape hatch from the guess: JSON, and only JSON.
+    #[test]
+    fn a_json_assignment_is_not_guessed_at() {
+        assert_eq!(
+            parse_assignment(r#"summary:="3""#),
+            Ok(("summary".to_owned(), serde_json::json!("3"))),
+            "a number-shaped summary must be writable as a string"
+        );
+        assert_eq!(
+            parse_assignment("storyPoints:=3"),
+            Ok(("storyPoints".to_owned(), serde_json::json!(3)))
+        );
+    }
+
+    /// Saying JSON and not writing JSON is a mistake worth naming, not
+    /// something to quietly turn back into text.
+    #[test]
+    fn invalid_json_after_the_colon_is_refused() {
+        assert!(parse_assignment("summary:=not json").is_err());
+    }
+
+    /// `:=` inside a value is part of the value.
+    #[test]
+    fn only_a_leading_colon_equals_means_json() {
+        assert_eq!(
+            parse_assignment("summary=a:=b"),
+            Ok(("summary".to_owned(), serde_json::json!("a:=b")))
         );
     }
 

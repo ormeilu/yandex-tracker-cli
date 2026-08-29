@@ -245,8 +245,11 @@ what was there — and takes `-` for stdin; `--description-file` reads it from a
 file instead.
 
 `--set` takes any field, custom ones included. A value that parses as JSON is
-sent as JSON, so `--set storyPoints=3` sends the number 3; quote it to mean the
-string. `ytcli queue fields PROJ` lists the keys.
+sent as JSON, so `--set storyPoints=3` sends the number 3. The cost of that
+guess is that a summary which happens to look like a number becomes one, so
+`key:=json` says it outright: `--set 'summary:=\"3\"'` writes the string, and
+invalid JSON after `:=` is refused rather than quietly becoming text.
+`ytcli queue fields PROJ` lists the keys.
 
 More than one issue needs `--yes`: one issue is the ordinary case, several is
 irreversible at scale.

@@ -56,6 +56,10 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
                                         file. Also on `issue update`, where it
                                         replaces the description in full
   ytcli issue update PROJ-1 --set storyPoints=3 --assignee login
+                                        a value that parses as JSON is sent as
+                                        JSON; `--set 'summary:="3"'` says JSON
+                                        outright, for a value the guess would
+                                        get wrong
   ytcli issue update PROJ-1 PROJ-2 --set storyPoints=3 --yes
                                         same change to several; --yes required.
                                         One request, checked whole before it
