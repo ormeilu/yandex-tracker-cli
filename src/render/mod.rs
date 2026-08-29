@@ -13,6 +13,7 @@
 //! a diff in review rather than as a surprise in someone's pipeline.
 
 pub mod board;
+pub mod bulk;
 pub mod dict;
 pub mod entity;
 pub mod image;

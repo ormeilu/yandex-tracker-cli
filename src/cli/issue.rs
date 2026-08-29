@@ -5,13 +5,15 @@
 //! the escape hatch widens what can be *read*, never what can be changed
 //! (`docs/adr/0001-security-model.md`).
 
+use std::io::Write as _;
+
 use clap::{Args, Subcommand};
 
 use crate::api::query::Filter;
 use crate::cli::write::{Gate, Intent, check, parse_assignment};
 use crate::cli::{Session, emit, report};
 use crate::exit::ExitCode;
-use crate::render::{Format, image, machine, text};
+use crate::render::{self, Format, image, machine, text};
 
 #[derive(Debug, Subcommand)]
 pub enum IssueCommand {
@@ -80,6 +82,10 @@ pub enum IssueCommand {
         /// Set any field, including custom ones: --set storyPoints=3
         #[arg(long = "set", value_name = "KEY=VALUE")]
         set: Vec<String>,
+        /// Hand the change to Tracker and print its id without waiting for it
+        /// to finish. Several issues only.
+        #[arg(long)]
+        no_wait: bool,
     },
     /// Add a comment, or edit and remove one. Every verb here writes.
     ///
@@ -313,7 +319,18 @@ pub async fn run(command: &IssueCommand, session: &Session) -> ExitCode {
             summary,
             assignee,
             set,
-        } => update(keys, summary.as_deref(), assignee.as_deref(), set, session).await,
+            no_wait,
+        } => {
+            update(
+                keys,
+                summary.as_deref(),
+                assignee.as_deref(),
+                set,
+                *no_wait,
+                session,
+            )
+            .await
+        }
         IssueCommand::Comment { command, key, text } => match (command, key, text) {
             (Some(command), _, _) => comment_write(command, session).await,
             (None, Some(key), Some(text)) => comment(key, text, session).await,
@@ -1383,6 +1400,7 @@ async fn update(
     summary: Option<&str>,
     assignee: Option<&str>,
     set: &[String],
+    no_wait: bool,
     session: &Session,
 ) -> ExitCode {
     let mut resolved = Vec::with_capacity(targets.len());
@@ -1418,25 +1436,128 @@ async fn update(
 
     let body = serde_json::Value::Object(body);
     let keys: Vec<String> = resolved.iter().map(|(_, key)| key.clone()).collect();
+
+    // A bulk change is one request to one organisation. Keys resolve per
+    // profile, so a list can straddle two of them, and that list has to go the
+    // slow way round.
+    let one_org = resolved.first().is_some_and(|(first, _)| {
+        resolved
+            .iter()
+            .all(|(client, _)| client.org() == first.org())
+    });
+    let bulk = keys.len() > 1 && one_org;
+
+    // What --dry-run prints has to be what would actually be sent, and the two
+    // paths do not send the same shape.
+    let request = if bulk {
+        serde_json::json!({ "issues": keys, "values": body })
+    } else {
+        body.clone()
+    };
     let intent = Intent {
         action: &format!("update {}", keys.join(", ")),
         targets: &keys,
-        body: &body,
+        body: &request,
         always_confirm: false,
     };
     if let Gate::Stop(code) = check(&intent, session) {
         return code;
     }
 
-    // One at a time, and stopping at the first failure. Tracker has no bulk
-    // endpoint and rate-limits, and a run that carried on would leave the caller
-    // to work out which issues it got to before it stopped.
+    if bulk {
+        let Some((client, _)) = resolved.first() else {
+            return ExitCode::Success;
+        };
+        return bulk_update(client, &keys, &body, no_wait, session).await;
+    }
+
+    // One issue, or several that no single request can cover. Stopping at the
+    // first failure: a run that carried on would leave the caller to work out
+    // which issues it got to before it stopped.
+    let mut done = 0_u64;
     for (client, key) in &resolved {
         match client.update_issue(key, &body).await {
-            Ok(issue) => emit(&text::issue_selected(
-                &issue,
-                &["status".to_owned(), "assignee".to_owned()],
-            )),
+            Ok(issue) => {
+                done += 1;
+                emit(&text::issue_selected(
+                    &issue,
+                    &["status".to_owned(), "assignee".to_owned()],
+                ));
+            }
+            Err(error) => {
+                let code = error.exit_code();
+                // The tally first: how far it got is the part that decides what
+                // the caller has to do next.
+                if keys.len() > 1 {
+                    emit(&render::bulk::changed(
+                        done,
+                        keys.len() as u64,
+                        &session.render,
+                    ));
+                }
+                return report(&error, code);
+            }
+        }
+    }
+
+    if keys.len() > 1 {
+        emit(&render::bulk::changed(
+            done,
+            keys.len() as u64,
+            &session.render,
+        ));
+    }
+    ExitCode::Success
+}
+
+/// How long to wait for Tracker to finish a bulk change before saying so.
+///
+/// Long enough that an ordinary change is simply done when the command returns,
+/// and short enough that a caller is not held indefinitely by work that is
+/// Tracker's to finish either way. Past it the id is the answer.
+const BULK_WAIT: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// Every issue in one request, and the answer polled until it is one.
+///
+/// Tracker validates the whole list before it writes anything: an unknown key
+/// is a refusal naming it, rather than half the change applied and an error.
+async fn bulk_update(
+    client: &crate::api::Client,
+    keys: &[String],
+    values: &serde_json::Value,
+    no_wait: bool,
+    session: &Session,
+) -> ExitCode {
+    let started = match client.bulk_update(keys, values).await {
+        Ok(change) => change,
+        Err(error) => {
+            let code = error.exit_code();
+            return report(&error, code);
+        }
+    };
+
+    if no_wait {
+        // Accepted, which is what was asked for and all that is being claimed.
+        emit(&render::bulk::change(&started, &session.render));
+        return ExitCode::Success;
+    }
+
+    let mut change = started;
+    let deadline = std::time::Instant::now() + BULK_WAIT;
+    while !change.finished() {
+        if std::time::Instant::now() >= deadline {
+            emit(&render::bulk::change(&change, &session.render));
+            return report(
+                &format!(
+                    "Tracker is still working on it; ask again with `ytcli bulk status {}`",
+                    change.id
+                ),
+                ExitCode::Failure,
+            );
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        match client.bulk_change(&change.id).await {
+            Ok(next) => change = next,
             Err(error) => {
                 let code = error.exit_code();
                 return report(&error, code);
@@ -1444,7 +1565,35 @@ async fn update(
         }
     }
 
-    ExitCode::Success
+    finished(client, &change, session).await
+}
+
+/// Report a bulk change that Tracker has finished with.
+///
+/// The per-issue listing costs a request, so it is only asked for when the
+/// counts leave something unexplained. A change where everything worked is one
+/// line, which is the whole point.
+async fn finished(
+    client: &crate::api::Client,
+    change: &crate::api::BulkChange,
+    session: &Session,
+) -> ExitCode {
+    emit(&render::bulk::change(change, &session.render));
+
+    if change.succeeded() {
+        return ExitCode::Success;
+    }
+
+    match client.bulk_change_issues(&change.id).await {
+        Ok(outcomes) => emit(&render::bulk::failures(&outcomes, &session.render)),
+        Err(error) => {
+            // The change itself was reported; failing to explain it further is
+            // not a reason to lose the part that was already answered.
+            let mut err = anstream::stderr();
+            let _ = writeln!(err, "could not read which issues failed: {error}");
+        }
+    }
+    ExitCode::ApiRejected
 }
 
 async fn comment(target: &str, raw: &str, session: &Session) -> ExitCode {

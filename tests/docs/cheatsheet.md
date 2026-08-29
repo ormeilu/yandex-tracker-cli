@@ -201,6 +201,13 @@ shown 2 of 2 for PROJ
 ```
 
 ```console
+$ ytcli bulk status 6a92d90773c59502bc8e028a
+→ profile=test org=12345 (from YTCLI_PROFILE)
+changed 2 of 2  bulkchange 6a92d90773c59502bc8e028a
+
+```
+
+```console
 $ ytcli queue access PROJ
 → profile=test org=12345 (from YTCLI_PROFILE)
 permissions

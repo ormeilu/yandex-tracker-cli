@@ -75,6 +75,12 @@ pub struct Client {
     http: reqwest::Client,
     base_url: String,
     retries: usize,
+    /// Which organisation this client talks to.
+    ///
+    /// The headers carry it already, but nothing can read them back, and one
+    /// command can hold two clients: keys resolve per profile, and two profiles
+    /// can be two organisations. A bulk change is one request to one of them.
+    org: String,
 }
 
 impl Client {
@@ -106,7 +112,14 @@ impl Client {
             http,
             base_url: config.base_url.trim_end_matches('/').to_owned(),
             retries: config.retries,
+            org: config.org_id.clone(),
         })
+    }
+
+    /// The organisation id this client was built for.
+    #[must_use]
+    pub fn org(&self) -> &str {
+        &self.org
     }
 
     /// `GET /v3/myself` — the cheapest call that proves the whole chain works:
@@ -961,6 +974,57 @@ impl Client {
             you,
             unreadable,
         })
+    }
+
+    /// `POST /v3/bulkchange/_update` — change many issues in one request.
+    ///
+    /// Tracker requires the keys: a query is refused with
+    /// `issues: Требуется параметр`, so what this touches is exactly what the
+    /// caller named and the confirmation that names them is the whole story.
+    /// Unknown keys are refused before anything is written, naming them — which
+    /// is better than the issue-at-a-time path, where the first few have already
+    /// been changed by the time a later one turns out not to exist.
+    ///
+    /// The answer is an operation to poll, not a result: see [`Self::bulk_change`].
+    pub async fn bulk_update(
+        &self,
+        keys: &[String],
+        values: &Value,
+    ) -> Result<BulkChange, ApiError> {
+        let body = serde_json::json!({ "issues": keys, "values": values });
+        let (value, _) = self
+            .post_value("/v3/bulkchange/_update", &body, "bulk change")
+            .await?;
+        BulkChange::parse(&value).ok_or_else(|| ApiError::NotFound("bulk change".to_owned()))
+    }
+
+    /// `GET /v3/bulkchange/{id}` — how far a bulk change got.
+    pub async fn bulk_change(&self, id: &str) -> Result<BulkChange, ApiError> {
+        let value = self
+            .get_value(
+                &format!("/v3/bulkchange/{id}"),
+                &format!("bulk change {id}"),
+            )
+            .await?;
+        BulkChange::parse(&value).ok_or_else(|| ApiError::NotFound(format!("bulk change {id}")))
+    }
+
+    /// `GET /v3/bulkchange/{id}/issues` — what happened to each issue.
+    ///
+    /// Only worth a request when the counts do not already say everything: the
+    /// point of a bulk change is one request instead of fifty, and printing a
+    /// line per issue that succeeded would spend the saving on the output.
+    pub async fn bulk_change_issues(&self, id: &str) -> Result<Vec<BulkOutcome>, ApiError> {
+        let raw = self
+            .get_value(
+                &format!("/v3/bulkchange/{id}/issues"),
+                &format!("bulk change {id}"),
+            )
+            .await?;
+        Ok(raw
+            .as_array()
+            .map(|entries| entries.iter().filter_map(BulkOutcome::parse).collect())
+            .unwrap_or_default())
     }
 
     /// One of the four organisation-wide dictionaries.
@@ -1851,6 +1915,100 @@ pub struct LinkType {
     pub inward: Option<String>,
 }
 
+impl BulkChange {
+    /// Whether Tracker is done with it, one way or the other.
+    #[must_use]
+    pub fn finished(&self) -> bool {
+        matches!(self.status.as_str(), "COMPLETE" | "FAILED")
+    }
+
+    /// Whether every issue it was given actually changed.
+    ///
+    /// `COMPLETE` alone does not say this: a change can finish having changed
+    /// nothing, and that must not exit zero.
+    #[must_use]
+    pub fn succeeded(&self) -> bool {
+        self.status == "COMPLETE" && self.done.is_some() && self.done == self.total
+    }
+
+    fn parse(value: &Value) -> Option<Self> {
+        Some(Self {
+            id: value.get("id").and_then(Value::as_str)?.to_owned(),
+            status: value
+                .get("status")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            status_text: value
+                .get("statusText")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            total: value.get("totalIssues").and_then(Value::as_u64),
+            done: value.get("totalCompletedIssues").and_then(Value::as_u64),
+        })
+    }
+}
+
+impl BulkOutcome {
+    fn parse(value: &Value) -> Option<Self> {
+        Some(Self {
+            key: value
+                .get("issue")
+                .and_then(|issue| issue.get("key"))
+                .and_then(Value::as_str)?
+                .to_owned(),
+            status: value
+                .get("status")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            error: value.get("error").and_then(field_errors),
+        })
+    }
+}
+
+/// Tracker's per-field complaints, joined into one sentence.
+///
+/// The shape is the same envelope every rejection uses — `errors` keyed by
+/// field, `errorMessages` for the rest — and both halves are passed through as
+/// written. A message about somebody's field is theirs, not ours to reword.
+fn field_errors(error: &Value) -> Option<String> {
+    let mut parts: Vec<String> = error
+        .get("errors")
+        .and_then(Value::as_object)
+        .map(|fields| {
+            fields
+                .iter()
+                .filter_map(|(field, message)| {
+                    message
+                        .as_str()
+                        .map(|message| format!("{field}: {message}"))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    parts.extend(
+        error
+            .get("errorMessages")
+            .and_then(Value::as_array)
+            .map(|messages| {
+                messages
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(ToOwned::to_owned)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default(),
+    );
+
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("; "))
+    }
+}
+
 impl Permission {
     /// Every operation in the answer, in a fixed order.
     ///
@@ -1995,6 +2153,31 @@ pub struct Automation {
     /// sections out of three is a useful answer, and failing the whole command
     /// because of the third would throw them away.
     pub unreadable: Vec<Unreadable>,
+}
+
+/// A change to many issues at once, which Tracker performs in the background.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct BulkChange {
+    pub id: String,
+    /// `CREATED`, `COMPLETE`, `FAILED` are the ones this has seen. Anything else
+    /// is treated as still running rather than as an outcome, because guessing
+    /// which way an unknown status went is the one thing worth not doing here.
+    pub status: String,
+    /// Tracker's own sentence, in the organisation's language.
+    pub status_text: String,
+    /// How many issues the change is about, once Tracker has counted them.
+    pub total: Option<u64>,
+    /// How many of them it finished. The tally a bulk change ends with.
+    pub done: Option<u64>,
+}
+
+/// What happened to one issue in a bulk change.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct BulkOutcome {
+    pub key: String,
+    pub status: String,
+    /// Tracker's own words about why this one did not change.
+    pub error: Option<String>,
 }
 
 /// Who may do what in a queue: the rules, and the people they come out as.

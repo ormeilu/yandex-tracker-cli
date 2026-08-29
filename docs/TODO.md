@@ -79,6 +79,11 @@ Labels split the work by area: `area:issues`, `area:entities`,
   rule, roles and all, and the people that rule resolves to. Only the second can
   say whether the caller is one of them, and it says `?` rather than `no` when
   the token could not name its own user.
+  `issue update` over several issues is one request rather than one each, which
+  turned out to be the safer shape as well as the cheaper one: Tracker validates
+  the whole list before it writes, so an unknown key refuses the change instead
+  of leaving half of it applied. It answers `changed N of M` and names every
+  issue that did not change; `ytcli bulk status` reads the result back later.
 - `ytcli issue list` as an alias of `issue find`: every other group lists with
   that word, and the group used most was the one exception.
 - Profile routing: a bare key goes to the profile that can see its queue, and

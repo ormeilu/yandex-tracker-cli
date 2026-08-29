@@ -45,6 +45,10 @@ async fn tracker_answers(harness: &Harness) {
         ("/v3/queues/PROJ/permissions", "queue_permissions.json"),
         ("/v3/queues/PROJ/access", "queue_access.json"),
         ("/v3/myself", "user.json"),
+        (
+            "/v3/bulkchange/6a92d90773c59502bc8e028a",
+            "bulkchange_complete.json",
+        ),
         ("/v3/queues/PROJ/localFields", "queue_local_fields.json"),
         ("/v3/sprints", "all_sprints.json"),
         ("/v3/queues/PROJ/autoactions", "queue_autoactions.json"),

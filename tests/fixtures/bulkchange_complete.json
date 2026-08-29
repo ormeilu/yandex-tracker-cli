@@ -1,0 +1,12 @@
+{
+  "id": "6a92d90773c59502bc8e028a",
+  "self": "https://api.tracker.yandex.net/v3/bulkchange/6a92d90773c59502bc8e028a",
+  "createdBy": {"self": "https://api.tracker.yandex.net/v3/users/1120000000000001", "id": "1120000000000001", "display": "Ada Lovelace"},
+  "createdAt": "2026-08-29T13:05:11.596+0000",
+  "status": "COMPLETE",
+  "statusText": "Завершен",
+  "executionChunkPercent": 100,
+  "executionIssuePercent": 100,
+  "totalIssues": 2,
+  "totalCompletedIssues": 2
+}

@@ -21,11 +21,32 @@ ytcli issue update PROJ-1 --set storyPoints=3 --dry-run
 `--dry-run` prints the request body and sends nothing. Use it when the field
 name or the value type is a guess.
 
+## Changing several issues
+
+```bash
+ytcli issue update PROJ-1 PROJ-2 PROJ-7 --set storyPoints=3 --yes
+```
+
+One request, not one per issue, and Tracker checks the whole list before it
+writes anything: a key that does not exist is refused, naming it, with nothing
+changed. There is no half-applied change to work out afterwards.
+
+The answer is `changed N of M` plus the id of the change, and — for anything
+that did not change — a line per issue with Tracker's own reason. Nothing is
+printed for the ones that worked; that is the saving.
+
+`--no-wait` returns as soon as Tracker has accepted it. Success then means
+accepted, not done, and `ytcli bulk status <id>` is how to find out which.
+
+Keys that resolve through two profiles in two organisations cannot be one
+request and go one at a time.
+
 ## The verbs
 
 ```bash
 ytcli issue create -q PROJ -s "Attachments are lost on move" -d "body text"
 ytcli issue update PROJ-1 --set storyPoints=3 --assignee login
+ytcli issue update PROJ-1 PROJ-2 --set storyPoints=3 --yes   # one request, not two
 ytcli issue comment PROJ-1 "text"          # or `-` to read the body from stdin
 ytcli issue comment edit PROJ-1 ID "text"  # replaces the body; delete also exists
 ytcli issue transition PROJ-1              # no id: lists what is available

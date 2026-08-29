@@ -52,7 +52,12 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   ytcli issue create -q PROJ -s "title" [-d text] [--assignee login]
   ytcli issue update PROJ-1 --set storyPoints=3 --assignee login
   ytcli issue update PROJ-1 PROJ-2 --set storyPoints=3 --yes
-                                        same change to several; --yes required
+                                        same change to several; --yes required.
+                                        One request, checked whole before it
+                                        writes, answered with `changed N of M`
+                                        and a reason per issue that did not.
+                                        --no-wait returns the id instead
+  ytcli bulk status ID                  how far a bulk change got; read-only
   ytcli issue comment PROJ-1 "text"     use - to read the body from stdin
   ytcli issue comment edit PROJ-1 ID "text"   replaces the body; also: comment delete
   ytcli issue worklog edit PROJ-1 ID -d 2h    also: -m "text"; pass what is wrong

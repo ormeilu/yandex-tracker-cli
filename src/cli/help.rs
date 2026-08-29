@@ -236,11 +236,42 @@ ytcli issue update PROJ-1 --set 'summary=\"3\"' --dry-run
 sent as JSON, so `--set storyPoints=3` sends the number 3; quote it to mean the
 string. `ytcli queue fields PROJ` lists the keys.
 
-Several keys get the same change, one request each, stopping at the first
-failure rather than leaving you to work out how far it got. More than one issue
-needs `--yes`: one issue is the ordinary case, several is irreversible at scale.
+More than one issue needs `--yes`: one issue is the ordinary case, several is
+irreversible at scale.
+
+Several keys are one request, not one each. Tracker checks the whole list before
+it writes anything — an unknown key is refused, naming it, with nothing changed —
+then applies the change in the background, and this waits for it. The answer is
+a tally, `changed N of M`, and a line per issue that did not change with
+Tracker's reason for each. The bulk change's id is printed either way; it is the
+only handle on the work afterwards.
+
+`--no-wait` prints that id and returns as soon as Tracker has accepted the
+change. Success then means accepted, not done — `ytcli bulk status <id>` is how
+you find out which.
+
+Keys that resolve through two profiles in two organisations cannot be one
+request, so those go one at a time, stopping at the first failure rather than
+leaving you to work out how far it got. The tally is the same either way.
 
 An update that would change nothing is refused rather than sent.";
+
+pub const BULK_STATUS: &str = "\
+Show how far a bulk change got.
+
+```
+ytcli bulk status 6a92d90773c59502bc8e028a
+```
+
+The id comes from `issue update` over several issues. This is the only way back
+to work Tracker is still doing, or finished after the command that started it
+had returned.
+
+`changed N of M`, and — once it has finished with something left unchanged — a
+line per issue with Tracker's own reason.
+
+Read-only, and exits zero for having answered. A change that failed is still an
+answer; `issue update` is where that decides an exit code.";
 
 pub const ISSUE_COMMENT: &str = "\
 Add a comment.

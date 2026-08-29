@@ -65,9 +65,22 @@ fn setting(name: &str) -> Option<String> {
 /// set, which is how CI would run this if it ever did.
 fn client() -> Client {
     let (org, kind, account) = organisation();
-    let token = setting("YTCLI_TOKEN")
-        .or_else(|| account.and_then(|account| ytcli::secrets::token(&account).ok()))
-        .expect("no token: set YTCLI_TOKEN, or run `ytcli auth login`");
+    let from_account = || {
+        account
+            .as_deref()
+            .and_then(|account| ytcli::secrets::token(account).ok())
+    };
+
+    // Naming a profile means naming the identity that goes with it. Otherwise
+    // `YTCLI_TOKEN` — which is not per profile, and which this suite also reads
+    // out of `.env` — would be sent to somebody else's organisation, and a 401
+    // is the friendly version of what that could do.
+    let token = if setting("YTCLI_PROFILE").is_some() {
+        from_account().or_else(|| setting("YTCLI_TOKEN"))
+    } else {
+        setting("YTCLI_TOKEN").or_else(from_account)
+    }
+    .expect("no token: set YTCLI_TOKEN, or run `ytcli auth login`");
 
     Client::new(&ClientConfig::new(token, org, kind)).expect("client")
 }
@@ -85,8 +98,13 @@ fn organisation() -> (String, OrgKind, Option<String>) {
     let file = ytcli::config::paths::config_file().expect("config path");
     let config = ytcli::config::Config::load(&file).expect("config");
     let here = std::env::current_dir().expect("cwd");
+    // `YTCLI_PROFILE` has to be passed in: resolution does not read the
+    // environment on its own. Leaving it out silently ran this suite — writes
+    // included — against the default profile while it had been told another
+    // one, which is exactly the mistake every command's profile line exists to
+    // prevent.
     let resolved = config
-        .resolve(None, None, &here)
+        .resolve(None, setting("YTCLI_PROFILE").as_deref(), &here)
         .expect("no profile: set YTCLI_ORG_ID, or run `ytcli auth login`");
 
     (
@@ -484,6 +502,125 @@ async fn a_link_reads_the_same_way_from_both_ends() {
         .delete_link(&dependent.key, &one.id)
         .await
         .expect("unlink");
+}
+
+/// The tags an issue carries, straight from the payload.
+fn tags_of(raw: &serde_json::Value) -> Vec<String> {
+    raw.get("tags")
+        .and_then(serde_json::Value::as_array)
+        .map(|tags| {
+            tags.iter()
+                .filter_map(serde_json::Value::as_str)
+                .map(ToOwned::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// What a bulk change refuses, which is the half the safety of it rests on.
+///
+/// Neither call writes anything: both are refusals, and that is the point.
+/// Tracker requires the keys — a query is not accepted — so a bulk change
+/// touches exactly what the caller named and the confirmation that names them
+/// is the whole story. And a list containing one key that does not exist is
+/// refused entire, rather than applied up to the bad one.
+#[tokio::test]
+#[ignore = "needs real credentials"]
+async fn a_bulk_change_takes_keys_and_refuses_a_list_it_cannot_do_whole() {
+    let client = client();
+    let queue = a_queue(&client).await;
+    let page = client
+        .search(&format!("Queue: {queue}"), 1, 1)
+        .await
+        .expect("search");
+    let Some(issue) = page.items.first() else {
+        return;
+    };
+
+    // A key that cannot exist beside one that does. Refused, and nothing on the
+    // real one is touched — which is what the issue-at-a-time path cannot say.
+    let missing = format!("{queue}-99999999");
+    let error = client
+        .bulk_update(
+            &[issue.key.clone(), missing.clone()],
+            &serde_json::json!({"tags": {"add": ["ytcli-live-should-not-happen"]}}),
+        )
+        .await
+        .expect_err("a change naming an issue that does not exist was accepted");
+    assert!(
+        error.to_string().contains(&missing),
+        "the refusal does not name the key it refused: {error}"
+    );
+
+    // Read from the raw payload: `tags` is not a field the compact view keeps,
+    // and the question here is what Tracker holds, not what we render.
+    let (_, raw) = client.issue(&issue.key).await.expect("issue");
+    assert!(
+        !tags_of(&raw).contains(&"ytcli-live-should-not-happen".to_owned()),
+        "{}: a refused bulk change wrote a tag anyway",
+        issue.key
+    );
+}
+
+/// The whole round trip: one request, polled to an outcome, and a tally that
+/// matches what was asked for.
+///
+/// The two issues stay, as everything this suite creates does; the tag it adds
+/// is taken off again.
+#[tokio::test]
+#[ignore = "creates real issues; needs YTCLI_TEST_QUEUE"]
+async fn a_bulk_change_finishes_and_counts_what_it_changed() {
+    const TAG: &str = "ytcli-live-bulk";
+
+    let Some(queue) = setting("YTCLI_TEST_QUEUE") else {
+        return;
+    };
+    let client = client();
+
+    let mut keys = Vec::new();
+    for summary in [
+        "ytcli live test — bulk change, one of two",
+        "ytcli live test — bulk change, two of two",
+    ] {
+        let issue = client
+            .create_issue(&serde_json::json!({"queue": queue, "summary": summary}))
+            .await
+            .expect("create");
+        keys.push(issue.key);
+    }
+
+    let mut change = client
+        .bulk_update(&keys, &serde_json::json!({"tags": {"add": [TAG]}}))
+        .await
+        .expect("bulk update");
+
+    // Tracker answers with an operation, not a result. Waiting for it is what
+    // makes an exit code mean anything.
+    for _ in 0..60 {
+        if change.finished() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        change = client.bulk_change(&change.id).await.expect("bulk status");
+    }
+
+    assert!(change.finished(), "{} never finished", change.id);
+    assert_eq!(change.total, Some(keys.len() as u64), "{change:?}");
+    assert_eq!(change.done, change.total, "{change:?}");
+    assert!(change.succeeded(), "{change:?}");
+
+    for key in &keys {
+        let (_, raw) = client.issue(key).await.expect("issue");
+        assert!(
+            tags_of(&raw).iter().any(|tag| tag == TAG),
+            "{key}: the change said it worked and the issue disagrees"
+        );
+    }
+
+    client
+        .bulk_update(&keys, &serde_json::json!({"tags": {"remove": [TAG]}}))
+        .await
+        .expect("undo");
 }
 
 /// Both link vocabularies, and the fact that they are two.

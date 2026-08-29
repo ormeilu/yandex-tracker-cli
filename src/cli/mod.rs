@@ -8,6 +8,7 @@
 pub mod attachment;
 pub mod auth;
 pub mod board;
+pub mod bulk;
 pub mod cheatsheet;
 pub mod component;
 pub mod dict;
@@ -125,6 +126,9 @@ pub enum Command {
     /// The kinds of link two issues can have.
     #[command(subcommand)]
     Link(link::LinkCommand),
+    /// Bulk changes Tracker is running, or has run.
+    #[command(subcommand)]
+    Bulk(bulk::BulkCommand),
     /// Components: the parts a queue splits its work by.
     #[command(subcommand)]
     Component(component::ComponentCommand),

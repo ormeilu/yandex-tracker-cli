@@ -1,0 +1,17 @@
+[
+  {
+    "issue": {"self": "https://api.tracker.yandex.net/v3/issues/PROJ-1", "id": "5f8e2c1a0f7ab45eca47cdc2", "key": "PROJ-1", "display": "Storage rework"},
+    "status": "COMPLETE",
+    "statusText": "Изменения выполнены"
+  },
+  {
+    "issue": {"self": "https://api.tracker.yandex.net/v3/issues/PROJ-2", "id": "5f8e2c1a0f7ab45eca47cdc3", "key": "PROJ-2", "display": "Billing"},
+    "status": "FAILED",
+    "statusText": "Изменения не выполнены",
+    "error": {
+      "errors": {"priority": "приоритет nonexistent не существует."},
+      "errorsData": {},
+      "errorMessages": []
+    }
+  }
+]

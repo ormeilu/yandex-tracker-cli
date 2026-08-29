@@ -254,20 +254,31 @@ async fn changing_several_issues_without_yes_exits_two_and_sends_nothing() {
     );
 }
 
+/// Several issues are one request, not one each, and the answer is a tally.
+///
+/// Tracker checks the whole list before it writes anything, which is the part
+/// the issue-at-a-time path could never offer: there is no half-applied change
+/// to reconstruct afterwards.
 #[tokio::test]
-async fn several_issues_with_yes_each_get_the_same_change() {
+async fn several_issues_with_yes_are_one_request_and_a_tally() {
     let harness = Harness::new().await;
-    for key in ["PROJ-1", "PROJ-4"] {
-        Mock::given(method("PATCH"))
-            .and(path(format!("/v3/issues/{key}")))
-            .and(body_json(serde_json::json!({"storyPoints": 3})))
-            .respond_with(ResponseTemplate::new(200).set_body_json(fixture("issue.json")))
-            .expect(1)
-            .mount(&harness.server)
-            .await;
-    }
+    Mock::given(method("POST"))
+        .and(path("/v3/bulkchange/_update"))
+        .and(body_json(serde_json::json!({
+            "issues": ["PROJ-1", "PROJ-4"],
+            "values": {"storyPoints": 3},
+        })))
+        .respond_with(ResponseTemplate::new(201).set_body_json(fixture("bulkchange_created.json")))
+        .expect(1)
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v3/bulkchange/6a92d90773c59502bc8e028a"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("bulkchange_complete.json")))
+        .mount(&harness.server)
+        .await;
 
-    harness
+    let output = harness
         .run(&[
             "issue",
             "update",
@@ -279,6 +290,159 @@ async fn several_issues_with_yes_each_get_the_same_change() {
         ])
         .assert()
         .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert!(stdout.contains("changed 2 of 2"), "{stdout}");
+    // The only handle on the work afterwards, so it is printed even when
+    // nothing went wrong.
+    assert!(
+        stdout.contains("bulkchange 6a92d90773c59502bc8e028a"),
+        "{stdout}"
+    );
+    // Nothing per issue: the saving is the point, and repeating the keys would
+    // spend it on the output.
+    assert!(!stdout.contains("PROJ-1"), "{stdout}");
+}
+
+/// A change that finished having changed nothing must not exit zero, and the
+/// per-issue reasons are worth the second request precisely then.
+#[tokio::test]
+async fn a_bulk_change_that_failed_names_each_issue_and_why() {
+    let harness = Harness::new().await;
+    Mock::given(method("POST"))
+        .and(path("/v3/bulkchange/_update"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(fixture("bulkchange_created.json")))
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v3/bulkchange/6a92d90773c59502bc8e028a"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("bulkchange_failed.json")))
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v3/bulkchange/6a92d9387d41a060a2b5e6d9/issues"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("bulkchange_issues.json")))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness
+        .run(&[
+            "issue",
+            "update",
+            "PROJ-1",
+            "PROJ-4",
+            "--set",
+            "priority=nonexistent",
+            "--yes",
+        ])
+        .assert()
+        .code(5);
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert!(stdout.contains("changed 1 of 2"), "{stdout}");
+    // Tracker's own words about the field, kept as written.
+    assert!(stdout.contains("priority: "), "{stdout}");
+    assert!(stdout.contains("PROJ-2"), "{stdout}");
+    // The one that worked stays in the tally rather than in a line of its own.
+    assert!(!stdout.contains("PROJ-1  "), "{stdout}");
+}
+
+/// An unknown key is refused before anything is written, and Tracker names it.
+///
+/// The issue-at-a-time path had already changed the earlier issues by the time
+/// it found out.
+#[tokio::test]
+async fn a_key_that_does_not_exist_stops_the_whole_change() {
+    let harness = Harness::new().await;
+    Mock::given(method("POST"))
+        .and(path("/v3/bulkchange/_update"))
+        .respond_with(ResponseTemplate::new(422).set_body_json(serde_json::json!({
+            "errors": {"issues": "задачи [PROJ-999] не существуют"},
+            "statusCode": 422,
+        })))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&[
+            "issue",
+            "update",
+            "PROJ-1",
+            "PROJ-999",
+            "--set",
+            "storyPoints=3",
+            "--yes",
+        ])
+        .assert()
+        .code(5)
+        .stderr(predicate::str::contains("PROJ-999"));
+}
+
+/// `--no-wait` claims only what happened: Tracker accepted it.
+#[tokio::test]
+async fn no_wait_returns_the_id_without_claiming_the_work_is_done() {
+    let harness = Harness::new().await;
+    Mock::given(method("POST"))
+        .and(path("/v3/bulkchange/_update"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(fixture("bulkchange_created.json")))
+        .expect(1)
+        .mount(&harness.server)
+        .await;
+
+    let output = harness
+        .run(&[
+            "issue",
+            "update",
+            "PROJ-1",
+            "PROJ-4",
+            "--set",
+            "storyPoints=3",
+            "--yes",
+            "--no-wait",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert!(
+        stdout.contains("bulkchange 6a92d90773c59502bc8e028a"),
+        "{stdout}"
+    );
+    // No tally is invented from the keys we sent: Tracker has not counted them.
+    assert!(!stdout.contains("changed 2 of 2"), "{stdout}");
+}
+
+/// Two organisations cannot be one request. The slow path stays, and says how
+/// far it got in the same words.
+#[tokio::test]
+async fn keys_in_two_organisations_go_one_at_a_time() {
+    let harness = Harness::new().await;
+    harness.add_profile("other", "98765");
+    for key in ["PROJ-1", "PROJ-4"] {
+        Mock::given(method("PATCH"))
+            .and(path(format!("/v3/issues/{key}")))
+            .and(body_json(serde_json::json!({"storyPoints": 3})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(fixture("issue.json")))
+            .expect(1)
+            .mount(&harness.server)
+            .await;
+    }
+
+    let output = harness
+        .run(&[
+            "issue",
+            "update",
+            "test/PROJ-1",
+            "other/PROJ-4",
+            "--set",
+            "storyPoints=3",
+            "--yes",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert!(stdout.contains("changed 2 of 2"), "{stdout}");
 }
 
 /// A dry run names every target, which is the only way to check the set before
