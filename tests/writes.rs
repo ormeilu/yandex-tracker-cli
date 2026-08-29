@@ -686,3 +686,120 @@ async fn keep_fields_is_passed_through_to_tracker() {
         .assert()
         .success();
 }
+
+/// A workflow step applied to several issues is one request, with the fields the
+/// workflow demands carried into it.
+#[tokio::test]
+async fn several_issues_take_one_transition_in_one_request() {
+    let harness = Harness::new().await;
+    Mock::given(method("POST"))
+        .and(path("/v3/bulkchange/_transition"))
+        .and(body_json(serde_json::json!({
+            "issues": ["PROJ-1", "PROJ-4"],
+            "transition": "close",
+            "values": {"resolution": "fixed"},
+        })))
+        .respond_with(ResponseTemplate::new(201).set_body_json(fixture("bulkchange_created.json")))
+        .expect(1)
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v3/bulkchange/6a92d90773c59502bc8e028a"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("bulkchange_complete.json")))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness
+        .run(&[
+            "issue",
+            "transition",
+            "PROJ-1",
+            "PROJ-4",
+            "--to",
+            "close",
+            "-r",
+            "fixed",
+            "--yes",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert!(stdout.contains("changed 2 of 2"), "{stdout}");
+}
+
+/// With a list of keys there is nowhere unambiguous for a bare transition id, so
+/// the command says which flag names it rather than guessing which word is which.
+#[tokio::test]
+async fn several_issues_without_to_are_refused_and_send_nothing() {
+    let harness = Harness::new().await;
+
+    harness
+        .run(&["issue", "transition", "PROJ-1", "PROJ-4", "close", "--yes"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("--to"));
+
+    assert!(
+        harness
+            .server
+            .received_requests()
+            .await
+            .expect("recorded")
+            .is_empty()
+    );
+}
+
+/// Moving several issues is one request. `--yes` is still required for a single
+/// one: the key change is irreversible in kind, not merely at scale.
+#[tokio::test]
+async fn several_issues_move_in_one_request() {
+    let harness = Harness::new().await;
+    Mock::given(method("POST"))
+        .and(path("/v3/bulkchange/_move"))
+        .and(body_json(serde_json::json!({
+            "issues": ["PROJ-1", "PROJ-4"],
+            "queue": "OPS",
+            "moveAllFields": false,
+            "initialStatus": false,
+        })))
+        .respond_with(ResponseTemplate::new(201).set_body_json(fixture("bulkchange_created.json")))
+        .expect(1)
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/v3/bulkchange/6a92d90773c59502bc8e028a"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("bulkchange_complete.json")))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness
+        .run(&["issue", "move", "PROJ-1", "PROJ-4", "--to", "OPS", "--yes"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert!(stdout.contains("changed 2 of 2"), "{stdout}");
+}
+
+/// The confirmation for a move names every key it is about to change, because
+/// after the request none of them address the issue any more.
+#[tokio::test]
+async fn moving_several_issues_without_yes_names_all_of_them() {
+    let harness = Harness::new().await;
+
+    harness
+        .run(&["issue", "move", "PROJ-1", "PROJ-4", "--to", "OPS"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("PROJ-1, PROJ-4"));
+
+    assert!(
+        harness
+            .server
+            .received_requests()
+            .await
+            .expect("recorded")
+            .is_empty()
+    );
+}

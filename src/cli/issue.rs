@@ -121,8 +121,10 @@ pub enum IssueCommand {
     /// Move an issue to another queue. Its key changes, and nothing undoes it.
     #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_MOVE))]
     Move {
-        key: String,
-        /// Queue to move it into.
+        /// Issue keys. Several go in one request, to one queue.
+        #[arg(required = true)]
+        keys: Vec<String>,
+        /// Queue to move them into.
         #[arg(long, short = 't')]
         to: String,
         /// Carry over fields the target queue does not define. Without this,
@@ -133,19 +135,28 @@ pub enum IssueCommand {
         /// keeping the one it has.
         #[arg(long)]
         initial_status: bool,
+        /// Return the bulk change id instead of waiting for Tracker to finish.
+        #[arg(long)]
+        no_wait: bool,
     },
     /// Move an issue through a workflow transition.
     #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_TRANSITION))]
     Transition {
-        key: String,
-        /// Transition id; omit to list what is available.
-        transition: Option<String>,
+        /// One issue key, or a key and a transition id; several keys need --to.
+        #[arg(required = true)]
+        keys: Vec<String>,
+        /// Transition id. Required when naming more than one issue.
+        #[arg(long, short = 't')]
+        to: Option<String>,
         /// Resolution to close with. `dict list --kind resolutions` lists them.
         #[arg(long, short = 'r')]
         resolution: Option<String>,
         /// Any other field the transition needs: --set comment=text
         #[arg(long = "set", value_name = "KEY=VALUE")]
         set: Vec<String>,
+        /// Return the bulk change id instead of waiting for Tracker to finish.
+        #[arg(long)]
+        no_wait: bool,
     },
 }
 
@@ -298,11 +309,12 @@ pub async fn run(command: &IssueCommand, session: &Session) -> ExitCode {
         IssueCommand::Comments { key } => comments(key, session).await,
         IssueCommand::Changelog { key, limit } => changelog(key, *limit, session).await,
         IssueCommand::Move {
-            key,
+            keys,
             to,
             keep_fields,
             initial_status,
-        } => move_issue(key, to, *keep_fields, *initial_status, session).await,
+            no_wait,
+        } => move_issues(keys, to, *keep_fields, *initial_status, *no_wait, session).await,
         IssueCommand::Create {
             queue,
             summary,
@@ -348,16 +360,18 @@ pub async fn run(command: &IssueCommand, session: &Session) -> ExitCode {
             ),
         },
         IssueCommand::Transition {
-            key,
-            transition,
+            keys,
+            to,
             resolution,
             set,
+            no_wait,
         } => {
             transition_cmd(
-                key,
-                transition.as_deref(),
+                keys,
+                to.as_deref(),
                 resolution.as_deref(),
                 set,
+                *no_wait,
                 session,
             )
             .await
@@ -1554,6 +1568,19 @@ async fn bulk_update(
         }
     };
 
+    awaited(client, started, no_wait, session).await
+}
+
+/// Poll a bulk change to its end, and report it.
+///
+/// Shared by every command that can start one: what a caller is owed after
+/// `_update`, `_transition` and `_move` is the same tally and the same id.
+async fn awaited(
+    client: &crate::api::Client,
+    started: crate::api::BulkChange,
+    no_wait: bool,
+    session: &Session,
+) -> ExitCode {
     if no_wait {
         // Accepted, which is what was asked for and all that is being claimed.
         emit(&render::bulk::change(&started, &session.render));
@@ -1649,38 +1676,88 @@ async fn comment(target: &str, raw: &str, session: &Session) -> ExitCode {
         }
     }
 }
+/// Resolve every target, and say whether one request could cover them all.
+///
+/// A bulk change is one request to one organisation, so a list that straddles
+/// two profiles has to go the slow way round whatever the endpoint offers.
+async fn resolve_all(
+    targets: &[String],
+    session: &Session,
+) -> Result<(Vec<(crate::api::Client, String)>, bool), ExitCode> {
+    let mut resolved = Vec::with_capacity(targets.len());
+    for target in targets {
+        match session.client_for(target).await {
+            Ok(pair) => resolved.push(pair),
+            Err(code) => return Err(code),
+        }
+    }
+
+    let one_org = resolved.first().is_some_and(|(first, _)| {
+        resolved
+            .iter()
+            .all(|(client, _)| client.org() == first.org())
+    });
+    Ok((resolved, one_org))
+}
 
 /// With no transition named, list what is available.
 ///
 /// That is the common case for a caller who does not know the workflow, and it
 /// is a read: listing must not require the write gate.
-async fn transition_cmd(
-    target: &str,
-    transition: Option<&str>,
-    resolution: Option<&str>,
-    set: &[String],
-    session: &Session,
-) -> ExitCode {
+async fn transitions_of(target: &str, session: &Session) -> ExitCode {
     let (client, key) = match session.client_for(target).await {
         Ok(pair) => pair,
         Err(code) => return code,
     };
-    let key = key.as_str();
+
+    match client.transitions(&key).await {
+        Ok(transitions) => {
+            let rendered = match session.render.format {
+                Format::Text => Ok(text::transitions(&key, &transitions)),
+                Format::JsonRaw => machine(&transitions, Format::Json),
+                other => machine(&transitions, other),
+            };
+            finish(rendered)
+        }
+        Err(error) => {
+            let code = error.exit_code();
+            report(&error, code)
+        }
+    }
+}
+
+/// Move issues through one workflow transition.
+///
+/// Unlike a move, this is reversible in kind — a workflow that got somewhere
+/// can usually get back — so a list of keys is gated the ordinary way: `--yes`
+/// for more than one, nothing for a single issue.
+async fn transition_cmd(
+    targets: &[String],
+    to: Option<&str>,
+    resolution: Option<&str>,
+    set: &[String],
+    no_wait: bool,
+    session: &Session,
+) -> ExitCode {
+    // One command, two shapes. `transition PROJ-1 close` reads naturally and is
+    // what the documentation has always shown; a list of keys leaves no
+    // unambiguous place for the transition, so it is named with --to.
+    let (targets, transition) = match (to, targets) {
+        (Some(to), keys) => (keys, Some(to.to_owned())),
+        (None, [key]) => (std::slice::from_ref(key), None),
+        (None, [key, id]) => (std::slice::from_ref(key), Some(id.clone())),
+        (None, _) => {
+            return report(
+                &"naming several issues needs --to TRANSITION: ytcli issue transition A-1 A-2 --to close --yes",
+                ExitCode::ConfirmationRequired,
+            );
+        }
+    };
 
     let Some(transition) = transition else {
-        return match client.transitions(key).await {
-            Ok(transitions) => {
-                let rendered = match session.render.format {
-                    Format::Text => Ok(text::transitions(key, &transitions)),
-                    Format::JsonRaw => machine(&transitions, Format::Json),
-                    other => machine(&transitions, other),
-                };
-                finish(rendered)
-            }
-            Err(error) => {
-                let code = error.exit_code();
-                report(&error, code)
-            }
+        return match targets.first() {
+            Some(target) => transitions_of(target, session).await,
+            None => ExitCode::Success,
         };
     };
 
@@ -1699,98 +1776,192 @@ async fn transition_cmd(
             Err(error) => return report(&error, ExitCode::ConfirmationRequired),
         }
     }
-
     let body = serde_json::Value::Object(fields);
-    let targets = [key.to_owned()];
+
+    let (resolved, one_org) = match resolve_all(targets, session).await {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let keys: Vec<String> = resolved.iter().map(|(_, key)| key.clone()).collect();
+    let bulk = keys.len() > 1 && one_org;
+
+    // What --dry-run prints has to be what would actually be sent, and the two
+    // paths do not send the same shape.
+    let request = if bulk {
+        serde_json::json!({ "issues": keys, "transition": transition, "values": body })
+    } else {
+        body.clone()
+    };
     let intent = Intent {
-        action: &format!("move {key} through `{transition}`"),
-        targets: &targets,
-        body: &body,
+        action: &format!("move {} through `{transition}`", keys.join(", ")),
+        targets: &keys,
+        body: &request,
         always_confirm: false,
     };
     if let Gate::Stop(code) = check(&intent, session) {
         return code;
     }
 
-    match client.execute_transition(key, transition, &body).await {
-        Ok(()) => {
-            emit(&format!("{key} {transition}\n"));
-            ExitCode::Success
-        }
-        Err(error) => {
-            let code = error.exit_code();
-            let wants_fields = body.as_object().is_some_and(serde_json::Map::is_empty)
-                && matches!(error, crate::api::error::ApiError::Rejected { .. });
-            let outcome = report(&error, code);
-
-            // Tracker names the fields it wanted, in the organisation's own
-            // language and by their display names — which are not what `--set`
-            // takes. Its sentence is passed through as written, and what is
-            // added after it is the part it cannot know: how to supply them
-            // here.
-            if wants_fields {
-                let mut err = anstream::stderr();
-                let _ = writeln!(
-                    err,
-                    "this transition wants fields: pass them with --resolution or --set key=value \
-                     (`ytcli dict list --kind resolutions` names the resolutions)"
-                );
+    if bulk {
+        let Some((client, _)) = resolved.first() else {
+            return ExitCode::Success;
+        };
+        return match client.bulk_transition(&keys, &transition, &body).await {
+            Ok(started) => awaited(client, started, no_wait, session).await,
+            Err(error) => {
+                let code = error.exit_code();
+                report(&error, code)
             }
-            outcome
+        };
+    }
+
+    let mut done = 0_u64;
+    for (client, key) in &resolved {
+        match client.execute_transition(key, &transition, &body).await {
+            Ok(()) => {
+                done += 1;
+                emit(&format!("{key} {transition}\n"));
+            }
+            Err(error) => {
+                let code = error.exit_code();
+                if keys.len() > 1 {
+                    emit(&render::bulk::changed(
+                        done,
+                        keys.len() as u64,
+                        &session.render,
+                    ));
+                }
+                return rejected_for_fields(&error, &body, code);
+            }
         }
     }
+
+    if keys.len() > 1 {
+        emit(&render::bulk::changed(
+            done,
+            keys.len() as u64,
+            &session.render,
+        ));
+    }
+    ExitCode::Success
 }
 
-/// Send an issue to another queue.
+/// Report a refused transition, and say how to supply what it wanted.
 ///
-/// Gated with `always_confirm` rather than the ordinary single-issue path: the
-/// key changes, every reference to the old one is left pointing at a redirect,
-/// and no request puts it back. That is irreversible in kind, like claiming a
-/// queue key, not merely at scale.
-async fn move_issue(
-    target: &str,
+/// Tracker names the fields it wanted, in the organisation's own language and by
+/// their display names — which are not what `--set` takes. Its sentence is
+/// passed through as written, and what is added after it is the part it cannot
+/// know: how to supply them here.
+fn rejected_for_fields(
+    error: &crate::api::error::ApiError,
+    body: &serde_json::Value,
+    code: ExitCode,
+) -> ExitCode {
+    let wants_fields = body.as_object().is_some_and(serde_json::Map::is_empty)
+        && matches!(error, crate::api::error::ApiError::Rejected { .. });
+    let outcome = report(error, code);
+
+    if wants_fields {
+        let mut err = anstream::stderr();
+        let _ = writeln!(
+            err,
+            "this transition wants fields: pass them with --resolution or --set key=value \
+             (`ytcli dict list --kind resolutions` names the resolutions)"
+        );
+    }
+    outcome
+}
+
+/// Send issues to another queue.
+///
+/// Gated with `always_confirm` rather than the ordinary write gate: the key
+/// changes, every reference to the old one is left pointing at a redirect, and
+/// no request puts it back. That is irreversible in kind, like claiming a queue
+/// key, not merely at scale — so a single issue asks for `--yes` too, and a list
+/// of them asks once for all of them after printing every key it will change.
+async fn move_issues(
+    targets: &[String],
     queue: &str,
     keep_fields: bool,
     initial_status: bool,
+    no_wait: bool,
     session: &Session,
 ) -> ExitCode {
-    let (client, key) = match session.client_for(target).await {
+    let (resolved, one_org) = match resolve_all(targets, session).await {
         Ok(pair) => pair,
         Err(code) => return code,
     };
-    let key = key.as_str();
+    let keys: Vec<String> = resolved.iter().map(|(_, key)| key.clone()).collect();
+    let bulk = keys.len() > 1 && one_org;
 
-    let body = serde_json::json!({
+    let mut request = serde_json::json!({
         "queue": queue,
         "moveAllFields": keep_fields,
         "initialStatus": initial_status,
     });
-    let targets = [key.to_owned()];
+    if bulk && let Some(object) = request.as_object_mut() {
+        object.insert("issues".to_owned(), serde_json::json!(keys));
+    }
     let intent = Intent {
-        action: &format!("move {key} to {queue}, changing its key"),
-        targets: &targets,
-        body: &body,
+        action: &format!("move {} to {queue}, changing the key", keys.join(", ")),
+        targets: &keys,
+        body: &request,
         always_confirm: true,
     };
     if let Gate::Stop(code) = check(&intent, session) {
         return code;
     }
 
-    match client
-        .move_issue(key, queue, keep_fields, initial_status)
-        .await
-    {
-        Ok(issue) => {
-            // The new key is the whole result: nothing else the caller holds
-            // still addresses this issue.
-            emit(&format!("{key} → {}\n", issue.key));
-            ExitCode::Success
-        }
-        Err(error) => {
-            let code = error.exit_code();
-            report(&error, code)
+    if bulk {
+        let Some((client, _)) = resolved.first() else {
+            return ExitCode::Success;
+        };
+        return match client
+            .bulk_move(&keys, queue, keep_fields, initial_status)
+            .await
+        {
+            Ok(started) => awaited(client, started, no_wait, session).await,
+            Err(error) => {
+                let code = error.exit_code();
+                report(&error, code)
+            }
+        };
+    }
+
+    let mut done = 0_u64;
+    for (client, key) in &resolved {
+        match client
+            .move_issue(key, queue, keep_fields, initial_status)
+            .await
+        {
+            Ok(issue) => {
+                done += 1;
+                // The new key is the whole result: nothing else the caller holds
+                // still addresses this issue.
+                emit(&format!("{key} → {}\n", issue.key));
+            }
+            Err(error) => {
+                let code = error.exit_code();
+                if keys.len() > 1 {
+                    emit(&render::bulk::changed(
+                        done,
+                        keys.len() as u64,
+                        &session.render,
+                    ));
+                }
+                return report(&error, code);
+            }
         }
     }
+
+    if keys.len() > 1 {
+        emit(&render::bulk::changed(
+            done,
+            keys.len() as u64,
+            &session.render,
+        ));
+    }
+    ExitCode::Success
 }
 
 #[cfg(test)]

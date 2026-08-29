@@ -501,6 +501,7 @@ Move an issue to another queue.
 ytcli issue move PROJ-1 --to OPS --yes
 ytcli issue move PROJ-1 --to OPS --keep-fields --yes
 ytcli issue move PROJ-1 --to OPS --dry-run
+ytcli issue move PROJ-1 PROJ-2 --to OPS --yes
 ```
 
 **The key changes.** `PROJ-1` becomes `OPS-N`, every link and every note that
@@ -513,7 +514,14 @@ them across instead. `--initial-status` restarts the issue at the beginning of
 the target queue's workflow rather than keeping the status it has, which
 matters when the two workflows do not share one.
 
-The new key is printed, and is the only thing that still addresses the issue.";
+The new key is printed, and is the only thing that still addresses the issue.
+
+Several issues go in one request, and the confirmation names every one of them
+before anything moves. The answer is then a tally — `changed N of M` — and the
+id of the change, with a reason for each issue that did not move; `--no-wait`
+returns that id immediately instead of waiting. A list spanning two
+organisations cannot be one request, so it is moved one issue at a time and
+stops at the first failure.";
 
 pub const ISSUE_TRANSITION: &str = "\
 Move an issue through a workflow transition.
@@ -523,6 +531,7 @@ ytcli issue transition PROJ-1
 ytcli issue transition PROJ-1 close
 ytcli issue transition PROJ-1 close --resolution fixed
 ytcli issue transition PROJ-1 close -r wontFix --set comment=\"not this quarter\"
+ytcli issue transition PROJ-1 PROJ-2 --to close -r fixed --yes
 ```
 
 Without an id it lists what is available from the current status, which is the
@@ -533,7 +542,14 @@ without one Tracker refuses with the names of the fields it wanted, in the
 organisation's own language. `--resolution` is the one everybody needs;
 `--set key=value` covers the rest, and takes field keys the way `issue update`
 does — `ytcli dict list --kind resolutions` names the resolutions, and
-`ytcli queue fields PROJ` the rest.";
+`ytcli queue fields PROJ` the rest.
+
+More than one issue takes the same workflow step in one request, and needs
+`--yes` and `--to`: with a list of keys there is no unambiguous place left for a
+bare transition id. The answer is `changed N of M` plus the id of the change,
+and a reason for every issue whose workflow refused the step — an issue that was
+not in a status the transition starts from is one of them, so a partial tally
+here is ordinary rather than a fault.";
 
 pub const QUEUE_LIST: &str = "\
 List the queues this profile can see.

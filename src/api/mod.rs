@@ -1013,6 +1013,52 @@ impl Client {
         BulkChange::parse(&value).ok_or_else(|| ApiError::NotFound("bulk change".to_owned()))
     }
 
+    /// `POST /v3/bulkchange/_transition` — one workflow step, many issues.
+    ///
+    /// `values` carries what the transition demands — a resolution, usually —
+    /// exactly as the single-issue path sends it, and is omitted when empty
+    /// rather than sent as `{}`.
+    pub async fn bulk_transition(
+        &self,
+        keys: &[String],
+        transition: &str,
+        values: &Value,
+    ) -> Result<BulkChange, ApiError> {
+        let mut body = serde_json::json!({ "issues": keys, "transition": transition });
+        if !values.as_object().is_some_and(serde_json::Map::is_empty)
+            && let Some(object) = body.as_object_mut()
+        {
+            object.insert("values".to_owned(), values.clone());
+        }
+        let (value, _) = self
+            .post_value("/v3/bulkchange/_transition", &body, "bulk change")
+            .await?;
+        BulkChange::parse(&value).ok_or_else(|| ApiError::NotFound("bulk change".to_owned()))
+    }
+
+    /// `POST /v3/bulkchange/_move` — many issues into one queue.
+    ///
+    /// Every key in the list changes, and nothing undoes that; the gate this
+    /// goes through asks for `--yes` even for a single issue for that reason.
+    pub async fn bulk_move(
+        &self,
+        keys: &[String],
+        queue: &str,
+        keep_fields: bool,
+        initial_status: bool,
+    ) -> Result<BulkChange, ApiError> {
+        let body = serde_json::json!({
+            "issues": keys,
+            "queue": queue,
+            "moveAllFields": keep_fields,
+            "initialStatus": initial_status,
+        });
+        let (value, _) = self
+            .post_value("/v3/bulkchange/_move", &body, "bulk change")
+            .await?;
+        BulkChange::parse(&value).ok_or_else(|| ApiError::NotFound("bulk change".to_owned()))
+    }
+
     /// `GET /v3/bulkchange/{id}` — how far a bulk change got.
     pub async fn bulk_change(&self, id: &str) -> Result<BulkChange, ApiError> {
         let value = self

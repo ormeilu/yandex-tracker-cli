@@ -623,6 +623,68 @@ async fn a_bulk_change_finishes_and_counts_what_it_changed() {
         .expect("undo");
 }
 
+/// What the other two bulk endpoints refuse, which is what makes a list of keys
+/// safe to offer at all.
+///
+/// Nothing here writes. `_transition` is given a list holding one key that
+/// cannot exist and refused entire — the real issue in the list keeps the status
+/// it had, which is the promise a loop over the single-issue endpoint could
+/// never make. `_move` is given a queue that does not exist and refused for that
+/// reason alone, so the keys it names are still the keys they were.
+#[tokio::test]
+#[ignore = "needs real credentials"]
+async fn bulk_transition_and_move_refuse_a_list_they_cannot_do_whole() {
+    let client = client();
+    let queue = a_queue(&client).await;
+    let page = client
+        .search(&format!("Queue: {queue}"), 1, 1)
+        .await
+        .expect("search");
+    let Some(issue) = page.items.first() else {
+        return;
+    };
+    let before = client.issue(&issue.key).await.expect("issue").0;
+
+    let missing = format!("{queue}-99999999");
+    let refused = client
+        .bulk_transition(
+            &[issue.key.clone(), missing.clone()],
+            "close",
+            &serde_json::json!({}),
+        )
+        .await
+        .expect_err("a transition naming an issue that does not exist was accepted");
+    assert!(
+        refused.to_string().contains(&missing),
+        "the refusal does not name the key it refused: {refused}"
+    );
+
+    let refused = client
+        .bulk_move(
+            std::slice::from_ref(&issue.key),
+            "NOSUCHQUEUE0",
+            false,
+            false,
+        )
+        .await
+        .expect_err("a move into a queue that does not exist was accepted");
+    assert!(
+        refused.to_string().contains("NOSUCHQUEUE0"),
+        "the refusal does not name the queue it refused: {refused}"
+    );
+
+    let after = client.issue(&issue.key).await.expect("issue").0;
+    assert_eq!(
+        before.status_key, after.status_key,
+        "{}: a refused bulk transition moved the issue anyway",
+        issue.key
+    );
+    assert_eq!(
+        before.key, after.key,
+        "a refused bulk move changed a key anyway"
+    );
+}
+
 /// Both link vocabularies, and the fact that they are two.
 #[tokio::test]
 #[ignore = "needs real credentials"]

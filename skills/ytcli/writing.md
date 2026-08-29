@@ -51,6 +51,7 @@ ytcli issue comment PROJ-1 "text"          # or `-` to read the body from stdin
 ytcli issue comment edit PROJ-1 ID "text"  # replaces the body; delete also exists
 ytcli issue transition PROJ-1              # no id: lists what is available
 ytcli issue transition PROJ-1 close -r fixed       # closing usually needs one
+ytcli issue transition PROJ-1 PROJ-2 --to close -r fixed --yes   # one request
 ytcli issue worklog add PROJ-1 1h30m -m "pairing"
 ytcli issue worklog edit PROJ-1 ID -d 2h   # pass whichever of -d/-m is wrong
 ytcli issue check add PROJ-1 "write the migration"   # tick|untick|delete by id
@@ -75,12 +76,20 @@ and expect the previous wording to be gone — Tracker keeps no history of it.
 
 ```bash
 ytcli issue move PROJ-1 --to OPS --yes     # --keep-fields to carry the rest
+ytcli issue move PROJ-1 PROJ-2 --to OPS --yes    # one request, one tally
 ```
 
 `issue move` needs `--yes` even for one issue, because the key changes.
 `PROJ-1` becomes `OPS-N`, every reference to the old key becomes a redirect,
 and no request moves it back. Say the new key back to the user — nothing they
 were holding still addresses the issue.
+
+Several keys go to one endpoint each for update, transition and move, so the
+answer is `changed N of M` and a bulk change id rather than a line per issue.
+With a list, the transition is named with `--to`: there is no unambiguous place
+for a bare id once the positional arguments are keys. A partial tally after a
+transition is ordinary — an issue that was not in a status the transition starts
+from is refused on its own, and `ytcli bulk status ID` says which and why.
 
 Two writes reach past issues, and both are rarer than they look:
 

@@ -66,8 +66,14 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   ytcli issue transition PROJ-1 close -r fixed
                                         closing usually needs a resolution; --set
                                         for any other field the workflow demands
+  ytcli issue transition PROJ-1 PROJ-2 --to close -r fixed --yes
+                                        one workflow step, one request; a list of
+                                        keys names the transition with --to
   ytcli issue move PROJ-1 --to OPS --yes    the key changes and nothing undoes it;
                                         --keep-fields carries what OPS does not define
+  ytcli issue move PROJ-1 PROJ-2 --to OPS --yes
+                                        several in one request; the confirmation
+                                        names every key before any of them change
   ytcli issue worklogs PROJ-1           time logged, with the total
   ytcli issue checklist PROJ-1          lines, boxes and ids
   ytcli issue worklog add PROJ-1 1h30m -m "text"     also: worklog delete KEY ID
