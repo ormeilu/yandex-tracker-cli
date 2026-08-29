@@ -24,7 +24,7 @@ allow: ytcli issue get:*, ytcli issue find:*, ytcli issue list:*, ytcli issue co
 ask:   ytcli issue create:*, ytcli issue update:*, ytcli issue comment:*,
        ytcli issue transition:*, ytcli issue move:*, ytcli issue worklog:*,
        ytcli issue check:*, ytcli issue link:*, ytcli queue create:*, ytcli project place:*,
-       ytcli attachment upload:*
+       ytcli attachment upload:*, ytcli attachment delete:*
 ```
 
 Reads and writes never share a command prefix — `worklogs` and `worklog`,

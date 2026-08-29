@@ -57,6 +57,7 @@ ytcli issue check add PROJ-1 "write the migration"   # tick|untick|delete by id
 ytcli issue link add PROJ-1 relates PROJ-7
 ytcli issue link add PROJ-1 "depends on" PROJ-3    # not `depends`: see below
 ytcli attachment upload PROJ-1 ./file.png
+ytcli attachment delete PROJ-1 301 --yes   # by id or filename; no undo at all
 ```
 
 A link relationship is **not** a link type id. `ytcli link types` prints both:

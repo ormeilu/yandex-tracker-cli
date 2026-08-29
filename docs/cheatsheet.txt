@@ -164,6 +164,8 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
                                         anywhere else, the download command to run
   ytcli attachment download PROJ-1 ID -o DIR
   ytcli attachment upload PROJ-1 FILE
+  ytcli attachment delete PROJ-1 ID --yes   by id or filename; --yes even for one,
+                                        Tracker keeps no copy
 
 ## format
   text      compact key/value; fixed field order so caches and scripts hold

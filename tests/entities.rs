@@ -346,3 +346,89 @@ async fn show_of_an_unknown_attachment_exits_four() {
         .assert()
         .code(4);
 }
+
+/// The one gap a user hits by accident: `attachment upload` had no undo.
+///
+/// The listing is fetched first so the confirmation can name the file. An id on
+/// its own says nothing about what is about to be lost.
+#[tokio::test]
+async fn deleting_an_attachment_names_the_file_and_needs_yes() {
+    let harness = Harness::new().await;
+    let body = attachment_list(&harness.server.uri());
+    Mock::given(method("GET"))
+        .and(path("/v3/issues/PROJ-1/attachments"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(body))
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("DELETE"))
+        .and(path("/v3/issues/PROJ-1/attachments/301"))
+        .respond_with(ResponseTemplate::new(204))
+        .expect(1)
+        .mount(&harness.server)
+        .await;
+
+    // One file is enough to ask about: Tracker keeps no copy.
+    harness
+        .run(&["attachment", "delete", "PROJ-1", "301"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("without --yes"))
+        .stderr(predicate::str::contains("trace.log"));
+
+    harness
+        .run(&["attachment", "delete", "PROJ-1", "301", "--yes"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("trace.log"));
+}
+
+/// The filename is the part a caller has; the id is the part Tracker has.
+#[tokio::test]
+async fn an_attachment_can_be_deleted_by_its_name() {
+    let harness = Harness::new().await;
+    let body = attachment_list(&harness.server.uri());
+    Mock::given(method("GET"))
+        .and(path("/v3/issues/PROJ-1/attachments"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(body))
+        .mount(&harness.server)
+        .await;
+    Mock::given(method("DELETE"))
+        .and(path("/v3/issues/PROJ-1/attachments/301"))
+        .respond_with(ResponseTemplate::new(204))
+        .expect(1)
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&["attachment", "delete", "PROJ-1", "trace.log", "--yes"])
+        .assert()
+        .success();
+}
+
+/// Nothing is sent for an attachment that is not there, and it exits four
+/// rather than reporting a delete that never happened.
+#[tokio::test]
+async fn deleting_an_attachment_that_is_not_there_exits_four() {
+    let harness = Harness::new().await;
+    let body = attachment_list(&harness.server.uri());
+    Mock::given(method("GET"))
+        .and(path("/v3/issues/PROJ-1/attachments"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(body))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&["attachment", "delete", "PROJ-1", "999", "--yes"])
+        .assert()
+        .code(4);
+
+    let deletes = harness
+        .server
+        .received_requests()
+        .await
+        .expect("recorded")
+        .into_iter()
+        .filter(|request| request.method == wiremock::http::Method::DELETE)
+        .count();
+    assert_eq!(deletes, 0);
+}

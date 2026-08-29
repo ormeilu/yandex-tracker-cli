@@ -452,6 +452,21 @@ impl Client {
         Ok(())
     }
 
+    /// `DELETE /v3/issues/{key}/attachments/{id}` — remove an attachment.
+    ///
+    /// Tracker keeps no copy: the file is gone, and the comment or description
+    /// that pointed at it is left pointing at nothing.
+    pub async fn delete_attachment(&self, key: &str, id: &str) -> Result<(), ApiError> {
+        self.send_value(
+            reqwest::Method::DELETE,
+            &format!("/v3/issues/{key}/attachments/{id}"),
+            None,
+            &format!("attachment {id} of issue {key}"),
+        )
+        .await?;
+        Ok(())
+    }
+
     /// Transitions available from the issue's current status.
     pub async fn transitions(&self, key: &str) -> Result<Vec<Transition>, ApiError> {
         let raw = self

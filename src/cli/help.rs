@@ -870,6 +870,23 @@ ytcli attachment upload PROJ-1 ./screenshot.png
 Prints the profile and organisation first, like every write. Whatever you upload
 is visible to everyone in the organisation.";
 
+pub const ATTACHMENT_DELETE: &str = "\
+Remove an attachment from an issue.
+
+```
+ytcli attachment list PROJ-1
+ytcli attachment delete PROJ-1 1234 --yes
+```
+
+`--yes` even for one file: Tracker keeps no copy, and whatever pointed at it —
+a comment, the description — is left pointing at nothing. The name of the file
+is printed before it goes, because an attachment id says nothing about what it
+is; `attachment list` is where the ids come from.
+
+Uploading is not undone by this so much as followed by it: the change is in the
+issue history either way, and everyone who already downloaded the file still
+has it.";
+
 pub const AUTH_STATUS: &str = "\
 Check every profile: who the token belongs to, and what it can see.
 

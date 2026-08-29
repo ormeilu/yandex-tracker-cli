@@ -36,6 +36,13 @@ pub enum AttachmentCommand {
     /// Upload a file to an issue.
     #[command(long_about = crate::cli::help::md(crate::cli::help::ATTACHMENT_UPLOAD))]
     Upload { key: String, file: PathBuf },
+    /// Remove an attachment from an issue.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::ATTACHMENT_DELETE))]
+    Delete {
+        key: String,
+        /// Attachment id, or its filename. `attachment list` prints both.
+        attachment: String,
+    },
 }
 
 pub async fn run(command: &AttachmentCommand, session: &Session) -> ExitCode {
@@ -49,6 +56,7 @@ pub async fn run(command: &AttachmentCommand, session: &Session) -> ExitCode {
         } => download(key, attachment, out, *force, session).await,
         AttachmentCommand::Show { key, attachment } => show(key, attachment, session).await,
         AttachmentCommand::Upload { key, file } => upload(key, file, session).await,
+        AttachmentCommand::Delete { key, attachment } => delete(key, attachment, session).await,
     }
 }
 
@@ -323,6 +331,62 @@ async fn upload(target: &str, file: &Path, session: &Session) -> ExitCode {
     match client.upload(key, &name, bytes).await {
         Ok(attachment) => {
             emit(&format!("{key} attachment {}\n", attachment.id));
+            ExitCode::Success
+        }
+        Err(error) => {
+            let code = error.exit_code();
+            report(&error, code)
+        }
+    }
+}
+
+/// Remove one attachment.
+///
+/// The listing is fetched first so the confirmation can name the file rather
+/// than an id. An id on its own says nothing about what is about to be lost,
+/// and this is the one command here with no undo at all.
+async fn delete(target: &str, attachment: &str, session: &Session) -> ExitCode {
+    let (client, key) = match session.client_for(target).await {
+        Ok(pair) => pair,
+        Err(code) => return code,
+    };
+    let key = key.as_str();
+
+    let attachments = match client.attachments(key).await {
+        Ok(attachments) => attachments,
+        Err(error) => {
+            let code = error.exit_code();
+            return report(&error, code);
+        }
+    };
+
+    let Some(found) = attachments
+        .iter()
+        .find(|candidate| candidate.id == attachment || candidate.name == attachment)
+    else {
+        return report(
+            &format!("issue {key} has no attachment `{attachment}`"),
+            ExitCode::NotFound,
+        );
+    };
+
+    let body = serde_json::json!({ "file": found.name, "id": found.id });
+    let targets = [key.to_owned()];
+    let intent = Intent {
+        action: &format!("delete {} from {key}", found.name),
+        targets: &targets,
+        body: &body,
+        // One file is enough: Tracker keeps no copy, and nothing here puts it
+        // back. The same reason `queue create` asks.
+        always_confirm: true,
+    };
+    if let Gate::Stop(code) = check(&intent, session) {
+        return code;
+    }
+
+    match client.delete_attachment(key, &found.id).await {
+        Ok(()) => {
+            emit(&format!("{key} deleted attachment {}\n", found.name));
             ExitCode::Success
         }
         Err(error) => {

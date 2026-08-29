@@ -249,6 +249,7 @@ const UNRUNNABLE: &[(&str, &str)] = &[
         "draws pixels, or names a download command with a real id",
     ),
     ("attachment download", "writes a file"),
+    ("attachment delete", "a write, and the one with no undo"),
     ("attachment upload", "a write"),
 ];
 

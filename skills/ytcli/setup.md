@@ -162,6 +162,7 @@ allowlist is worth having. For Claude Code, in `.claude/settings.json`:
       "Bash(ytcli issue check:*)",
       "Bash(ytcli issue link:*)",
       "Bash(ytcli attachment upload:*)",
+      "Bash(ytcli attachment delete:*)",
       "Bash(ytcli auth login:*)",
       "Bash(ytcli auth use:*)",
       "Bash(ytcli auth logout:*)"

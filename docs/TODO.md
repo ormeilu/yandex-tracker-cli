@@ -79,6 +79,8 @@ Labels split the work by area: `area:issues`, `area:entities`,
   rule, roles and all, and the people that rule resolves to. Only the second can
   say whether the caller is one of them, and it says `?` rather than `no` when
   the token could not name its own user.
+  `attachment delete` closes the one gap in the sweep of the API that a user
+  hits by accident, naming the file rather than the id it is about to lose.
   `issue update` over several issues is one request rather than one each, which
   turned out to be the safer shape as well as the cheaper one: Tracker validates
   the whole list before it writes, so an unknown key refuses the change instead
@@ -139,3 +141,17 @@ someone reading the backlog:
   silently break that for every user.
 - **Printing a stored token.** A tool whose main consumer is an agent should not
   offer secret exfiltration as a feature.
+- **Creating versions, sprints, fields and boards.** A sweep of the API for
+  verbs this tool does not have turned up five, and one of them — deleting an
+  attachment — was worth building, because `attachment upload` had no undo and
+  the mistake is one anybody makes. The other four are all the configuration of
+  a queue rather than work in it: `POST /v3/queues/{key}/versions` and the
+  version writes, `POST /v3/sprints` and the board writes, `POST /v3/fields` and
+  `POST /v3/queues/{key}/localFields`. They are done once, by somebody with the
+  rights to do them, in an interface that shows what the choice affects — the
+  same argument that keeps triggers read-only here. A board is a view of work
+  and not the work, and `board` and `sprint` stay read-only for that reason.
+- **Deleting a queue.** Tracker deletes a queue by hiding it, so the key stays
+  spent and no `--yes` buys it back. `queue create` already asks for exactly
+  that reason; a delete would be the same irreversible act with less to show
+  for it.
