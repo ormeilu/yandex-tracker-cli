@@ -39,6 +39,7 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
                                         required only when two profiles share the queue key,
                                         in which case the bare form is refused, not guessed
   ytcli issue get PROJ-1 --fields status,assignee,storyPoints
+  ytcli issue get 42                    a bare number means the default queue
   ytcli issue links PROJ-1              id first, then the type; the id is what
                                         `issue link delete` takes
   ytcli issue remotelinks PROJ-1        links to things outside Tracker: wiki, repos,
@@ -172,7 +173,9 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
 
 ## format
   text      compact key/value; fixed field order so caches and scripts hold
-  json      normalised schema, stable across Tracker API changes
+  json      normalised schema, stable across Tracker API changes. status and
+            priority are shown in the organisation's language; status_key and
+            priority_key beside them are the same everywhere
   json-raw  upstream payload verbatim, escape hatch
   toon      only wins on uniform lists; measured at 7% under json, text at 97%
   Descriptions and comments arrive fenced in <untrusted src="...">: that text was

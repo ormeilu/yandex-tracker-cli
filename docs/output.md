@@ -54,6 +54,11 @@ line two
 (+2 more lines: --full)
 ```
 
+`status` and `priority` come back in the organisation's own language — a Russian
+organisation answers `Закрыт`. `--json` carries `status_key` and `priority_key`
+beside them, which are the stable English handles (`closed`, `critical`) every
+organisation shares. Branch on the key; show the display.
+
 **Field order never changes.** A view that reorders itself invalidates an agent's
 prompt cache on every call and breaks anything parsing the text. Every renderer is
 pinned by a snapshot test for that reason.

@@ -153,10 +153,21 @@ pub struct Issue {
     pub summary: String,
     #[serde(default)]
     pub status: Option<String>,
+    /// The status's stable handle — `open`, `inProgress`, `closed`.
+    ///
+    /// `status` comes back in the organisation's language, so it is the wrong
+    /// thing to compare against: a Russian organisation answers `Закрыт`, and
+    /// code that matched on `closed` matched nothing and said so in no way at
+    /// all. This is the half that is the same everywhere.
+    #[serde(default)]
+    pub status_key: Option<String>,
     #[serde(default)]
     pub issue_type: Option<String>,
     #[serde(default)]
     pub priority: Option<String>,
+    /// The priority's stable handle — `blocker`, `critical`, `normal`.
+    #[serde(default)]
+    pub priority_key: Option<String>,
     #[serde(default)]
     pub queue: Option<String>,
     #[serde(default)]

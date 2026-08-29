@@ -40,11 +40,15 @@ pub fn issue(issue: &Issue, ctx: &Context) -> String {
         out,
         "{} {}   {} {}   {} {}",
         label("status:"),
-        status_painted(issue.status.as_deref(), ctx),
+        status_painted(issue.status.as_deref(), issue.status_key.as_deref(), ctx),
         label("type:"),
         or_dash(issue.issue_type.as_ref()),
         label("prio:"),
-        priority_painted(issue.priority.as_deref(), ctx),
+        priority_painted(
+            issue.priority.as_deref(),
+            issue.priority_key.as_deref(),
+            ctx
+        ),
     );
     let _ = writeln!(
         out,
@@ -716,9 +720,14 @@ fn field_value(issue: &Issue, field: &str) -> String {
 /// open issues" is a worse failure than a few wasted tokens.
 #[must_use]
 pub fn issue_page(page: &Page<Issue>, ctx: &Context) -> String {
+    // The fifth value in each row is the status key. It is never printed —
+    // neither format shows more cells than there are columns — and exists so
+    // the colour can be decided by what a status means rather than by the
+    // language the organisation shows it in.
+    const STATUS_KEY: usize = 4;
     let columns = [
         Column::whole("KEY", 12, Palette::key()),
-        Column::by_value("STATUS", 14, status_style),
+        Column::by_other("STATUS", 14, STATUS_KEY, status_style),
         Column::new("ASSIGNEE", 14, anstyle::Style::new()),
         Column::new("SUMMARY", 60, anstyle::Style::new()),
     ];
@@ -731,6 +740,7 @@ pub fn issue_page(page: &Page<Issue>, ctx: &Context) -> String {
                 or_dash(issue.status.as_ref()).to_owned(),
                 who(issue.assignee.as_ref()).to_owned(),
                 issue.summary.clone(),
+                issue.status_key.clone().unwrap_or_default(),
             ]
         })
         .collect();
@@ -745,36 +755,37 @@ pub fn issue_page(page: &Page<Issue>, ctx: &Context) -> String {
     out
 }
 
-/// Colour a status by what it means, not by its name: Tracker lets every queue
-/// invent its own, so the mapping is on the few well-known words and everything
-/// else stays unpainted rather than guessed at.
-fn status_style(status: &str) -> anstyle::Style {
-    let lower = status.to_ascii_lowercase();
-    if lower.contains("closed") || lower.contains("resolved") || lower.contains("done") {
-        Palette::ok()
-    } else if lower.contains("progress") || lower.contains("review") || lower.contains("test") {
-        Palette::warn()
-    } else {
-        anstyle::Style::new()
+/// Colour a status by what it means, not by the words it is shown in.
+///
+/// This takes the key, not the display name. A queue may invent statuses, and
+/// every organisation shows them in its own language — a Russian one answers
+/// `Закрыт` — so matching on the displayed text worked in English and nowhere
+/// else, silently. Anything not on the well-known list stays unpainted rather
+/// than guessed at.
+fn status_style(key: &str) -> anstyle::Style {
+    match key {
+        "closed" | "resolved" | "done" | "released" | "rejected" => Palette::ok(),
+        "inProgress" | "readyForReview" | "inReview" | "testing" | "needInfo" => Palette::warn(),
+        _ => anstyle::Style::new(),
     }
 }
 
-fn status_painted(status: Option<&str>, ctx: &Context) -> String {
+fn status_painted(status: Option<&str>, key: Option<&str>, ctx: &Context) -> String {
     let Some(status) = status else {
         return "-".to_owned();
     };
-    ctx.painter().paint(status, status_style(status))
+    let style = key.map_or_else(anstyle::Style::new, status_style);
+    ctx.painter().paint(status, style)
 }
 
 /// Critical and blocker are worth noticing; the rest are not worth a colour.
-fn priority_painted(priority: Option<&str>, ctx: &Context) -> String {
+fn priority_painted(priority: Option<&str>, key: Option<&str>, ctx: &Context) -> String {
     let paint = ctx.painter();
     let Some(priority) = priority else {
         return "-".to_owned();
     };
 
-    let lower = priority.to_ascii_lowercase();
-    if lower.contains("critical") || lower.contains("blocker") {
+    if matches!(key, Some("critical" | "blocker")) {
         paint.paint(priority, Palette::bad())
     } else {
         priority.to_owned()
@@ -830,8 +841,10 @@ mod tests {
             key: "PROJ-1".to_owned(),
             summary: "Attachments are lost on move".to_owned(),
             status: Some("In Progress".to_owned()),
+            status_key: Some("inProgress".to_owned()),
             issue_type: Some("Bug".to_owned()),
             priority: Some("Critical".to_owned()),
+            priority_key: Some("critical".to_owned()),
             queue: Some("PROJ".to_owned()),
             assignee: Some(User {
                 id: "1".to_owned(),

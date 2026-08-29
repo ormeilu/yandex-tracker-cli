@@ -33,6 +33,17 @@ use crate::render::style::{Painter, Palette};
 pub enum Paint {
     Fixed(Style),
     ByValue(fn(&str) -> Style),
+    /// Painted from a value the row carries but does not print.
+    ///
+    /// A status is shown in the organisation's own language and classified by
+    /// the key Tracker keeps behind it: `Закрыт` is worth a colour only if
+    /// something knows it means `closed`. Guessing from the displayed words
+    /// works in English and nowhere else.
+    ByOther {
+        /// Index into the row, past the end of the columns.
+        source: usize,
+        pick: fn(&str) -> Style,
+    },
 }
 
 impl std::fmt::Debug for Paint {
@@ -40,15 +51,23 @@ impl std::fmt::Debug for Paint {
         match self {
             Self::Fixed(style) => f.debug_tuple("Fixed").field(style).finish(),
             Self::ByValue(_) => f.write_str("ByValue(..)"),
+            Self::ByOther { source, .. } => write!(f, "ByOther({source})"),
         }
     }
 }
 
 impl Paint {
-    fn style(self, cell: &str) -> Style {
+    fn style(self, cell: &str, row: &[String]) -> Style {
         match self {
             Self::Fixed(style) => style,
             Self::ByValue(pick) => pick(cell),
+            Self::ByOther { source, pick } => row.get(source).map_or_else(Style::new, |value| {
+                if value.is_empty() {
+                    Style::new()
+                } else {
+                    pick(value)
+                }
+            }),
         }
     }
 }
@@ -95,6 +114,26 @@ impl Column {
             paint: Paint::ByValue(pick),
         }
     }
+
+    /// A column painted from a value the row carries after its last column.
+    ///
+    /// Those trailing values are never printed — neither format shows more
+    /// cells than there are columns — so what a caller receives is unchanged
+    /// and only the colour knows about them.
+    #[must_use]
+    pub const fn by_other(
+        header: &'static str,
+        width: usize,
+        source: usize,
+        pick: fn(&str) -> Style,
+    ) -> Self {
+        Self {
+            header,
+            width,
+            truncate: true,
+            paint: Paint::ByOther { source, pick },
+        }
+    }
 }
 
 /// Render rows as a listing, without the tally that follows them.
@@ -116,7 +155,8 @@ fn machine(columns: &[Column], rows: &[Vec<String>]) -> String {
 
     for row in rows {
         let mut line = String::with_capacity(80);
-        for (index, cell) in row.iter().enumerate() {
+        let printed = row.len().min(columns.len());
+        for (index, cell) in row.iter().take(printed).enumerate() {
             let Some(column) = columns.get(index) else {
                 continue;
             };
@@ -125,7 +165,7 @@ fn machine(columns: &[Column], rows: &[Vec<String>]) -> String {
             } else {
                 cell.clone()
             };
-            if index + 1 == row.len() {
+            if index + 1 == printed {
                 line.push_str(&value);
             } else {
                 let _ = write!(
@@ -182,9 +222,10 @@ fn human(columns: &[Column], rows: &[Vec<String>], ctx: &Context) -> String {
 
 fn paint_row(columns: &[Column], row: &[String], paint: Painter) -> Vec<String> {
     row.iter()
+        .take(columns.len())
         .enumerate()
         .map(|(index, cell)| match columns.get(index) {
-            Some(column) => paint.paint(cell, column.paint.style(cell)),
+            Some(column) => paint.paint(cell, column.paint.style(cell, row)),
             None => cell.clone(),
         })
         .collect()

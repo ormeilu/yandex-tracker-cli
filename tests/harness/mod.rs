@@ -88,6 +88,17 @@ impl Harness {
         std::fs::write(&self.config, config).expect("write config");
     }
 
+    /// Add a profile that has a default queue, for the cases about completing a
+    /// bare issue number.
+    pub fn add_profile_with_queue(&self, name: &str, org_id: &str, queue: &str) {
+        use std::fmt::Write as _;
+
+        self.add_profile(name, org_id);
+        let mut config = std::fs::read_to_string(&self.config).expect("read config");
+        let _ = writeln!(config, "default_queue = \"{queue}\"");
+        std::fs::write(&self.config, config).expect("write config");
+    }
+
     /// Pretend a previous `auth status` learned which profiles see which queues.
     pub fn write_queue_cache(&self, entries: &[(&str, &[&str])]) {
         let queues: serde_json::Map<String, serde_json::Value> = entries

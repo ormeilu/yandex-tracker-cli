@@ -241,3 +241,44 @@ async fn list_is_the_same_command_as_find() {
         r#"Queue: "PROJ" AND Assignee: me()"#
     );
 }
+
+/// A number is what somebody reading a board has in front of them, and
+/// `PROJ-` is the part they should not have to retype.
+#[tokio::test]
+async fn a_bare_number_is_completed_with_the_default_queue() {
+    let harness = Harness::new().await;
+    harness.add_profile_with_queue("pinned", "12345", "PROJ");
+    Mock::given(method("GET"))
+        .and(path("/v3/issues/PROJ-1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("issue.json")))
+        .expect(1)
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&["issue", "get", "pinned/1"])
+        .assert()
+        .success();
+}
+
+/// Without a default queue there is nothing to complete it with, and a number
+/// is not a key. Refused, rather than sent somewhere and 404ed.
+#[tokio::test]
+async fn a_bare_number_without_a_default_queue_is_refused() {
+    let harness = Harness::new().await;
+
+    harness
+        .run(&["issue", "get", "1"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("no default queue"));
+
+    assert!(
+        harness
+            .server
+            .received_requests()
+            .await
+            .expect("recorded")
+            .is_empty()
+    );
+}

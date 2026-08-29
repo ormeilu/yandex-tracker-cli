@@ -77,6 +77,18 @@ fn label(value: Option<&Value>) -> Option<String> {
 /// Queues are addressed by key everywhere — it is the `PROJ` in `PROJ-1` — so
 /// showing the prettier `display` name would print something the caller cannot
 /// then type back into another command.
+/// The stable key of a referenced object, and nothing else.
+///
+/// Unlike [`key_label`] this does not fall back to a display name: half a
+/// vocabulary is worse than none, since a caller matching on `closed` would
+/// silently start matching a localised word that happens to be there.
+fn key_of(value: Option<&Value>) -> Option<String> {
+    value?
+        .get("key")
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+}
+
 fn key_label(value: Option<&Value>) -> Option<String> {
     let value = value?;
     if let Some(key) = value.get("key").and_then(Value::as_str) {
@@ -459,8 +471,10 @@ pub fn issue(value: &Value) -> Option<Issue> {
             .unwrap_or_default()
             .to_owned(),
         status: label(object.get("status")),
+        status_key: key_of(object.get("status")),
         issue_type: label(object.get("type")),
         priority: label(object.get("priority")),
+        priority_key: key_of(object.get("priority")),
         queue: key_label(object.get("queue")),
         assignee: user(object.get("assignee")),
         author: user(object.get("createdBy")),

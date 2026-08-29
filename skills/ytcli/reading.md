@@ -20,6 +20,15 @@ than vanishing, so the columns never shift under you.
 Guessing a custom field name and getting `-` back is indistinguishable from the
 field being empty; this is how you tell.
 
+A bare number is the issue's number in the profile's default queue, so
+`ytcli issue get 42` and `ytcli issue get PROJ-42` are the same issue.
+
+**Do not branch on a status or priority you read as text.** They come back in
+the organisation's own language — a Russian organisation answers `Закрыт`, not
+`Closed`. `--format json` carries `status_key` and `priority_key` beside them,
+and those are the same in every organisation: `open`, `inProgress`, `closed`,
+`blocker`, `critical`. Show the display, compare the key.
+
 ## Search
 
 ```bash

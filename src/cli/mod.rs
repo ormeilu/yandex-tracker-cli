@@ -184,6 +184,54 @@ impl Session {
             .ok_or(crate::config::ConfigError::NoProfile)
     }
 
+    /// A bare issue number completed with the default queue of its profile.
+    ///
+    /// Everything else is returned as given: this only ever fires on digits,
+    /// which no queue key can be, so nothing that already worked changes
+    /// meaning.
+    fn expanded(&self, target: &str) -> Result<String, ExitCode> {
+        let (prefix, number) = match target.split_once('/') {
+            Some((profile, key)) => (Some(profile), key),
+            None => (None, target),
+        };
+        if number.is_empty() || !number.bytes().all(|byte| byte.is_ascii_digit()) {
+            return Ok(target.to_owned());
+        }
+
+        let resolved = match prefix {
+            Some(profile) => self
+                .config
+                .resolve(Some(profile), None, std::path::Path::new("."))
+                .map_err(|error| report(&error, ExitCode::Auth))?,
+            None => self
+                .resolved()
+                .map_err(|error| report(&error, ExitCode::Auth))?
+                .clone(),
+        };
+
+        // A pinned repository's queue wins, the way it does everywhere else: the
+        // checkout says what work is being done here.
+        let Some(queue) = resolved
+            .queue
+            .as_deref()
+            .or(resolved.profile.default_queue.as_deref())
+        else {
+            return Err(report(
+                &format!(
+                    "`{number}` is a number, not an issue key, and profile {} has no default queue \
+                     to complete it with — write PROJ-{number}, or set one with `ytcli auth login`",
+                    resolved.name
+                ),
+                ExitCode::ConfirmationRequired,
+            ));
+        };
+
+        Ok(match prefix {
+            Some(profile) => format!("{profile}/{queue}-{number}"),
+            None => format!("{queue}-{number}"),
+        })
+    }
+
     /// Split a possibly profile-qualified target and build the client for it.
     ///
     /// Queue keys are only unique **inside** an organisation: two profiles can
@@ -196,7 +244,13 @@ impl Session {
     ///    have the queue only produces a 403 that reads like a rights problem.
     /// 3. Two profiles in *different* organisations seeing one queue key is the
     ///    genuinely ambiguous case, and is refused rather than guessed at.
+    /// 4. A bare number is the issue's number in the profile's default queue.
+    ///    `42` and `PROJ-42` then name the same issue, which is what somebody
+    ///    reading a board and typing a key by hand actually has in front of
+    ///    them. Without a default queue it is refused: there is nothing to
+    ///    complete it with, and a number is not a key.
     pub async fn client_for(&self, target: &str) -> Result<(crate::api::Client, String), ExitCode> {
+        let target = &self.expanded(target)?;
         let Some((profile, key)) = target.split_once('/') else {
             if let Some(owner) = self.owner_of(target).await? {
                 let client = self.client_with(&owner)?;

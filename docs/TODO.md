@@ -79,6 +79,11 @@ Labels split the work by area: `area:issues`, `area:entities`,
   rule, roles and all, and the people that rule resolves to. Only the second can
   say whether the caller is one of them, and it says `?` rather than `no` when
   the token could not name its own user.
+  `--format json` carries `status_key` and `priority_key` beside the displayed
+  status and priority, and the terminal colours a status by that key: a Russian
+  organisation answers `Закрыт`, and everything that matched on `closed` matched
+  nothing and said so in no way at all. A bare issue number is completed from
+  the profile's default queue.
   `attachment delete` closes the one gap in the sweep of the API that a user
   hits by accident, naming the file rather than the id it is about to lose.
   `issue update` over several issues is one request rather than one each, which
@@ -151,6 +156,17 @@ someone reading the backlog:
   rights to do them, in an interface that shows what the choice affects — the
   same argument that keeps triggers read-only here. A board is a view of work
   and not the work, and `board` and `sprint` stay read-only for that reason.
+- **Box-drawn tables, and wrapping a cell instead of cutting it.** Both come
+  from looking at another Tracker CLI to see what was worth taking. Borders cost
+  tokens on every row and stop the output being `cut` and `grep`ed; a wrapped
+  cell breaks one-line-per-issue, which is the property that makes a listing
+  greppable at all. What was worth taking from that comparison was colouring by
+  the status *key* rather than the words, and completing a bare issue number
+  from the default queue — both are in.
+- **A JSON error envelope on stderr under `--format json`.** The exit code
+  already carries the class of failure — 2, 3, 4, 5 mean distinct things and are
+  the documented contract — and a second, parseable copy of the message would be
+  one more shape to keep stable for no question it answers.
 - **Deleting a queue.** Tracker deletes a queue by hiding it, so the key stays
   spent and no `--yes` buys it back. `queue create` already asks for exactly
   that reason; a delete would be the same irreversible act with less to show
