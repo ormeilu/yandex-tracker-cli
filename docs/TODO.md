@@ -26,9 +26,14 @@ meet is how the drift started.
   down against a live Tracker rather than from memory.
 - [0.7.0](https://github.com/ormeilu/yandex-tracker-cli/milestone/6) — the rest
   of the Tracker API: components, link types, queue access, and the writes a
-  sweep found missing. **1.0.0 waits on this**, because a tool that claims a
-  version 1 for a Tracker CLI should not still make a caller guess at what a
-  component field takes.
+  sweep found missing; then a study of another Tracker CLI, which added bars,
+  a timer, `sprint get`, transition by status and two ways to stop fighting the
+  shell. Shipped across 0.7.0 and 1.0.0.
+- **1.0.0** — no new surface of its own. It is the version that says the surface
+  is finished: every endpoint a survey of the API found is reachable, the output
+  shape has been stable for several releases, and what was deliberately left out
+  is written down below rather than pending. The number is a promise about
+  breakage from here, not a claim that there is nothing left to build.
 - [Yandex Wiki](https://github.com/ormeilu/yandex-tracker-cli/milestone/5) —
   whether the other half of an organisation's writing belongs behind this binary
   at all. Not a version: research first, and the answer may be no.
@@ -72,7 +77,7 @@ Labels split the work by area: `area:issues`, `area:entities`,
   `queue automation` reports macros, autoactions and triggers, and says which
   section it was refused rather than counting it zero. `sprint list` and
   `queue local-fields` close the two listings that had no way in.
-- Milestone 0.7.0 so far: `link types` prints the vocabulary a write takes beside
+- Milestone 0.7.0: `link types` prints the vocabulary a write takes beside
   the type ids it is not — a distinction that turned out to be encoded backwards
   in the parser, the fixture and a unit test at once. `queue access` answers who
   may do what in a queue, in two tables because Tracker gives two answers: the

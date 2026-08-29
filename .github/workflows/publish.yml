@@ -14,7 +14,36 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
 jobs:
+  # The tag is what everything downstream is named after, and nothing else
+  # checks that the crate agrees with it. Tagging v0.7.0 with `version = 0.6.0`
+  # in Cargo.toml published a GitHub release and a Homebrew formula called
+  # 0.7.0 carrying a binary that reports 0.6.0, while crates.io and PyPI
+  # refused it as a version they already had. That is a release half out of the
+  # door, and it costs one job to make it impossible.
+  #
+  # It runs on `workflow_dispatch` too, where there is no tag: the check is
+  # skipped from inside rather than by a job-level `if`, because a skipped job
+  # skips everything that needs it.
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: The tag and Cargo.toml must agree
+        run: |
+          if [ "${{ github.ref_type }}" != tag ]; then
+            echo "not a tag; nothing to check"
+            exit 0
+          fi
+          tagged="${GITHUB_REF_NAME#v}"
+          crate="$(cargo metadata --no-deps --format-version 1 \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
+          if [ "$tagged" != "$crate" ]; then
+            echo "tag v$tagged does not match Cargo.toml $crate" >&2
+            exit 1
+          fi
+          echo "v$tagged"
   binaries:
+    needs: version
     strategy:
       fail-fast: false
       matrix:
@@ -119,6 +148,7 @@ jobs:
             dist/*.tar.gz
             dist/*.zip
   wheels:
+    needs: version
     strategy:
       fail-fast: false
       matrix:
