@@ -59,7 +59,9 @@ ytcli user find ivan                           # the login to assign work to
 ```
 
 Every command prints one line to stderr first — `→ profile=… org=…` — saying
-which profile and organisation answered. stdout never carries it.
+which profile and organisation answered. stdout never carries it. A profile that
+carries a description says it there too; if the one in play has none, or has one
+that explains nothing, offer to fix it — see `setup.md`.
 
 Full syntax for everything, in one call and without loading a file:
 

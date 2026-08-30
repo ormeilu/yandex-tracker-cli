@@ -443,10 +443,20 @@ impl Session {
             return;
         }
 
+        // The note, when there is one, is the half of this line a person can
+        // read: `org=12345` identifies nothing until you already know the
+        // number, and "which organisation is this about to write to" is the
+        // question the banner exists to answer.
+        let note = resolved
+            .profile
+            .description
+            .as_deref()
+            .map_or_else(String::new, |description| format!(" — {description}"));
+
         let mut err = anstream::stderr();
         let _ = writeln!(
             err,
-            "→ profile={} org={} (from {})",
+            "→ profile={} org={} (from {}){note}",
             resolved.name, resolved.profile.org_id, resolved.source,
         );
     }

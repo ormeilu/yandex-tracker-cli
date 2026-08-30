@@ -234,6 +234,165 @@ fn there_is_no_subcommand_that_prints_a_stored_token() {
 
     assert_eq!(
         subcommands,
-        ["login", "logout", "list", "use", "status", "help"]
+        ["login", "logout", "list", "use", "edit", "status", "help"]
     );
+}
+
+/// A profile's note is what makes `→ profile=… org=…` mean something to a
+/// person: `12345` identifies nothing until you already know the number.
+#[test]
+fn a_profile_description_is_shown_by_list_and_on_the_provenance_line() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let config = dir.path().join("config.toml");
+    std::fs::write(
+        &config,
+        r#"
+default_profile = "work"
+
+[accounts.admin]
+
+[profiles.work]
+account = "admin"
+org_id = "12345"
+org_kind = "cloud"
+description = "production — customer data"
+"#,
+    )
+    .expect("write config");
+
+    let output = ytcli()
+        .args(["auth", "list", "--config"])
+        .arg(&config)
+        .current_dir(dir.path())
+        .env_remove("YTCLI_PROFILE")
+        .env_remove("YTCLI_TOKEN")
+        .assert()
+        .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert!(stdout.contains("production — customer data"));
+}
+
+/// Editing is a local edit: no token, no request, and only what was asked for.
+#[test]
+fn auth_edit_changes_one_key_and_leaves_the_rest_alone() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let config = dir.path().join("config.toml");
+    std::fs::write(
+        &config,
+        r#"# hand-written
+default_profile = "work"
+
+[accounts.admin]
+
+[profiles.work]
+account = "admin"
+org_id = "12345"
+org_kind = "cloud"
+default_queue = "PROJ"
+"#,
+    )
+    .expect("write config");
+
+    ytcli()
+        .args([
+            "auth",
+            "edit",
+            "work",
+            "--description",
+            "production",
+            "--config",
+        ])
+        .arg(&config)
+        .current_dir(dir.path())
+        .env_remove("YTCLI_PROFILE")
+        .env_remove("YTCLI_TOKEN")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("production"));
+
+    let written = std::fs::read_to_string(&config).expect("readable");
+    assert!(written.contains("# hand-written"));
+    assert!(written.contains(r#"description = "production""#));
+    assert!(written.contains(r#"default_queue = "PROJ""#));
+}
+
+/// A rename that leaves `default_profile` pointing at a name that no longer
+/// exists breaks every later command, so it moves with the profile.
+#[test]
+fn auth_edit_renames_a_profile_and_carries_the_default_across() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let config = dir.path().join("config.toml");
+    std::fs::write(
+        &config,
+        r#"default_profile = "work"
+
+[accounts.admin]
+
+[profiles.work]
+account = "admin"
+org_id = "12345"
+org_kind = "cloud"
+"#,
+    )
+    .expect("write config");
+
+    ytcli()
+        .args(["auth", "edit", "work", "--name", "prod", "--config"])
+        .arg(&config)
+        .current_dir(dir.path())
+        .env_remove("YTCLI_PROFILE")
+        .env_remove("YTCLI_TOKEN")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("renamed profile `work` → `prod`"));
+
+    let written = std::fs::read_to_string(&config).expect("readable");
+    assert!(written.contains("[profiles.prod]"));
+    assert!(written.contains(r#"default_profile = "prod""#));
+}
+
+/// An edit that asks for nothing rewrites nothing, and says what is there now
+/// rather than reporting a success that changed no file.
+#[test]
+fn auth_edit_without_any_change_refuses_and_reports_the_profile() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let config = dir.path().join("config.toml");
+    std::fs::write(
+        &config,
+        "[accounts.admin]\n\n[profiles.work]\naccount = \"admin\"\norg_id = \"12345\"\norg_kind = \"cloud\"\n",
+    )
+    .expect("write config");
+
+    ytcli()
+        .args(["auth", "edit", "work", "--config"])
+        .arg(&config)
+        .current_dir(dir.path())
+        .env_remove("YTCLI_PROFILE")
+        .env_remove("YTCLI_TOKEN")
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("nothing to change"))
+        .stderr(predicate::str::contains("org=12345"));
+}
+
+#[test]
+fn auth_edit_refuses_a_profile_that_is_not_configured() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let config = dir.path().join("config.toml");
+    std::fs::write(
+        &config,
+        "[accounts.admin]\n\n[profiles.work]\naccount = \"admin\"\norg_id = \"12345\"\norg_kind = \"cloud\"\n",
+    )
+    .expect("write config");
+
+    ytcli()
+        .args(["auth", "edit", "nope", "--description", "x", "--config"])
+        .arg(&config)
+        .current_dir(dir.path())
+        .env_remove("YTCLI_PROFILE")
+        .env_remove("YTCLI_TOKEN")
+        .assert()
+        .code(4)
+        .stderr(predicate::str::contains("no profile called `nope`"));
 }

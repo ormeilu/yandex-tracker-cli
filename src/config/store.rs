@@ -57,15 +57,20 @@ pub fn upsert(
         if let Some(table) = entry.as_table_mut() {
             table["account"] = value(&profile.account);
             table["org_id"] = value(&profile.org_id);
-            table["org_kind"] = value(match profile.org_kind {
-                OrgKind::Cloud => "cloud",
-                OrgKind::Yandex360 => "yandex360",
-            });
+            table["org_kind"] = value(kind_name(profile.org_kind));
             match &profile.default_queue {
                 Some(queue) => table["default_queue"] = value(queue),
                 None => {
                     table.remove("default_queue");
                 }
+            }
+            // Unlike the keys above, an absent description means "not said"
+            // rather than "cleared": login knows the intended queue every time
+            // it runs and does not ask about the note unless told to, so
+            // rewriting the profile must leave a hand-written one alone.
+            // `edit` is how it goes away.
+            if let Some(description) = &profile.description {
+                table["description"] = value(description);
             }
         }
 
@@ -112,6 +117,134 @@ pub fn set_default(path: &Path, name: &str) -> Result<String, StoreError> {
     Ok(rendered)
 }
 
+/// What an edit changes about a profile.
+///
+/// Two levels of optionality, and they mean different things: the outer
+/// `None` is "not mentioned, leave it alone", and `Some(None)` on the fields
+/// that have it is "remove this key". A command that edits one thing must not
+/// quietly rewrite the rest.
+#[derive(Debug, Default)]
+pub struct Edits<'a> {
+    /// Rename the profile itself.
+    pub name: Option<&'a str>,
+    pub account: Option<&'a str>,
+    pub org_id: Option<&'a str>,
+    pub org_kind: Option<OrgKind>,
+    pub description: Option<Option<&'a str>>,
+    pub default_queue: Option<Option<&'a str>>,
+}
+
+impl Edits<'_> {
+    /// Nothing to do. The caller refuses rather than rewriting the file for no
+    /// reason: a no-op that reports success looks exactly like a change.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.name.is_none()
+            && self.account.is_none()
+            && self.org_id.is_none()
+            && self.org_kind.is_none()
+            && self.description.is_none()
+            && self.default_queue.is_none()
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum EditError {
+    #[error("no profile called `{0}` in the configuration file")]
+    Unknown(String),
+    #[error("a profile called `{0}` already exists; pick another name or remove that one")]
+    NameTaken(String),
+    #[error(transparent)]
+    Store(#[from] StoreError),
+}
+
+/// Change an existing profile in place, optionally renaming it.
+///
+/// Its own function rather than a mode of [`upsert`], and for the same reason
+/// [`set_default`] is: editing a profile is a local edit to a file the user
+/// owns, and making them log in again — token, verification and all — to fix a
+/// typo in an organisation id would be theatre.
+///
+/// A rename moves the table rather than copying its fields, so `[profiles.x.display]`
+/// and anything hand-written inside it travel with it, and `default_profile` is
+/// carried across because a default naming a profile that no longer exists
+/// breaks every later command.
+pub fn edit(path: &Path, profile: &str, edits: &Edits<'_>) -> Result<String, EditError> {
+    let existing = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(error) => return Err(StoreError::Read(error).into()),
+    };
+
+    let mut document: DocumentMut = existing.parse().map_err(StoreError::from)?;
+
+    let profiles = implicit_table(&mut document, "profiles");
+    if !profiles.contains_key(profile) {
+        return Err(EditError::Unknown(profile.to_owned()));
+    }
+    if let Some(taken) = edits
+        .name
+        .filter(|name| *name != profile && profiles.contains_key(name))
+    {
+        return Err(EditError::NameTaken(taken.to_owned()));
+    }
+
+    let entry = profiles
+        .entry(profile)
+        .or_insert_with(|| Item::Table(Table::new()));
+    if let Some(table) = entry.as_table_mut() {
+        if let Some(account) = edits.account {
+            table["account"] = value(account);
+        }
+        if let Some(org_id) = edits.org_id {
+            table["org_id"] = value(org_id);
+        }
+        if let Some(org_kind) = edits.org_kind {
+            table["org_kind"] = value(kind_name(org_kind));
+        }
+        if let Some(description) = edits.description {
+            set_or_remove(table, "description", description);
+        }
+        if let Some(queue) = edits.default_queue {
+            set_or_remove(table, "default_queue", queue);
+        }
+    }
+
+    if let Some(new_name) = edits.name.filter(|name| *name != profile) {
+        if let Some(moved) = profiles.remove(profile) {
+            profiles.insert(new_name, moved);
+        }
+        if document.get("default_profile").and_then(Item::as_str) == Some(profile) {
+            document["default_profile"] = value(new_name);
+        }
+    }
+
+    let rendered = document.to_string();
+
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(StoreError::Write)?;
+    }
+    write_private(path, &rendered).map_err(StoreError::Write)?;
+
+    Ok(rendered)
+}
+
+fn set_or_remove(table: &mut Table, key: &str, wanted: Option<&str>) {
+    match wanted {
+        Some(text) => table[key] = value(text),
+        None => {
+            table.remove(key);
+        }
+    }
+}
+
+fn kind_name(kind: OrgKind) -> &'static str {
+    match kind {
+        OrgKind::Cloud => "cloud",
+        OrgKind::Yandex360 => "yandex360",
+    }
+}
+
 /// Write with owner-only permissions.
 ///
 /// The file holds no secrets by design, but it does name organisations and
@@ -154,6 +287,7 @@ mod tests {
             account: "work".to_owned(),
             org_id: "12345".to_owned(),
             org_kind: OrgKind::Cloud,
+            description: None,
             default_queue: Some("PROJ".to_owned()),
             display: Display::default(),
         }
@@ -254,6 +388,144 @@ org_kind = "yandex360"
         assert!(written.contains(r#"org_kind = "yandex360""#));
         assert!(!written.contains("default_queue"));
         assert_eq!(written.matches("[profiles.work]").count(), 1);
+    }
+
+    /// The note is about the organisation, which has not changed because a
+    /// token was renewed. A login that does not mention it must leave it be.
+    #[test]
+    fn a_login_that_says_nothing_about_the_description_keeps_the_one_on_file() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("config.toml");
+        let mut described = profile();
+        described.description = Some("production — customer data".to_owned());
+        upsert(&path, "work", None, Some(("work", &described)), true).expect("first");
+
+        let written =
+            upsert(&path, "work", None, Some(("work", &profile())), false).expect("second");
+
+        assert!(written.contains(r#"description = "production — customer data""#));
+    }
+
+    #[test]
+    fn a_description_can_be_set_and_removed_without_touching_anything_else() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            "# my notes\n\n[profiles.work]\naccount = \"me\"\norg_id = \"12345\"\n",
+        )
+        .expect("write");
+
+        let written = edit(
+            &path,
+            "work",
+            &Edits {
+                description: Some(Some("sandbox")),
+                ..Edits::default()
+            },
+        )
+        .expect("set");
+        assert!(written.contains(r#"description = "sandbox""#));
+        assert!(written.contains("# my notes"));
+        assert!(written.contains(r#"org_id = "12345""#));
+
+        let cleared = edit(
+            &path,
+            "work",
+            &Edits {
+                description: Some(None),
+                ..Edits::default()
+            },
+        )
+        .expect("clear");
+        assert!(!cleared.contains("description"));
+        assert!(cleared.contains(r#"org_id = "12345""#));
+    }
+
+    /// A rename that loses the display settings, or leaves `default_profile`
+    /// pointing at a name that no longer exists, is worse than no rename.
+    #[test]
+    fn renaming_moves_the_whole_profile_and_the_default_with_it() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            r#"default_profile = "work"
+
+[profiles.work]
+account = "me"
+org_id = "12345"
+org_kind = "cloud"
+
+[profiles.work.display]
+limit = 5
+"#,
+        )
+        .expect("write");
+
+        let written = edit(
+            &path,
+            "work",
+            &Edits {
+                name: Some("prod"),
+                description: Some(Some("production")),
+                ..Edits::default()
+            },
+        )
+        .expect("renamed");
+
+        assert!(written.contains("[profiles.prod]"));
+        assert!(written.contains("[profiles.prod.display]"));
+        assert!(written.contains("limit = 5"));
+        assert!(written.contains(r#"default_profile = "prod""#));
+        assert!(written.contains(r#"description = "production""#));
+        assert!(!written.contains("[profiles.work]"));
+    }
+
+    /// Renaming onto a name in use would merge two organisations into one
+    /// profile, silently. It is refused instead.
+    #[test]
+    fn renaming_onto_an_existing_profile_is_refused() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            "[profiles.work]\naccount = \"me\"\n\n[profiles.home]\naccount = \"me\"\n",
+        )
+        .expect("write");
+
+        let error = edit(
+            &path,
+            "work",
+            &Edits {
+                name: Some("home"),
+                ..Edits::default()
+            },
+        )
+        .expect_err("refused");
+
+        assert!(matches!(error, EditError::NameTaken(name) if name == "home"));
+        let still = std::fs::read_to_string(&path).expect("readable");
+        assert!(still.contains("[profiles.work]"));
+    }
+
+    #[test]
+    fn editing_a_profile_that_does_not_exist_says_so() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "[profiles.work]\naccount = \"me\"\n").expect("write");
+
+        let error = edit(
+            &path,
+            "nope",
+            &Edits {
+                org_id: Some("1"),
+                ..Edits::default()
+            },
+        )
+        .expect_err("refused");
+
+        assert!(matches!(error, EditError::Unknown(name) if name == "nope"));
     }
 
     #[test]

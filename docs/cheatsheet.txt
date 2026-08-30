@@ -29,6 +29,12 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
                                         `ytcli auth login --help` says where to get both values
   ytcli auth use NAME                   make a profile the default; a local edit,
                                         no token read and no request made
+  ytcli auth edit NAME --description "TEXT"
+                                        say which organisation a profile is; shown by list,
+                                        status and the profile= line. --clear-description removes it
+  ytcli auth edit NAME --name NEW [--org-id ID] [--org-kind KIND] [--account NAME] [--queue KEY]
+                                        change an existing profile without logging in again;
+                                        what you do not pass is not touched
   ytcli auth logout --account NAME      forget a token
   An account holds one credential. A profile is an organisation seen through an account.
 

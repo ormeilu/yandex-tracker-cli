@@ -54,6 +54,7 @@ account = "work"
 org_id = "12345"
 org_kind = "cloud"      # cloud -> X-Cloud-Org-Id, yandex360 -> X-Org-Id
 default_queue = "PROJ"
+description = "production — customer data"
 
 [profiles.work.display]
 limit = 25
@@ -61,9 +62,43 @@ description_lines = 10
 extra_fields = ["sprint", "storyPoints"]
 ```
 
+`description` is optional and free text. It is shown by `ytcli auth list` and
+`ytcli auth status`, and appended to the `→ profile=… org=…` line every command
+prints on stderr — which is the point of it: `12345` identifies nothing until
+you already know the number, and `work2` does not say whose data is behind it.
+Set it without hand-editing:
+
+```bash
+ytcli auth edit work --description "production — customer data"
+ytcli auth edit sandbox --clear-description
+```
+
+`ytcli auth login --description TEXT` sets the same field while creating a
+profile, and logging in again without the flag leaves an existing note alone.
+
 With `default_queue` set, a bare issue number is completed from it: `ytcli issue
 get 42` and `ytcli issue get PROJ-42` name the same issue, which is what
 somebody reading a board and typing a key by hand actually has in front of them.
+
+## Changing a profile later
+
+```bash
+ytcli auth edit work --name prod                  # rename; default_profile follows
+ytcli auth edit work --org-id 67890 --queue TEAM  # point it somewhere else
+ytcli auth edit work --account admin              # use another credential
+```
+
+Like `auth use`, these read no token and send no request, so a profile can be
+corrected whether or not its credentials currently work. What you do not pass is
+not touched, and a rename moves the whole `[profiles.x]` table — display
+settings and all. Nothing here is verified against Tracker, because nothing is
+sent: `ytcli auth status --active-only` is the check afterwards.
+
+Two things a local edit deliberately does not reach: a committed
+`.tracker.toml` naming the old profile is reported rather than rewritten, since
+it is shared with everyone else working in that checkout; and the credential
+itself, which is keyed by account in the keychain — `ytcli auth login` replaces
+that.
 
 ## Per repository
 

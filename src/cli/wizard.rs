@@ -170,6 +170,22 @@ pub fn queue(available: &[String]) -> Result<Option<String>, WizardError> {
     })
 }
 
+/// The note that says which organisation this profile is.
+///
+/// Optional, and empty means "leave it as it was": a re-login is about the
+/// token, and clearing someone's note because they pressed Enter would be a
+/// surprise. `auth edit --clear-description` is the way to remove one.
+pub fn description(current: Option<&str>) -> Result<Option<String>, WizardError> {
+    let typed: String = Input::with_theme(&theme())
+        .with_prompt("What is this organisation? (optional)")
+        .with_initial_text(current.unwrap_or_default())
+        .allow_empty(true)
+        .interact_text()?;
+
+    let typed = typed.trim();
+    Ok((!typed.is_empty()).then(|| typed.to_owned()))
+}
+
 /// Should this profile be the one a bare command uses?
 pub fn make_default(profile: &str, current: Option<&str>) -> Result<bool, WizardError> {
     let Some(current) = current else {

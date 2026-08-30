@@ -75,6 +75,27 @@ impl Cache {
         self.queues.retain(|_, profiles| !profiles.is_empty());
     }
 
+    /// Follow a profile that was renamed.
+    ///
+    /// Stale names are already harmless — `profiles_for` filters against the
+    /// configured ones — but dropping the knowledge would make the next bare
+    /// key ambiguous again until something lists queues afresh. Returns whether
+    /// anything moved, so an unchanged cache is not rewritten.
+    pub fn rename(&mut self, from: &str, to: &str) -> bool {
+        let mut moved = false;
+        for profiles in self.queues.values_mut() {
+            for profile in profiles.iter_mut() {
+                if profile == from {
+                    to.clone_into(profile);
+                    moved = true;
+                }
+            }
+            profiles.sort();
+            profiles.dedup();
+        }
+        moved
+    }
+
     /// Which profiles see this queue, among those still configured.
     ///
     /// Filtering against the current config matters: a profile deleted from the
@@ -129,6 +150,21 @@ pub fn queue_of(key: &str) -> Option<&str> {
 #[allow(clippy::expect_used)]
 mod tests {
     use super::*;
+
+    /// A renamed profile keeps what was known about it: otherwise the next
+    /// bare key is ambiguous again until something lists queues afresh.
+    #[test]
+    fn renaming_a_profile_carries_its_queues_over() {
+        let mut cache = Cache::default();
+        cache.record("work", &["LMS".to_owned(), "PROJ".to_owned()]);
+
+        assert!(cache.rename("work", "prod"));
+        assert_eq!(
+            cache.profiles_for("LMS", &["prod".to_owned()]),
+            vec!["prod".to_owned()]
+        );
+        assert!(!cache.rename("work", "prod"), "nothing left to move");
+    }
 
     #[test]
     fn a_queue_key_is_the_part_before_the_number() {

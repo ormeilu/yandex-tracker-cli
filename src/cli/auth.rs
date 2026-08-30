@@ -37,6 +37,9 @@ pub enum AuthCommand {
         /// Profile name, as `auth list` prints it.
         profile: String,
     },
+    /// Change an existing profile: its name, its note, the organisation it points at.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::AUTH_EDIT))]
+    Edit(EditArgs),
     /// Check every profile: who the token belongs to, and what it can see.
     #[command(long_about = crate::cli::help::md(crate::cli::help::AUTH_STATUS))]
     Status {
@@ -76,6 +79,12 @@ pub struct LoginArgs {
     #[arg(long, short = 'q')]
     pub queue: Option<String>,
 
+    /// Note saying which organisation this profile is; shown wherever the
+    /// profile is named. Asked for in a terminal, and left as it was when a
+    /// re-login omits it.
+    #[arg(long)]
+    pub description: Option<String>,
+
     /// Make this the default profile even if another one already is.
     #[arg(long)]
     pub default: bool,
@@ -83,6 +92,49 @@ pub struct LoginArgs {
     /// Skip the check that the token and organisation actually work.
     #[arg(long)]
     pub no_verify: bool,
+}
+
+/// Arguments for `auth edit`.
+///
+/// Everything is optional except the profile, and anything not passed is left
+/// exactly as it was: this command exists to change one thing without having to
+/// restate the rest of a profile that already works.
+#[derive(Debug, Args)]
+pub struct EditArgs {
+    /// Profile to change, as `auth list` prints it.
+    pub profile: String,
+
+    /// Rename it. `default_profile` follows; a committed `.tracker.toml` does not.
+    #[arg(long)]
+    pub name: Option<String>,
+
+    /// Note saying which organisation this is.
+    #[arg(long)]
+    pub description: Option<String>,
+
+    /// Remove the note.
+    #[arg(long, conflicts_with = "description")]
+    pub clear_description: bool,
+
+    /// Account whose credential this profile uses.
+    #[arg(long, short = 'a')]
+    pub account: Option<String>,
+
+    /// Organisation id.
+    #[arg(long)]
+    pub org_id: Option<String>,
+
+    /// Which header carries the organisation id.
+    #[arg(long, value_enum)]
+    pub org_kind: Option<OrgKind>,
+
+    /// Queue assumed when a command needs one and none was given.
+    #[arg(long, short = 'q')]
+    pub queue: Option<String>,
+
+    /// Stop assuming a queue.
+    #[arg(long, conflicts_with = "queue")]
+    pub clear_queue: bool,
 }
 
 /// Run an auth subcommand.
@@ -93,6 +145,7 @@ pub async fn run(command: &AuthCommand, session: &Session) -> ExitCode {
         AuthCommand::Logout { account } => logout(account),
         AuthCommand::List => list(session),
         AuthCommand::Use { profile } => use_profile(session, profile),
+        AuthCommand::Edit(args) => edit(args, session),
     }
 }
 
@@ -160,17 +213,7 @@ async fn status(session: &Session, brief: bool, active_only: bool) -> ExitCode {
             paint.paint(&source, Palette::label()),
             paint.paint(marks, Palette::ok()),
         );
-        let _ = writeln!(
-            out,
-            "  {} {}   {} {} ({:?})   {} {}",
-            paint.paint("account:", Palette::label()),
-            profile.account,
-            paint.paint("org:", Palette::label()),
-            profile.org_id,
-            profile.org_kind,
-            paint.paint("queue:", Palette::label()),
-            profile.default_queue.as_deref().unwrap_or("-"),
-        );
+        describe_profile(profile, paint, &mut out);
 
         let code = report_profile(
             profile,
@@ -226,6 +269,33 @@ async fn status(session: &Session, brief: bool, active_only: bool) -> ExitCode {
     active_failure
         .or_else(|| (!any_success).then_some(last_failure).flatten())
         .unwrap_or(ExitCode::Success)
+}
+
+/// The two lines under a profile heading: its note, then what it points at.
+fn describe_profile(
+    profile: &crate::config::Profile,
+    paint: Painter,
+    out: &mut impl std::io::Write,
+) {
+    if let Some(description) = profile.description.as_deref() {
+        let _ = writeln!(
+            out,
+            "  {} {description}",
+            paint.paint("note:", Palette::label()),
+        );
+    }
+
+    let _ = writeln!(
+        out,
+        "  {} {}   {} {} ({:?})   {} {}",
+        paint.paint("account:", Palette::label()),
+        profile.account,
+        paint.paint("org:", Palette::label()),
+        profile.org_id,
+        profile.org_kind,
+        paint.paint("queue:", Palette::label()),
+        profile.default_queue.as_deref().unwrap_or("-"),
+    );
 }
 
 /// Persist the queue map, so a later bare key can be judged without a request.
@@ -603,10 +673,14 @@ async fn login(args: &LoginArgs, session: &Session) -> ExitCode {
     if session.global.dry_run {
         let _ = writeln!(
             err,
-            "dry run: would write profile `{profile_name}` (account={}, org={}, {:?}{}) to {}",
+            "dry run: would write profile `{profile_name}` (account={}, org={}, {:?}{}{}) to {}",
             profile.account,
             profile.org_id,
             profile.org_kind,
+            profile
+                .description
+                .as_deref()
+                .map_or_else(String::new, |note| format!(", {note}")),
             if make_default { ", default" } else { "" },
             session.config_file.display(),
         );
@@ -748,6 +822,21 @@ async fn shape_profile(
         None => None,
     };
 
+    // Kept when a re-login does not mention it: the note is about the
+    // organisation, which has not changed just because the token was renewed.
+    let existing = session
+        .config
+        .profiles
+        .get(&profile_name)
+        .and_then(|profile| profile.description.clone());
+    let description = match (args.description.clone(), shape.interactive) {
+        (Some(text), _) => Some(text),
+        (None, true) => wizard::description(existing.as_deref())
+            .map_err(|error| report(&error, error.exit_code()))?
+            .or(existing),
+        (None, false) => existing,
+    };
+
     let current_default = session.config.default_profile.as_deref();
     let make_default = if args.default || current_default.is_none() {
         true
@@ -764,6 +853,7 @@ async fn shape_profile(
             account: shape.account.to_owned(),
             org_id: shape.org_id.to_owned(),
             org_kind: shape.org_kind,
+            description,
             default_queue: queue,
             display: crate::config::Display::default(),
         },
@@ -868,6 +958,25 @@ async fn verify(
     Err(reported)
 }
 
+/// "That name is not in the config, and here are the ones that are."
+///
+/// The list matters more than the refusal: the usual cause is a typo or a
+/// profile from another machine, and both are answered by seeing the names.
+fn unknown<'a>(what: &str, name: &str, configured: impl Iterator<Item = &'a String>) -> ExitCode {
+    let known: Vec<&str> = configured.map(String::as_str).collect();
+    report(
+        &format!(
+            "no {what} called `{name}`; configured: {}",
+            if known.is_empty() {
+                "none — run `ytcli auth login`".to_owned()
+            } else {
+                known.join(", ")
+            }
+        ),
+        ExitCode::NotFound,
+    )
+}
+
 /// Point `default_profile` at another profile.
 ///
 /// A local edit and nothing else: no token is read, no request is made. The
@@ -877,18 +986,7 @@ fn use_profile(session: &Session, profile: &str) -> ExitCode {
     let mut err = anstream::stderr();
 
     if !session.config.profiles.contains_key(profile) {
-        let known: Vec<&str> = session.config.profiles.keys().map(String::as_str).collect();
-        return report(
-            &format!(
-                "no profile called `{profile}`; configured: {}",
-                if known.is_empty() {
-                    "none — run `ytcli auth login`".to_owned()
-                } else {
-                    known.join(", ")
-                }
-            ),
-            ExitCode::NotFound,
-        );
+        return unknown("profile", profile, session.config.profiles.keys());
     }
 
     let previous = session.config.default_profile.clone();
@@ -917,6 +1015,191 @@ fn use_profile(session: &Session, profile: &str) -> ExitCode {
         }
         Err(error) => report(&error, ExitCode::Failure),
     }
+}
+
+/// Change an existing profile.
+///
+/// Like `auth use`, a local edit: no token is read and no request is made, so a
+/// profile can be corrected whether or not its credentials currently work. What
+/// is not passed is not touched — the point of the command is changing one
+/// thing without restating a profile that already works.
+fn edit(args: &EditArgs, session: &Session) -> ExitCode {
+    let mut err = anstream::stderr();
+
+    if !session.config.profiles.contains_key(&args.profile) {
+        return unknown("profile", &args.profile, session.config.profiles.keys());
+    }
+
+    // An account nobody has logged into is a profile that fails on every later
+    // command, with a message about the account rather than about this edit.
+    if let Some(account) = args
+        .account
+        .as_deref()
+        .filter(|account| !session.config.accounts.contains_key(*account))
+    {
+        return unknown("account", account, session.config.accounts.keys());
+    }
+
+    // An empty string is how a shell says "nothing", so it means the same as
+    // --clear-description rather than writing a note nobody can read.
+    let description = if args.clear_description {
+        Some(None)
+    } else {
+        args.description
+            .as_deref()
+            .map(str::trim)
+            .map(|text| (!text.is_empty()).then_some(text))
+    };
+
+    let edits = store::Edits {
+        name: args.name.as_deref(),
+        account: args.account.as_deref(),
+        org_id: args.org_id.as_deref(),
+        org_kind: args.org_kind,
+        description,
+        default_queue: if args.clear_queue {
+            Some(None)
+        } else {
+            args.queue.as_deref().map(Some)
+        },
+    };
+
+    if edits.is_empty() {
+        return report(
+            &format!(
+                "nothing to change; pass --name, --description, --account, --org-id, --org-kind or --queue (see `ytcli auth edit --help`)\ncurrently: {}",
+                describe_current(session, &args.profile)
+            ),
+            ExitCode::ConfirmationRequired,
+        );
+    }
+
+    if session.global.dry_run {
+        let _ = writeln!(
+            err,
+            "dry run: would change profile `{}` in {}",
+            args.profile,
+            session.config_file.display()
+        );
+        return ExitCode::Success;
+    }
+
+    match store::edit(&session.config_file, &args.profile, &edits) {
+        Ok(_) => {
+            let name = args.name.as_deref().unwrap_or(&args.profile);
+            if let Some(new_name) = args.name.as_deref().filter(|name| *name != args.profile) {
+                rename_side_effects(session, &args.profile, new_name, &mut err);
+            }
+            let _ = writeln!(
+                err,
+                "profile `{name}`: {}",
+                describe_after(session, &args.profile, &edits)
+            );
+            if args.org_id.is_some() || args.org_kind.is_some() || args.account.is_some() {
+                let _ = writeln!(
+                    err,
+                    "check it: ytcli auth status --profile {name} --active-only"
+                );
+            }
+            emit(&format!("{name}\n"));
+            ExitCode::Success
+        }
+        Err(error) => {
+            let code = match error {
+                store::EditError::Unknown(_) => ExitCode::NotFound,
+                // Neither is ApiRejected: nothing was sent. A name already in
+                // use, and a file that will not parse, are both plain failures
+                // of this local edit.
+                store::EditError::NameTaken(_) | store::EditError::Store(_) => ExitCode::Failure,
+            };
+            report(&error, code)
+        }
+    }
+}
+
+/// Carry a rename through the things outside the profile table that name it,
+/// and say what a local edit cannot reach.
+fn rename_side_effects(session: &Session, from: &str, to: &str, err: &mut impl std::io::Write) {
+    let cache_path = crate::config::cache::path_for(&session.config_file);
+    let mut cache = crate::config::cache::Cache::load(&cache_path);
+    if cache.rename(from, to) {
+        cache.save(&cache_path);
+    }
+
+    let _ = writeln!(err, "renamed profile `{from}` → `{to}`");
+
+    // A committed `.tracker.toml` is shared with other people and other
+    // checkouts; rewriting it from here would change what a colleague's next
+    // command does, so it is reported instead.
+    if let Some((path, _)) =
+        crate::config::paths::find_project_pin(&std::env::current_dir().unwrap_or_default())
+            .filter(|(_, pin)| pin.profile.as_deref() == Some(from))
+    {
+        let _ = writeln!(
+            err,
+            "note: {} still names `{from}`; update it by hand",
+            path.display()
+        );
+    }
+
+    if session.config.default_profile.as_deref() == Some(from) {
+        let _ = writeln!(err, "default profile: {from} → {to}");
+    }
+}
+
+/// The profile as it stands, for the message that says nothing was asked for.
+fn describe_current(session: &Session, profile: &str) -> String {
+    session
+        .config
+        .profiles
+        .get(profile)
+        .map_or_else(String::new, |current| {
+            format!(
+                "account={} org={} ({:?}) queue={} description={}",
+                current.account,
+                current.org_id,
+                current.org_kind,
+                current.default_queue.as_deref().unwrap_or("-"),
+                current.description.as_deref().unwrap_or("-"),
+            )
+        })
+}
+
+/// What this edit changed, named key by key so the line is about the change and
+/// not about the profile.
+fn describe_after(session: &Session, profile: &str, edits: &store::Edits<'_>) -> String {
+    let current = session.config.profiles.get(profile);
+    let mut parts: Vec<String> = Vec::new();
+
+    if let Some(account) = edits.account {
+        parts.push(format!("account={account}"));
+    }
+    if let Some(org_id) = edits.org_id {
+        parts.push(format!("org={org_id}"));
+    }
+    if let Some(org_kind) = edits.org_kind {
+        parts.push(format!("org_kind={org_kind:?}"));
+    }
+    match edits.default_queue {
+        Some(Some(queue)) => parts.push(format!("queue={queue}")),
+        Some(None) => parts.push("queue removed".to_owned()),
+        None => {}
+    }
+    match edits.description {
+        Some(Some(text)) => parts.push(format!("description=\"{text}\"")),
+        Some(None) => parts.push("description removed".to_owned()),
+        None => {}
+    }
+
+    if parts.is_empty() {
+        // A rename on its own: say what the profile is now, since its identity
+        // is exactly what just changed.
+        return current.map_or_else(String::new, |current| {
+            format!("account={} org={}", current.account, current.org_id)
+        });
+    }
+
+    parts.join(" ")
 }
 
 fn logout(account: &str) -> ExitCode {
@@ -966,9 +1249,14 @@ fn list(session: &Session) -> ExitCode {
             format!("  [{}]", marks.join(", "))
         };
 
+        let note = profile
+            .description
+            .as_deref()
+            .map_or_else(String::new, |description| format!("  {description}"));
+
         let _ = writeln!(
             out,
-            "profile {name}  account: {}  org: {} ({:?}){suffix}",
+            "profile {name}  account: {}  org: {} ({:?}){suffix}{note}",
             profile.account, profile.org_id, profile.org_kind,
         );
     }

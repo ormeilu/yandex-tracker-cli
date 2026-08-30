@@ -33,6 +33,30 @@ ytcli auth status --brief --active-only
 ytcli auth list          # accounts and profiles, and whether a token is stored
 ```
 
+A profile can carry a note saying which organisation it is:
+
+```bash
+ytcli auth edit work --description "production — customer data"
+```
+
+Where it is set, the note rides along on the `→ profile=… org=…` line every
+command prints, which is what tells you what a write is about to touch.
+
+`auth edit` changes anything else about an existing profile too — `--name` to
+rename it (`default_profile` follows), `--org-id`, `--org-kind`, `--account`,
+`--queue`. It is a local edit: no token is read and no request is made, so a
+profile can be corrected while its credentials are broken. What you do not pass
+is not touched, and nothing is verified — `ytcli auth status --active-only`
+after changing an organisation id.
+
+**When a profile's note is missing or says nothing** — `work2`, `default`,
+`test` — offer to write one, and say why: it is the only part of
+`→ profile=… org=…` a person can read, and it is what stands between a comment
+meant for the sandbox and the customers' queue. Propose the text from what you
+can see (`ytcli auth status --brief` names the organisation and who the token
+belongs to) and let the user approve it. Do not run `auth edit` unasked: it
+writes to their config file.
+
 ## Which profile is in play
 
 Highest wins:
@@ -168,6 +192,7 @@ allowlist is worth having. For Claude Code, in `.claude/settings.json`:
       "Bash(ytcli attachment delete:*)",
       "Bash(ytcli auth login:*)",
       "Bash(ytcli auth use:*)",
+      "Bash(ytcli auth edit:*)",
       "Bash(ytcli auth logout:*)"
     ]
   }

@@ -127,7 +127,11 @@ Labels split the work by area: `area:issues`, `area:entities`,
   that word, and the group used most was the one exception.
 - Profile routing: a bare key goes to the profile that can see its queue, and
   every command says on stderr which profile and organisation answered.
-  `ytcli auth use` switches the stored default without reading a token.
+  `ytcli auth use` switches the stored default without reading a token, and
+  `ytcli auth edit` changes an existing profile — its name, the organisation it
+  points at, and the free-text note saying which organisation that is — on the
+  same terms. The note rides along on that stderr line, because an organisation
+  id is a number nobody recognises.
 - Help written in markdown and rendered with termimad for a terminal; the source
   goes to a pipe, where an agent reads it natively and escape codes would be
   noise.

@@ -554,3 +554,32 @@ async fn status_names_the_config_file_and_the_overriding_environment() {
     assert!(stdout.contains("environment: YTCLI_"), "{stdout}");
     assert!(!stdout.contains("test-token"), "{stdout}");
 }
+
+/// The note is what makes the profile line readable later, so login can set it
+/// while the profile is being created rather than only afterwards.
+#[tokio::test]
+async fn a_description_given_at_login_is_written_with_the_profile() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v3/myself"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(myself()))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run_raw(&[
+            "auth",
+            "login",
+            "--account",
+            "work",
+            "--org-id",
+            "12345",
+            "--description",
+            "production — customer data",
+            "--dry-run",
+        ])
+        .write_stdin("test-token\n")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("production — customer data"));
+}

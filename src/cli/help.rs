@@ -1076,7 +1076,11 @@ ytcli auth list
 ```
 
 Whether a token is stored is shown; the token never is. An account holds one
-credential; a profile is one organisation seen through one account.";
+credential; a profile is one organisation seen through one account.
+
+Both can carry a note saying who or what they are — `ytcli auth edit NAME
+--description TEXT` writes a profile's, and an account's is hand-edited into the
+config file.";
 
 pub const AUTH_USE: &str = "\
 Make a profile the default one.
@@ -1093,6 +1097,34 @@ rather than a side effect of `auth login`.
 For one command, `--profile` is cheaper than switching; for one shell,
 `YTCLI_PROFILE`; for one directory, `.tracker.toml`. And a key whose queue only
 one profile can see is routed there whatever the default says.";
+
+pub const AUTH_EDIT: &str = "\
+Change an existing profile: its name, its note, the organisation it points at.
+
+```
+ytcli auth edit work --description \"production — customer data\"
+ytcli auth edit work --name prod
+ytcli auth edit sandbox --org-id 67890 --queue TEST
+ytcli auth edit sandbox --clear-description
+```
+
+A local edit to the config file: no token is read and no request is made, so a
+profile can be corrected whether or not its credentials currently work. What you
+do not pass is not touched.
+
+`--description` is the note saying which organisation this is. It is shown by
+`auth list`, by `auth status`, and on the one-line `→ profile=… org=…` that
+every command prints on stderr — which is where it earns its keep: an
+organisation id is a number nobody recognises, and `work2` does not say whose
+data it is. `auth login --description TEXT` sets the same field while creating a
+profile, and a later login leaves an existing one alone.
+
+`--name` moves the whole profile, display settings included, and carries
+`default_profile` with it. A committed `.tracker.toml` naming the old name is
+reported rather than rewritten: it is shared with other people.
+
+Changing `--org-id`, `--org-kind` or `--account` is not verified here — nothing
+is sent. `ytcli auth status --active-only` checks it afterwards.";
 
 pub const AUTH_LOGOUT: &str = "\
 Remove a stored token.

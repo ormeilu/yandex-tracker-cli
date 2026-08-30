@@ -107,6 +107,12 @@ pub struct Profile {
     /// Organisation id sent in the header chosen by `org_kind`.
     pub org_id: String,
     pub org_kind: OrgKind,
+    /// Human note about which organisation this is. An org id is a number
+    /// nobody recognises and a profile name is whatever was typed at login, so
+    /// this is what answers "am I about to write to production" — which is why
+    /// it rides along on the provenance banner and not only in `auth list`.
+    #[serde(default)]
+    pub description: Option<String>,
     /// Queue assumed when a command needs one and none was given.
     #[serde(default)]
     pub default_queue: Option<String>,
