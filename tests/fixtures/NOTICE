@@ -17,16 +17,39 @@ in these files. Only the structure is borrowed.
 asks the real API once per endpoint and fails on a key a fixture claims and
 Tracker no longer returns. Everything it can reach has been confirmed that way.
 
-Seven cannot be reached, because no organisation available to us has any of the
-thing they describe, and an empty array agrees with every fixture ever written:
+Seven of them used to be out of its reach, because no organisation had any of the
+thing they describe and an empty array agrees with every fixture ever written
+(#78). They are reachable now:
+`one_of_everything_the_fixture_audit_cannot_otherwise_reach` makes one of each —
+a queue version, a component with a lead, a local field with an options provider,
+a board with a sprint, an issue template, a link out of Tracker, and a required
+field on the queue — and then checks the fixture against what comes back.
 
-    queue_fields.json        queue_versions.json    queue_local_fields.json
-    components.json          issue_templates.json   all_sprints.json
-    issue_remotelinks.json
+All seven have been confirmed that way against a real organisation. Run it before
+trusting any of them again after an edit:
 
-Those are still only borrowed shapes. Treat a change to one of them as a change
-to something nobody has checked — see issue #78, which is where the plan for
-closing that gap lives.
+    YTCLI_PROFILE=… YTCLI_TEST_QUEUE=… just test-live
+
+What that run also established, none of which is in the API reference:
+
+  * `POST /v3/issueTemplates` exists. `fieldTemplates` is an object of field to
+    value; the array form the reference uses elsewhere is refused, and so is an
+    empty one.
+  * A template made through the API carries no `createdBy`. The first element of
+    `issue_templates.json` is the shape Tracker answered with; the second keeps
+    the `createdBy` variant, which is still only borrowed.
+  * `GET /v3/queues/{key}/fields` is the queue's *required* fields, which is why
+    it answers `[]` in an organisation that has plenty of fields. `PATCH` on the
+    same path sets them, and takes a bare array of field ids.
+  * Anything versioned — a component, a local field — takes its version in the
+    query (`?version=N`), not in the body: sent as a field it answers
+    "version: Incorrect data format", which reads like the value is wrong rather
+    than the place.
+  * A remote link needs an application registered in the organisation, and not
+    every one of them accepts a link: Wiki answers 403 and Messenger 500, while
+    GitLab works. `GET /v3/applications` lists the candidates.
+  * Listing endpoints lag a second or two behind the write that fed them, so a
+    fixture checked immediately after a write can look like it has drifted.
 
 `comments_html.json` is the exception in the other direction: it was recorded
 from a real organisation, sanitised of names and ids, and is the evidence for

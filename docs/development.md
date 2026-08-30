@@ -39,8 +39,23 @@ you would not mind losing.
 `just test-live` runs a small suite against a real organisation, one test at a
 time. It exists for the class of bug fixtures cannot catch — three shipped past
 the mocked suite because the fixtures encoded the same wrong beliefs the code
-did. Reads need credentials; the one write test only runs when `YTCLI_TEST_QUEUE`
+did. Reads need credentials; the write tests only run when `YTCLI_TEST_QUEUE`
 names a queue, because Tracker has no delete.
+
+Two of them are about the fixtures rather than the code.
+`every_fixture_still_has_the_shape_tracker_answers_with` checks each fixture
+against the endpoint it came from and prints what it could not reach;
+`one_of_everything_the_fixture_audit_cannot_otherwise_reach` makes the things no
+organisation has by default — a queue version, a component, a local field, a
+board with a sprint, a template, a link out of Tracker, a required field — so
+that the audit reaches them at all. Point them at a scratch queue:
+
+```bash
+YTCLI_PROFILE=personal YTCLI_TEST_QUEUE=YTLIVE just test-live
+```
+
+`tests/fixtures/NOTICE` records which shapes have been confirmed that way and
+what the runs turned up that the API reference does not say.
 
 Planned work is tracked in
 [GitHub issues](https://github.com/ormeilu/yandex-tracker-cli/issues); pick one
