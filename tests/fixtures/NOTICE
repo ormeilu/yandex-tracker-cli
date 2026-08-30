@@ -10,3 +10,24 @@ text.
 
 The values here are invented — no real issue, user, organisation or token appears
 in these files. Only the structure is borrowed.
+
+## Which of these have been confirmed against a real Tracker
+
+`every_fixture_still_has_the_shape_tracker_answers_with`, in `tests/live.rs`,
+asks the real API once per endpoint and fails on a key a fixture claims and
+Tracker no longer returns. Everything it can reach has been confirmed that way.
+
+Seven cannot be reached, because no organisation available to us has any of the
+thing they describe, and an empty array agrees with every fixture ever written:
+
+    queue_fields.json        queue_versions.json    queue_local_fields.json
+    components.json          issue_templates.json   all_sprints.json
+    issue_remotelinks.json
+
+Those are still only borrowed shapes. Treat a change to one of them as a change
+to something nobody has checked — see issue #78, which is where the plan for
+closing that gap lives.
+
+`comments_html.json` is the exception in the other direction: it was recorded
+from a real organisation, sanitised of names and ids, and is the evidence for
+what `markupType` does (#77).

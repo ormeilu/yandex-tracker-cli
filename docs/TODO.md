@@ -49,7 +49,9 @@ meet is how the drift started.
   the real API once per endpoint and fails on a key a fixture claims and Tracker
   no longer returns. It prints what it could **not** check rather than passing
   quietly: an organisation with no sprints leaves the sprint fixture unverified,
-  and that is a fact about the run rather than a success.
+  and that is a fact about the run rather than a success. `tests/fixtures/NOTICE`
+  names the seven that remain only borrowed, and issue #78 is where closing that
+  gap is tracked.
 - **1.0.0** — no new surface of its own. It is the version that says the surface
   is finished: every endpoint a survey of the API found is reachable, the output
   shape has been stable for several releases, and what was deliberately left out
