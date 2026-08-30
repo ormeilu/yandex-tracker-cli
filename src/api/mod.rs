@@ -268,6 +268,24 @@ impl Client {
         parse::comment(&value).ok_or_else(|| ApiError::NotFound("created comment".to_owned()))
     }
 
+    /// Ask Tracker something no command asks yet.
+    ///
+    /// Compiled only for the `live` feature, which is how it stays a probe
+    /// rather than product surface: a question we need answered once — what
+    /// `markupType` actually does, whether a field still has the shape we
+    /// believe — should not cost the binary a method that ships forever.
+    #[cfg(feature = "live")]
+    pub async fn probe_get(&self, path: &str) -> Result<Value, ApiError> {
+        self.get_value(path, path).await
+    }
+
+    /// The same, for a body somebody has to send to find out.
+    #[cfg(feature = "live")]
+    pub async fn probe_post(&self, path: &str, body: &Value) -> Result<Value, ApiError> {
+        let (value, _) = self.post_value(path, body, path).await?;
+        Ok(value)
+    }
+
     /// Rewrite a comment that is already there.
     ///
     /// Tracker keeps no history of the previous text and shows the comment as

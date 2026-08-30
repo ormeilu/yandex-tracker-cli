@@ -685,6 +685,104 @@ async fn bulk_transition_and_move_refuse_a_list_they_cannot_do_whole() {
     );
 }
 
+/// What `markupType` decides, asked of Tracker rather than of its reference.
+///
+/// The question from #77: every write this tool makes omits `markupType`, and
+/// the documentation implies that field is what selects Markdown. The issue API
+/// cannot answer it — the same body written three ways is stored byte-identical
+/// and no field says which was used — so this asks the one endpoint that
+/// renders on read. `expand=html` returns the drawn comment, and `#` disagrees
+/// between the two markups: a heading in Markdown, a numbered list in wiki.
+#[tokio::test]
+#[ignore = "writes comments; needs YTCLI_TEST_QUEUE"]
+async fn markup_type_decides_how_a_comment_is_drawn() {
+    // A body the two markups disagree about, in the one place that costs a
+    // reader something: `#` numbers a list in wiki markup and heads a section
+    // in Markdown.
+    const BODY: &str = "# one\n# two\n\n== Heading ==\n\n**md bold** !!wf bold!!\n\n1. first\n- item\n\n[md link](https://example.com) ((https://example.com wf link))\n\n`code`";
+
+    let Some(queue) = setting("YTCLI_TEST_QUEUE") else {
+        return;
+    };
+    let client = client();
+    let issue = client
+        .create_issue(&serde_json::json!({
+            "queue": queue,
+            "summary": "ytcli live test — what markupType decides",
+        }))
+        .await
+        .expect("create");
+
+    let path = format!("/v3/issues/{}/comments", issue.key);
+    for body in [
+        serde_json::json!({ "text": BODY }),
+        serde_json::json!({ "text": BODY, "markupType": "md" }),
+        serde_json::json!({ "text": BODY, "markupType": "wf" }),
+    ] {
+        client.probe_post(&path, &body).await.expect("comment");
+    }
+
+    let drawn = client
+        .probe_get(&format!("{path}?expand=html"))
+        .await
+        .expect("comments as html");
+    let html: Vec<String> = drawn
+        .as_array()
+        .expect("an array of comments")
+        .iter()
+        .filter_map(|comment| comment.get("textHtml").and_then(|html| html.as_str()))
+        .map(ToOwned::to_owned)
+        .collect();
+    assert_eq!(
+        html.len(),
+        3,
+        "expand=html returned no rendered text: {drawn}"
+    );
+
+    if let Ok(path) = std::env::var("YTCLI_CAPTURE") {
+        std::fs::write(
+            &path,
+            serde_json::to_string_pretty(&drawn).unwrap_or_default(),
+        )
+        .expect("capture");
+    }
+
+    // `#` heads a section in both modes. That is the trap #75 hit, and it is
+    // not conditional on anything.
+    for (mode, rendered) in ["bare", "md", "wf"].iter().zip(&html) {
+        assert!(
+            rendered.contains("<h1"),
+            "{mode}: `#` did not draw as a heading: {rendered}"
+        );
+    }
+
+    // The answer #77 exists for. A write with no markupType — which is every
+    // write this tool makes — is drawn exactly as `wf` is, and `wf` is the
+    // permissive mode: it honours the wiki markup *as well as* Markdown.
+    assert_eq!(
+        html.first(),
+        html.get(2),
+        "a bare write is no longer drawn the way `wf` is"
+    );
+    assert_ne!(
+        html.first(),
+        html.get(1),
+        "`md` and the default now draw the same, so the default may have changed"
+    );
+
+    // What `md` gives up: the wiki spellings stop being markup and stay text.
+    let md = html.get(1).map(String::as_str).unwrap_or_default();
+    assert!(md.contains("== Heading =="), "md drew a wiki heading: {md}");
+    assert!(md.contains("!!wf bold!!"), "md drew wiki emphasis: {md}");
+
+    // What the default gives: both vocabularies at once.
+    let bare = html.first().map(String::as_str).unwrap_or_default();
+    assert!(
+        bare.contains("<h1 id=\"heading\""),
+        "the default stopped honouring a wiki heading: {bare}"
+    );
+}
+
 /// Both link vocabularies, and the fact that they are two.
 #[tokio::test]
 #[ignore = "needs real credentials"]

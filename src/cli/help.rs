@@ -310,9 +310,9 @@ it can come from a file or from stdin rather than from an argument. Both at once
 is an error, not a precedence rule: guessing which was meant is how the wrong
 text gets written.
 
-Descriptions and comments are Markdown — Yandex Flavored Markdown, a superset of
-it — and **not** the wiki markup Yandex Wiki uses. A `#` starting a line is a
-heading, not a list marker; number a list with `1.` and head a section with `##`.
+Descriptions and comments are drawn as Yandex Flavored Markdown. The older wiki
+spellings still render alongside it, but a `#` starting a line is a heading in
+both, never a list marker: number a list with `1.` and head a section with `##`.
 The wrong one renders without an error, so nothing but the reader will say so.
 
 Prints the profile and organisation it is about to write to before it writes.

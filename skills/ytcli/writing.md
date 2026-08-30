@@ -81,23 +81,23 @@ and expect the previous wording to be gone — Tracker keeps no history of it.
 
 ## Descriptions and comments are Markdown
 
-Both are stored as [Yandex Flavored Markdown][yfm], a superset of Markdown — not
-as the wiki markup Yandex Wiki and Tracker's older editor use. The two disagree
-in exactly the place that costs the most:
+Both are drawn as [Yandex Flavored Markdown][yfm]. The older Yandex wiki
+spellings still work alongside it — `== Heading ==` and `((url text))` render —
+but that is a courtesy, and it does not extend to the one that matters:
 
-| what you want   | write        | **not**        |
-| --------------- | ------------ | -------------- |
-| heading         | `## Heading` | `== Heading`   |
-| numbered list   | `1. first`   | `# first`      |
-| bulleted list   | `- item`     | `* item` works |
-| bold, italic    | `**b**` `_i_` | `!!b!!`       |
-| link            | `[text](url)` | `((url text))` |
-| code            | backticks, and ``` for a block | |
+| what you want   | write         | **not**                      |
+| --------------- | ------------- | ---------------------------- |
+| numbered list   | `1. first`    | `# first` — that is a heading |
+| heading         | `## Heading`  | `== Heading ==` works, but Markdown is the one to write |
+| bold, italic    | `**b**` `_i_` | `!!b!!` colours text red      |
+| link            | `[text](url)` | `((url text))`               |
+| code            | backticks, and ``` for a block |           |
 
-**A `#` that starts a line is a heading, not a list marker.** That is the one
-worth remembering: in wiki markup `#` numbers a list, so a numbered list written
-the wiki way becomes a page of top-level headings. It renders without an error
-and without an exit code — the cost lands on whoever opens the issue.
+**A `#` that starts a line is a heading, not a list marker.** In wiki markup it
+numbers a list, and Tracker draws it as a heading either way — so a numbered
+list written the wiki way becomes a page of top-level headings. It renders
+without an error and without an exit code: the cost lands on whoever opens the
+issue.
 
 Comments follow the same rules as descriptions.
 

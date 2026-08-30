@@ -87,14 +87,16 @@ fn the_cheatsheet_carries_the_links_too() {
 }
 
 /// The mistake this line exists for: `#` numbers a list in Yandex wiki markup
-/// and heads a section in Markdown, and Tracker stores Markdown.
+/// and heads a section in Markdown, and Tracker draws it as a heading either
+/// way — verified against a real Tracker in `tests/live.rs`.
 #[test]
 fn the_cheatsheet_says_which_markup_a_description_is() {
     ytcli()
         .arg("cheatsheet")
         .assert()
         .success()
-        .stdout(predicate::str::contains("not Yandex wiki markup"));
+        .stdout(predicate::str::contains("Markdown (Yandex Flavored)"))
+        .stdout(predicate::str::contains("never a list marker"));
 }
 
 #[test]
