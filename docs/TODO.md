@@ -162,6 +162,12 @@ Labels split the work by area: `area:issues`, `area:entities`,
 - Documentation that is executed: the README and cheatsheet examples run as
   `trycmd` cases against the stub, and a command documented without a case has
   to be declared unrunnable with a reason.
+- The fixtures are checked against the real API, and the seven that nothing
+  could check are checkable now: a live test makes a queue version, a component,
+  a local field, a board with a sprint, a template, a link out of Tracker and a
+  required field, because an empty array agrees with every fixture ever written.
+  `tests/fixtures/NOTICE` says which shapes are confirmed and which are still
+  only borrowed.
 
 - `brew install ormeilu/tap/ytcli`, from
   [ormeilu/homebrew-tap](https://github.com/ormeilu/homebrew-tap). The formula is
