@@ -289,8 +289,9 @@ values: anything of that type
 ```console
 $ ytcli template list
 → profile=test org=12345 (from YTCLI_PROFILE)
+1            Weekly report                        PROJ         -
 7            Incident                             PROJ         ilubenets
-shown 1 of 1
+shown 2 of 2
 
 ```
 

@@ -1496,3 +1496,433 @@ async fn every_query_the_skill_teaches_is_accepted() {
         "Tracker refused queries the skill teaches: {refused:#?}"
     );
 }
+
+/// The seven fixtures no read-only audit can reach, made reachable.
+///
+/// `queue_fields`, `queue_versions`, `queue_local_fields`, `components`,
+/// `issue_templates`, `all_sprints` and `issue_remotelinks` all describe things
+/// an organisation does not have until somebody makes one, and an empty array
+/// agrees with every fixture ever written (#78). So this makes one of each and
+/// then looks at what came back — the pattern that already settled
+/// `issue_links.json`.
+///
+/// Queue administration has no delete worth the name, so this is opt-in twice
+/// over like every other write here, and it creates nothing it can already see:
+/// run it again and it checks rather than accumulates.
+///
+/// Not every organisation can reach all of it. A remote link needs an external
+/// application registered in the organisation, and templates have no documented
+/// write at all; those report what they could not do instead of failing, which
+/// is the same contract the audit itself has.
+#[tokio::test]
+#[ignore = "creates queue versions, components, fields, boards and sprints; needs YTCLI_TEST_QUEUE"]
+async fn one_of_everything_the_fixture_audit_cannot_otherwise_reach() {
+    let Some(queue) = setting("YTCLI_TEST_QUEUE") else {
+        return;
+    };
+    let client = client();
+    let mut unreached: Vec<String> = Vec::new();
+
+    queue_administration(&client, &queue, &mut unreached).await;
+    one_sprint(&client, &mut unreached).await;
+    one_remote_link(&client, &queue, &mut unreached).await;
+
+    // `POST /v3/issueTemplates` is not in the API reference, but it exists and
+    // it validates: `fieldTemplates` is an object of field to value, and both
+    // an empty one and the array form the reference's other endpoints use are
+    // refused.
+    provide(
+        &client,
+        "issue_templates.json",
+        "/v3/issueTemplates",
+        "/v3/issueTemplates",
+        &serde_json::json!({
+            "name": "ytcli fixture audit",
+            "queue": queue,
+            "fieldTemplates": {"summary": "created by the live suite"},
+        }),
+        None,
+        &mut unreached,
+    )
+    .await;
+
+    // The endpoint that answered `[]` in two organisations at once is the
+    // queue's *required* fields, which is why having fields at all did not fill
+    // it. It takes a bare array of field ids — not an object with a `fields`
+    // key, which is refused — and `assignee` is a field every queue has.
+    let fields = format!("/v3/queues/{queue}/fields");
+    if empty(&client, &fields).await
+        && let Err(error) = client
+            .probe_patch(&fields, &serde_json::json!(["assignee"]))
+            .await
+    {
+        unreached.push(format!(
+            "queue_fields.json: PATCH {fields} was refused — {error}"
+        ));
+    }
+    if empty(&client, &fields).await {
+        unreached.push(format!("queue_fields.json: {fields} is still empty"));
+    } else {
+        check_eventually(&client, "queue_fields.json", &fields).await;
+    }
+
+    for line in &unreached {
+        println!("still unreached — {line}");
+    }
+}
+
+/// A version, a component and a local field in the test queue.
+async fn queue_administration(client: &Client, queue: &str, unreached: &mut Vec<String>) {
+    provide(
+        client,
+        "queue_versions.json",
+        &format!("/v3/queues/{queue}/versions"),
+        "/v3/versions",
+        &serde_json::json!({
+            "queue": queue,
+            "name": "ytcli fixture audit",
+            "description": "created by the live suite so queue_versions.json can be checked",
+            "startDate": "2026-01-01",
+            "dueDate": "2026-12-31",
+        }),
+        None,
+        unreached,
+    )
+    .await;
+
+    // With a lead, because the fixture has one: a component nobody owns omits
+    // the key entirely, and the audit cannot tell that apart from a payload
+    // that stopped carrying it.
+    let me = client.myself().await.ok().and_then(|me| me.login);
+    let component = serde_json::json!({
+        "queue": queue,
+        "name": "ytcli fixture audit",
+        "description": "created by the live suite so components.json can be checked",
+        "lead": me,
+        "assignAuto": false,
+    });
+
+    provide(
+        client,
+        "components.json",
+        "/v3/components",
+        "/v3/components",
+        &component,
+        Some(("lead", "id")),
+        unreached,
+    )
+    .await;
+
+    // A local field needs a category, and the ids are organisation-specific.
+    let category = client
+        .probe_get("/v3/fields/categories")
+        .await
+        .ok()
+        .and_then(|categories| {
+            first_object(&categories)
+                .and_then(|first| first.get("id"))
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned)
+        });
+
+    let Some(category) = category else {
+        unreached.push("queue_local_fields.json: no field category to create one in".to_owned());
+        return;
+    };
+
+    // With a fixed list of options, because that is the field the fixture
+    // describes: a plain string field has no `optionsProvider`, and a fixture
+    // checked against one would report drift that is really a difference of
+    // field type.
+    let field = serde_json::json!({
+        "name": {"en": "ytcli fixture audit", "ru": "ytcli fixture audit"},
+        "id": "ytcliFixtureAudit",
+        "category": category,
+        "type": "ru.yandex.startrek.core.fields.StringFieldType",
+        // `options` is not a key a write may set — Tracker answers "options:
+        // Incorrect data format" — it is what having an options provider makes
+        // true.
+        "optionsProvider": {
+            "type": "FixedListOptionsProvider",
+            "values": ["canary", "partial", "full"],
+        },
+    });
+
+    let local_fields = format!("/v3/queues/{queue}/localFields");
+    provide(
+        client,
+        "queue_local_fields.json",
+        &local_fields,
+        &local_fields,
+        &field,
+        Some(("optionsProvider", "key")),
+        unreached,
+    )
+    .await;
+}
+
+/// One sprint, on a board that can hold one.
+///
+/// The sprints are looked at before the boards on purpose: asking for a board
+/// first made one on every run, because a freshly created board does not come
+/// back saying it has sprints even though it does.
+async fn one_sprint(client: &Client, unreached: &mut Vec<String>) {
+    if !empty(client, "/v3/sprints").await {
+        check_eventually(client, "all_sprints.json", "/v3/sprints").await;
+        return;
+    }
+
+    let Some(board) = sprint_board(client, unreached).await else {
+        unreached.push("all_sprints.json: no board with sprints to put one in".to_owned());
+        return;
+    };
+
+    provide(
+        client,
+        "all_sprints.json",
+        "/v3/sprints",
+        "/v3/sprints",
+        &serde_json::json!({
+            "name": "ytcli fixture audit",
+            "board": {"id": board},
+            "startDate": "2026-01-01",
+            "endDate": "2026-01-14",
+        }),
+        None,
+        unreached,
+    )
+    .await;
+}
+
+/// One link out of Tracker, which points at an object in an application
+/// registered in this organisation.
+///
+/// Which applications those are is organisation-specific and not every one of
+/// them accepts a link — Wiki answers 403, Messenger 500 — so this tries them
+/// in turn rather than believing in any particular one.
+async fn one_remote_link(client: &Client, queue: &str, unreached: &mut Vec<String>) {
+    let issue = client
+        .search(&format!("Queue: {queue}"), 1, 1)
+        .await
+        .ok()
+        .and_then(|page| page.items.into_iter().next())
+        .map(|issue| issue.key);
+
+    let Some(key) = issue else {
+        unreached.push(format!("issue_remotelinks.json: no issue in {queue}"));
+        return;
+    };
+
+    let path = format!("/v3/issues/{key}/remotelinks");
+    if !empty(client, &path).await {
+        check_eventually(client, "issue_remotelinks.json", &path).await;
+        return;
+    }
+
+    let mut refused: Vec<String> = Vec::new();
+    for origin in applications(client).await {
+        let sent = client
+            .probe_post(
+                &path,
+                &serde_json::json!({
+                    "relationship": "RELATES",
+                    "key": "ytcli-fixture-audit",
+                    "origin": origin,
+                }),
+            )
+            .await;
+        match sent {
+            Ok(_) => {
+                check_eventually(client, "issue_remotelinks.json", &path).await;
+                return;
+            }
+            Err(error) => refused.push(format!("{origin} — {error}")),
+        }
+    }
+
+    unreached.push(format!(
+        "issue_remotelinks.json: no application in this organisation accepted a link ({})",
+        refused.join("; ")
+    ));
+}
+
+/// The external applications this organisation knows about, the named one
+/// first when one was named.
+async fn applications(client: &Client) -> Vec<String> {
+    let named = setting("YTCLI_TEST_REMOTE_ORIGIN");
+    let listed = client
+        .probe_get("/v3/applications")
+        .await
+        .ok()
+        .map(|apps| {
+            apps.as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|app| app.get("id").and_then(serde_json::Value::as_str))
+                .map(ToOwned::to_owned)
+                .collect::<Vec<String>>()
+        })
+        .unwrap_or_default();
+
+    named.into_iter().chain(listed).collect()
+}
+
+/// Make one of something if the endpoint has none, mend what is there if it is
+/// missing the part the fixture describes, then check the fixture against what
+/// comes back.
+///
+/// `mend` names the key the fixture needs and the field that identifies the
+/// object in a URL: a component with no lead and a local field with no options
+/// are both objects Tracker answers with fewer keys, and a fixture checked
+/// against one reports drift that is really a difference of shape.
+async fn provide(
+    client: &Client,
+    fixture: &str,
+    list: &str,
+    create: &str,
+    body: &serde_json::Value,
+    mend: Option<(&str, &str)>,
+    unreached: &mut Vec<String>,
+) {
+    if empty(client, list).await
+        && let Err(error) = client.probe_post(create, body).await
+    {
+        unreached.push(format!("{fixture}: POST {create} was refused — {error}"));
+        return;
+    }
+
+    if let Some((needed, identifier)) = mend {
+        mend_first(client, fixture, list, body, needed, identifier, unreached).await;
+    }
+
+    if empty(client, list).await {
+        unreached.push(format!("{fixture}: {list} still answers with nothing"));
+        return;
+    }
+
+    check_eventually(client, fixture, list).await;
+}
+
+/// Check a fixture against an endpoint that was written to a moment ago.
+///
+/// Listing endpoints lag behind the write that fed them: a component created
+/// with a lead comes back without one, and a field given options comes back
+/// without them, for a few seconds. Checking once would report that as drift,
+/// which is the one thing this suite must not get wrong.
+async fn check_eventually(client: &Client, fixture: &str, path: &str) {
+    for attempt in 0..6 {
+        match compare(client, fixture, path).await {
+            Verdict::Same => {
+                println!("checked — {fixture} against {path}");
+                return;
+            }
+            Verdict::Drifted(_) | Verdict::Unchecked(_) if attempt < 5 => {
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            }
+            verdict => return report(fixture, path, &verdict),
+        }
+    }
+}
+
+fn report(fixture: &str, path: &str, verdict: &Verdict) {
+    match verdict {
+        Verdict::Same => println!("checked — {fixture} against {path}"),
+        Verdict::Drifted(missing) => {
+            panic!("{fixture} claims {missing:?}, which {path} does not return")
+        }
+        Verdict::Unchecked(why) => println!("unchecked — {fixture}: {path} {why}"),
+    }
+}
+
+/// Patch the object the audit reads, when it lacks a key the fixture has.
+async fn mend_first(
+    client: &Client,
+    fixture: &str,
+    list: &str,
+    body: &serde_json::Value,
+    needed: &str,
+    identifier: &str,
+    unreached: &mut Vec<String>,
+) {
+    let Ok(live) = client.probe_get(list).await else {
+        return;
+    };
+    let Some(first) = first_object(&live) else {
+        return;
+    };
+    if keys(first).contains(needed) {
+        return;
+    }
+    let Some(id) = first.get(identifier).map(ToString::to_string) else {
+        return;
+    };
+
+    // Tracker refuses a blind write to something versioned — 428, "specify
+    // either the version parameter or If-Match" — and the version goes in the
+    // query, not the body: sent as a field it answers "version: Incorrect data
+    // format", which reads like the value is wrong rather than the place.
+    let version = first
+        .get("version")
+        .map(ToString::to_string)
+        .map_or_else(String::new, |version| format!("?version={version}"));
+
+    let path = format!("{list}/{}{version}", id.trim_matches('"'));
+    if let Err(error) = client.probe_patch(&path, body).await {
+        unreached.push(format!(
+            "{fixture}: the first one has no `{needed}` and PATCH {path} was refused — {error}"
+        ));
+    }
+}
+
+/// Whether an endpoint answers with nothing to compare.
+async fn empty(client: &Client, path: &str) -> bool {
+    client
+        .probe_get(path)
+        .await
+        .ok()
+        .as_ref()
+        .and_then(first_object)
+        .is_none()
+}
+
+/// A board that can hold a sprint: one the organisation already has, or one
+/// made for the purpose.
+async fn sprint_board(client: &Client, unreached: &mut Vec<String>) -> Option<String> {
+    let existing = client.probe_get("/v3/boards").await.ok()?;
+    let with_sprints = existing.as_array().into_iter().flatten().find(|board| {
+        board
+            .get("sprintsEnabled")
+            .and_then(serde_json::Value::as_bool)
+            == Some(true)
+    });
+    if let Some(id) = with_sprints
+        .and_then(|board| board.get("id"))
+        .map(ToString::to_string)
+    {
+        return Some(id.trim_matches('"').to_owned());
+    }
+
+    let made = client
+        .probe_post(
+            "/v3/liveBoards/",
+            &serde_json::json!({
+                "name": "ytcli fixture audit",
+                "backlogAvailable": true,
+                "sprintsAvailable": true,
+            }),
+        )
+        .await;
+
+    match made {
+        Ok(board) => board
+            .get("id")
+            .map(ToString::to_string)
+            .map(|id| id.trim_matches('"').to_owned()),
+        Err(error) => {
+            unreached.push(format!(
+                "all_sprints.json: POST /v3/liveBoards/ was refused — {error}"
+            ));
+            None
+        }
+    }
+}

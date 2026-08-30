@@ -286,6 +286,24 @@ impl Client {
         Ok(value)
     }
 
+    /// The same, for changing something that is already there.
+    #[cfg(feature = "live")]
+    pub async fn probe_patch(&self, path: &str, body: &Value) -> Result<Value, ApiError> {
+        let (value, _) = self
+            .send_value(reqwest::Method::PATCH, path, Some(body), path)
+            .await?;
+        Ok(value)
+    }
+
+    /// The same, for undoing what a live test made.
+    #[cfg(feature = "live")]
+    pub async fn probe_delete(&self, path: &str) -> Result<Value, ApiError> {
+        let (value, _) = self
+            .send_value(reqwest::Method::DELETE, path, None, path)
+            .await?;
+        Ok(value)
+    }
+
     /// Rewrite a comment that is already there.
     ///
     /// Tracker keeps no history of the previous text and shows the comment as

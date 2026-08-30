@@ -1,5 +1,20 @@
 [
   {
+    "self": "https://api.tracker.yandex.net/v3/issueTemplates/1",
+    "id": 1,
+    "version": 1,
+    "name": "Weekly report",
+    "queue": {
+      "self": "https://api.tracker.yandex.net/v3/queues/PROJ",
+      "id": "2",
+      "key": "PROJ",
+      "display": "Product"
+    },
+    "fieldTemplates": {"summary": "Weekly report"},
+    "checklistItems": [],
+    "metricItems": []
+  },
+  {
     "self": "https://api.tracker.yandex.net/v3/issueTemplates/7",
     "id": 7,
     "version": 1,
