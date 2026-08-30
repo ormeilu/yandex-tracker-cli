@@ -27,7 +27,15 @@
 #![cfg(feature = "live")]
 // A test that cannot reach its fixture has nothing to say; failing loudly is the
 // correct behaviour.
-#![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
+// The fixture audit prints what it could *not* check: an organisation with no
+// boards leaves the board fixtures unverified, and that is a fact about the run
+// rather than a success. A test's own report belongs on stdout.
+#![allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::print_stdout
+)]
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -781,6 +789,290 @@ async fn markup_type_decides_how_a_comment_is_drawn() {
         bare.contains("<h1 id=\"heading\""),
         "the default stopped honouring a wiki heading: {bare}"
     );
+}
+
+/// Every fixture in the repository, against what Tracker actually returns.
+///
+/// The fixtures were written from the shapes an upstream client documents, not
+/// recorded from the API, and the mocked suite is only as true as they are. So
+/// this asks the real thing once per endpoint and checks that every key a
+/// fixture claims still exists in the answer — the direction that matters, since
+/// a field Tracker has added is nothing to us and a field it has removed is a
+/// renderer reading `None` forever.
+///
+/// It reports what it could not check rather than passing quietly: an
+/// organisation with no boards leaves the board fixtures unverified, and that is
+/// a fact about the run, not a success.
+#[tokio::test]
+#[ignore = "needs real credentials"]
+async fn every_fixture_still_has_the_shape_tracker_answers_with() {
+    let client = client();
+    let queue = a_queue(&client).await;
+    let me = client.myself().await.expect("myself");
+
+    // Every issue in the queue, not one of them: Tracker omits a field that is
+    // unset, so a single bare issue would look like a payload that had lost
+    // `assignee` and `description` rather than one that never had them.
+    let found = client
+        .search(&format!("Queue: {queue}"), 1, 25)
+        .await
+        .map(|page| page.items)
+        .unwrap_or_default();
+    let issue = found.first().map(|issue| issue.key.clone());
+    let mut issue_keys: BTreeSet<String> = BTreeSet::new();
+    for one in &found {
+        if let Ok((_, raw)) = client.issue(&one.key).await {
+            issue_keys.extend(keys(&raw));
+        }
+    }
+    let board = client
+        .boards()
+        .await
+        .ok()
+        .and_then(|boards| boards.into_iter().next())
+        .map(|board| board.id);
+
+    // (fixture, path) — the fixture is a listing when the payload is an array,
+    // and its first element is what carries the keys.
+    let mut pairs: Vec<(&str, String)> = vec![
+        ("queues.json", "/v3/queues".to_owned()),
+        ("queue.json", format!("/v3/queues/{queue}")),
+        ("queue_fields.json", format!("/v3/queues/{queue}/fields")),
+        (
+            "queue_versions.json",
+            format!("/v3/queues/{queue}/versions"),
+        ),
+        (
+            "queue_local_fields.json",
+            format!("/v3/queues/{queue}/localFields"),
+        ),
+        ("components.json", "/v3/components".to_owned()),
+        ("fields.json", "/v3/fields".to_owned()),
+        ("linktypes.json", "/v3/linktypes".to_owned()),
+        ("issuetypes.json", "/v3/issuetypes".to_owned()),
+        ("priorities.json", "/v3/priorities".to_owned()),
+        ("statuses.json", "/v3/statuses".to_owned()),
+        ("resolutions.json", "/v3/resolutions".to_owned()),
+        ("issue_templates.json", "/v3/issueTemplates".to_owned()),
+        ("users.json", "/v3/users?perPage=1".to_owned()),
+        ("user.json", format!("/v3/users/{}", me.id)),
+        ("all_sprints.json", "/v3/sprints".to_owned()),
+        ("boards.json", "/v3/boards".to_owned()),
+    ];
+    if let Some(key) = &issue {
+        pairs.extend([
+            ("issue_links.json", format!("/v3/issues/{key}/links")),
+            ("issue_comments.json", format!("/v3/issues/{key}/comments")),
+            ("changelog.json", format!("/v3/issues/{key}/changelog")),
+            (
+                "issue_remotelinks.json",
+                format!("/v3/issues/{key}/remotelinks"),
+            ),
+        ]);
+    }
+    if let Some(id) = &board {
+        pairs.push(("board.json", format!("/v3/boards/{id}")));
+    }
+
+    let (mut unchecked, mut drift) = (Vec::new(), Vec::new());
+
+    // The issue payload, against every issue in the queue at once: Tracker omits
+    // a field that is unset, so one bare issue would look like a payload that
+    // had lost `assignee` rather than one that never had it.
+    if issue_keys.is_empty() {
+        unchecked.push("no issue in the queue: issue.json".to_owned());
+    } else if let Some(missing) = fixture_gap("issue.json", &issue_keys) {
+        unchecked.push(format!(
+            "issue.json claims {missing:?}, which no issue in {queue} sets — \
+             unset fields are omitted, so this proves nothing either way"
+        ));
+    }
+
+    for (fixture, path) in pairs {
+        match compare(&client, fixture, &path).await {
+            Verdict::Same => {}
+            Verdict::Drifted(missing) => {
+                drift.push(format!(
+                    "{fixture} claims {missing:?}, which {path} no longer returns"
+                ));
+            }
+            Verdict::Unchecked(why) => unchecked.push(format!("{fixture}: {path} {why}")),
+        }
+    }
+
+    for line in &unchecked {
+        println!("unchecked — {line}");
+    }
+    assert!(
+        drift.is_empty(),
+        "fixtures have drifted:\n{}",
+        drift.join("\n")
+    );
+}
+
+/// What one endpoint had to say about one fixture.
+enum Verdict {
+    Same,
+    Drifted(Vec<String>),
+    Unchecked(&'static str),
+}
+
+/// Ask Tracker for `path` and check the fixture's keys against the answer.
+async fn compare(client: &Client, fixture: &str, path: &str) -> Verdict {
+    let Ok(live) = client.probe_get(path).await else {
+        return Verdict::Unchecked("could not be read");
+    };
+    let Some(live) = first_object(&live) else {
+        return Verdict::Unchecked("answered with nothing to compare");
+    };
+    let recorded = fixture_value(fixture);
+    let Some(recorded) = first_object(&recorded) else {
+        return Verdict::Unchecked("has a fixture with nothing to compare");
+    };
+
+    match fixture_gap_between(recorded, &keys(live)) {
+        Some(missing) => Verdict::Drifted(missing),
+        None => Verdict::Same,
+    }
+}
+
+/// The keys a fixture claims that `live` does not have.
+fn fixture_gap(fixture: &str, live: &BTreeSet<String>) -> Option<Vec<String>> {
+    let recorded = fixture_value(fixture);
+    fixture_gap_between(first_object(&recorded)?, live)
+}
+
+fn fixture_gap_between(
+    recorded: &serde_json::Value,
+    live: &BTreeSet<String>,
+) -> Option<Vec<String>> {
+    let missing: Vec<String> = keys(recorded)
+        .difference(live)
+        // A custom field is named after the field's id, so a fixture's invented
+        // one is never going to appear in somebody else's organisation.
+        .filter(|key| !key.contains("--"))
+        .cloned()
+        .collect();
+    (!missing.is_empty()).then_some(missing)
+}
+
+/// A fixture, as JSON.
+fn fixture_value(name: &str) -> serde_json::Value {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(name);
+    let text = std::fs::read_to_string(&path).expect("fixture readable");
+    serde_json::from_str(&text).expect("fixture is valid json")
+}
+
+/// The object a payload carries: itself, or the first element of a listing.
+fn first_object(value: &serde_json::Value) -> Option<&serde_json::Value> {
+    match value {
+        serde_json::Value::Array(items) => items.first(),
+        object @ serde_json::Value::Object(_) => Some(object),
+        _ => None,
+    }
+}
+
+/// The subresource payloads, which only exist once something has written one.
+///
+/// `issue_links.json` and the checklist, worklog and attachment shapes are the
+/// fixtures no read-only audit can reach: an organisation with no links answers
+/// `[]`, and an empty array agrees with every fixture ever written. So this
+/// makes one of each in the test queue and looks at what comes back.
+///
+/// Everything it creates stays, like everything else here — Tracker has no
+/// delete for an issue — but the link, the worklog and the checklist item are
+/// taken off again, since those it can undo.
+#[tokio::test]
+#[ignore = "creates real issues; needs YTCLI_TEST_QUEUE"]
+async fn the_subresources_have_the_shape_their_fixtures_claim() {
+    let Some(queue) = setting("YTCLI_TEST_QUEUE") else {
+        return;
+    };
+    let client = client();
+
+    let mut made = Vec::new();
+    for summary in [
+        "ytcli live test — subresource shapes, one",
+        "ytcli live test — subresource shapes, two",
+    ] {
+        made.push(
+            client
+                .create_issue(&serde_json::json!({"queue": queue, "summary": summary}))
+                .await
+                .expect("create")
+                .key,
+        );
+    }
+    let (Some(key), Some(other)) = (made.first(), made.get(1)) else {
+        panic!("two issues were created and fewer than two came back");
+    };
+
+    client
+        .add_link(key, "relates", other)
+        .await
+        .expect("add link");
+    client
+        .add_worklog(
+            key,
+            // `start` is required, which the fixtures never said: a worklog is
+            // when the work happened, not when it was recorded.
+            &serde_json::json!({
+                "duration": "PT1M",
+                "start": jiff::Zoned::now().strftime("%Y-%m-%dT%H:%M:%S%.3f%z").to_string(),
+                "comment": "ytcli live test",
+            }),
+        )
+        .await
+        .expect("add worklog");
+    client
+        .add_checklist_item(key, &serde_json::json!({"text": "ytcli live test"}))
+        .await
+        .expect("add checklist item");
+
+    // Each payload against the keys we believe it has. `issue_links.json` is a
+    // recorded fixture; the other two are only ever seen through our parsers,
+    // so what is asserted is what those parsers read.
+    let links = client
+        .probe_get(&format!("/v3/issues/{key}/links"))
+        .await
+        .expect("links");
+    let live = first_object(&links).map(keys).unwrap_or_default();
+    assert!(!live.is_empty(), "a link was added and none came back");
+    assert_eq!(
+        fixture_gap("issue_links.json", &live),
+        None,
+        "issue_links.json claims keys the real payload does not have"
+    );
+
+    for (path, required) in [
+        (
+            format!("/v3/issues/{key}/worklog"),
+            ["id", "issue", "duration", "createdBy", "createdAt"].as_slice(),
+        ),
+        (
+            format!("/v3/issues/{key}/checklistItems"),
+            ["id", "text", "checked"].as_slice(),
+        ),
+    ] {
+        let payload = client.probe_get(&path).await.expect("subresource");
+        let live = first_object(&payload).map(keys).unwrap_or_default();
+        assert!(!live.is_empty(), "{path} answered with nothing");
+        for field in required {
+            assert!(
+                live.contains(*field),
+                "{path} no longer carries `{field}`: {live:?}"
+            );
+        }
+    }
+
+    // Put back what can be put back.
+    if let Ok(links) = client.issue_links(key).await {
+        for link in links {
+            let _ = client.delete_link(key, &link.id).await;
+        }
+    }
 }
 
 /// Both link vocabularies, and the fact that they are two.

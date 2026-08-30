@@ -484,3 +484,24 @@ async fn stopping_what_was_never_started_says_so() {
         .code(4)
         .stderr(predicate::str::contains("no timer running for PROJ-1"));
 }
+
+/// The one write path with no mocked answer until now: unlinking.
+///
+/// `issue links` prints the id first precisely so this command can be given it,
+/// and a delete that names the wrong path would have failed only against a real
+/// Tracker.
+#[tokio::test]
+async fn unlinking_sends_a_delete_to_the_link_by_its_id() {
+    let harness = Harness::new().await;
+    Mock::given(method("DELETE"))
+        .and(path("/v3/issues/PROJ-1/links/987"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
+        .expect(1)
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&["issue", "link", "delete", "PROJ-1", "987"])
+        .assert()
+        .success();
+}

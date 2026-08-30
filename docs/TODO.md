@@ -39,6 +39,17 @@ meet is how the drift started.
   before it becomes a public document. The README's example of what a person
   sees was the machine rendering, fence tags and all — a person sees markdown
   behind a margin bar, and now that is what it shows.
+- What `markupType` decides, settled live: the default is `wf`, which honours
+  the old wiki spellings *as well as* Markdown, and `md` is the stricter mode
+  that drops them. So this sends neither, and `#` heads a section under both —
+  which is the only part a caller has to know.
+- A fixture audit, `every_fixture_still_has_the_shape_tracker_answers_with`.
+  The fixtures were written from an upstream client's documented shapes rather
+  than recorded, so the mocked suite is only as true as they are; the audit asks
+  the real API once per endpoint and fails on a key a fixture claims and Tracker
+  no longer returns. It prints what it could **not** check rather than passing
+  quietly: an organisation with no sprints leaves the sprint fixture unverified,
+  and that is a fact about the run rather than a success.
 - **1.0.0** — no new surface of its own. It is the version that says the surface
   is finished: every endpoint a survey of the API found is reachable, the output
   shape has been stable for several releases, and what was deliberately left out
