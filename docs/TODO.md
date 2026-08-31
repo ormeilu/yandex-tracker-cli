@@ -131,7 +131,9 @@ Labels split the work by area: `area:issues`, `area:entities`,
   `ytcli auth edit` changes an existing profile — its name, the organisation it
   points at, and the free-text note saying which organisation that is — on the
   same terms. The note rides along on that stderr line, because an organisation
-  id is a number nobody recognises.
+  id is a number nobody recognises. `ytcli auth remove` deletes a profile, and is
+  deliberately not `auth logout`: one drops an organisation from the config, the
+  other drops a credential from the keychain, and each says what it left behind.
 - Help written in markdown and rendered with termimad for a terminal; the source
   goes to a pipe, where an agent reads it natively and escape codes would be
   noise.

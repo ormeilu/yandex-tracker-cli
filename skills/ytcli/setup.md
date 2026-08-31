@@ -21,11 +21,26 @@ package, and `ytcli` as a package name belongs to somebody else. The package is
 
 ## Two words that are not the same thing
 
-An **account** holds one credential. A **profile** is one organisation seen
-through one account. A person with an admin login and a personal login in the
-same organisation has two accounts; the same account seeing a work and a
+An **account** is a login: one identity, one token, in the OS keychain. It says
+*who you are*. A **profile** is one organisation seen through one account, plus
+the defaults for working there — default queue, display settings, pinned fields.
+It says *where you work, as whom*.
+
+Neither contains the other. A person with an admin login and a personal login in
+the same organisation has two accounts; the same account seeing a work and a
 personal organisation gives two profiles. Log in once per account; every profile
 naming it works from then on.
+
+Profiles are what `--profile`, `YTCLI_PROFILE`, `.tracker.toml` and `work/PROJ-1`
+select — an account is never selected directly, it is only how the chosen
+profile gets its token. So the two are also removed separately:
+
+- `ytcli auth logout --account NAME` forgets the credential; every profile using
+  it stops working until the next login, and none of them are deleted.
+- `ytcli auth remove NAME --yes` deletes the profile — organisation and defaults
+  — and leaves the account and its token alone.
+
+Undoing a login completely takes both.
 
 ```bash
 ytcli auth status        # every profile: identity, org, queues, projects, your open issues
@@ -48,6 +63,12 @@ rename it (`default_profile` follows), `--org-id`, `--org-kind`, `--account`,
 profile can be corrected while its credentials are broken. What you do not pass
 is not touched, and nothing is verified — `ytcli auth status --active-only`
 after changing an organisation id.
+
+`auth remove NAME --yes` deletes a profile. `--dry-run` says what would go; the
+command refuses without `--yes`, because display settings and pinned fields live
+only in that file and a later login does not restore them. If it was the default
+profile, `default_profile` is dropped rather than pointed at another
+organisation. **Do not run it unasked** — it writes to the user's config.
 
 **When a profile's note is missing or says nothing** — `work2`, `default`,
 `test` — offer to write one, and say why: it is the only part of
@@ -193,7 +214,8 @@ allowlist is worth having. For Claude Code, in `.claude/settings.json`:
       "Bash(ytcli auth login:*)",
       "Bash(ytcli auth use:*)",
       "Bash(ytcli auth edit:*)",
-      "Bash(ytcli auth logout:*)"
+      "Bash(ytcli auth logout:*)",
+      "Bash(ytcli auth remove:*)"
     ]
   }
 }

@@ -51,3 +51,8 @@ not offer secret exfiltration as a feature.
 an existing login costs one config entry and no re-authentication. The price is a
 config file with two tables instead of one, which is a real cost in explaining the
 tool and is why `CONTEXT.md` defines both terms first.
+
+Deletion inherits the same split, and this is the part people meet first: `auth
+logout` forgets a credential and keeps every profile using it, while `auth
+remove` deletes a profile and keeps the account. Neither can stand in for the
+other, so both exist and each says what it left behind.

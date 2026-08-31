@@ -1126,6 +1126,28 @@ reported rather than rewritten: it is shared with other people.
 Changing `--org-id`, `--org-kind` or `--account` is not verified here — nothing
 is sent. `ytcli auth status --active-only` checks it afterwards.";
 
+pub const AUTH_REMOVE: &str = "\
+Delete a profile from the config file.
+
+```
+ytcli auth remove sandbox --yes
+ytcli auth remove sandbox --dry-run
+```
+
+The counterpart to `auth login`, not to `auth logout`: this forgets an
+organisation you were reaching, while logout forgets a credential. The account
+and its token stay, because one account usually backs several profiles — when
+nothing else uses it, the command says so and prints the logout line.
+
+`--yes` is required even for one profile. Nothing is sent anywhere, but
+`[profiles.x]` carries display settings and pinned custom fields that exist only
+in this file, and logging in again does not bring them back.
+
+If it was the default, `default_profile` is dropped rather than pointed at
+another organisation: which one a bare command touches is your decision, and
+`ytcli auth use NAME` is where you make it. A committed `.tracker.toml` naming
+it is reported rather than rewritten.";
+
 pub const AUTH_LOGOUT: &str = "\
 Remove a stored token.
 

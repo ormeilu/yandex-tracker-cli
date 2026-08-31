@@ -229,6 +229,123 @@ pub fn edit(path: &Path, profile: &str, edits: &Edits<'_>) -> Result<String, Edi
     Ok(rendered)
 }
 
+/// What removing a profile changed beyond the profile itself.
+#[derive(Debug)]
+pub struct Removed {
+    /// `default_profile` named this profile and was dropped with it.
+    pub cleared_default: bool,
+    /// The file's new contents, so the caller need not read it back.
+    pub contents: String,
+}
+
+/// Delete a profile from the config file.
+///
+/// The whole `[profiles.x]` table goes, display settings included: half a
+/// profile is worse than none, because the keys left behind still resolve and
+/// still send requests. `default_profile` naming it is dropped rather than
+/// pointed somewhere else — guessing which organisation should inherit the
+/// bare command is exactly the guess this tool does not make.
+///
+/// The account and its keychain token are untouched: an account can back
+/// several profiles, and forgetting a credential is `auth logout`.
+pub fn remove(path: &Path, profile: &str) -> Result<Removed, EditError> {
+    let existing = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(error) => return Err(StoreError::Read(error).into()),
+    };
+
+    let mut document: DocumentMut = existing.parse().map_err(StoreError::from)?;
+
+    let profiles = implicit_table(&mut document, "profiles");
+    if profiles.remove(profile).is_none() {
+        return Err(EditError::Unknown(profile.to_owned()));
+    }
+
+    let cleared_default = document.get("default_profile").and_then(Item::as_str) == Some(profile);
+    if cleared_default {
+        // A comment written above `default_profile` is usually about the file
+        // rather than about that one key, so it outlives the key: dropping it
+        // with the line would quietly edit prose the user wrote by hand.
+        let carried = document
+            .as_table()
+            .key("default_profile")
+            .and_then(|key| key.leaf_decor().prefix().cloned());
+        document.remove("default_profile");
+        if let Some(text) = carried
+            .as_ref()
+            .and_then(toml_edit::RawString::as_str)
+            .filter(|prefix| has_comment(prefix))
+        {
+            carry_prefix(document.as_table_mut(), text);
+        }
+    }
+
+    let rendered = document.to_string();
+
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(StoreError::Write)?;
+    }
+    write_private(path, &rendered).map_err(StoreError::Write)?;
+
+    Ok(Removed {
+        cleared_default,
+        contents: rendered,
+    })
+}
+
+/// Whether a chunk of decor holds anything a person wrote.
+fn has_comment(prefix: &str) -> bool {
+    prefix
+        .lines()
+        .any(|line| line.trim_start().starts_with('#'))
+}
+
+/// Move a departing key's leading comment onto whatever now comes first.
+///
+/// "First" is the first thing that is actually written out, which is not always
+/// the first entry: `[accounts]` exists in the tree while only `[accounts.admin]`
+/// appears in the file, and decor on a table nobody renders is decor nobody
+/// reads.
+fn carry_prefix(table: &mut Table, text: &str) -> bool {
+    let Some(name) = table.iter().map(|(name, _)| name.to_owned()).next() else {
+        return false;
+    };
+
+    if table
+        .get(&name)
+        .and_then(Item::as_table)
+        .is_some_and(Table::is_implicit)
+    {
+        return table
+            .get_mut(&name)
+            .and_then(Item::as_table_mut)
+            .is_some_and(|inner| carry_prefix(inner, text));
+    }
+
+    // A table wears its comment above its header; a plain key wears it above
+    // the key itself.
+    if let Some(inner) = table.get_mut(&name).and_then(Item::as_table_mut) {
+        prepend(inner.decor_mut(), text);
+        return true;
+    }
+    if let Some(mut key) = table.key_mut(&name) {
+        prepend(key.leaf_decor_mut(), text);
+        return true;
+    }
+
+    false
+}
+
+fn prepend(decor: &mut toml_edit::Decor, text: &str) {
+    let existing = decor
+        .prefix()
+        .and_then(toml_edit::RawString::as_str)
+        .unwrap_or("")
+        .to_owned();
+    decor.set_prefix(format!("{text}{existing}"));
+}
+
 fn set_or_remove(table: &mut Table, key: &str, wanted: Option<&str>) {
     match wanted {
         Some(text) => table[key] = value(text),
@@ -526,6 +643,67 @@ limit = 5
         .expect_err("refused");
 
         assert!(matches!(error, EditError::Unknown(name) if name == "nope"));
+    }
+
+    /// The whole table goes, display settings included, and the profiles that
+    /// share the file are left exactly as they were.
+    #[test]
+    fn removing_a_profile_takes_its_display_settings_and_nothing_else() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            "[accounts.me]\n\n[profiles.work]\naccount = \"me\"\n\n[profiles.work.display]\nwidth = 100\n\n[profiles.home]\naccount = \"me\"\n",
+        )
+        .expect("write");
+
+        let removed = remove(&path, "work").expect("removed");
+
+        assert!(!removed.cleared_default);
+        assert!(!removed.contents.contains("[profiles.work"));
+        assert!(!removed.contents.contains("width = 100"));
+        assert!(removed.contents.contains("[profiles.home]"));
+        assert!(removed.contents.contains("[accounts.me]"));
+    }
+
+    /// A `default_profile` naming a profile that no longer exists fails every
+    /// later command, so it goes with it — and it is not silently pointed at
+    /// somebody else's organisation.
+    #[test]
+    fn removing_the_default_profile_drops_the_default_rather_than_moving_it() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            "# mine\ndefault_profile = \"work\"\n\n[profiles.work]\naccount = \"me\"\n\n[profiles.home]\naccount = \"me\"\n",
+        )
+        .expect("write");
+
+        let removed = remove(&path, "work").expect("removed");
+
+        assert!(removed.cleared_default);
+        assert!(!removed.contents.contains("default_profile"));
+        assert!(
+            removed.contents.starts_with("# mine"),
+            "a comment written above the key outlives it: {}",
+            removed.contents
+        );
+    }
+
+    #[test]
+    fn removing_a_profile_that_does_not_exist_says_so() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "[profiles.work]\naccount = \"me\"\n").expect("write");
+
+        let error = remove(&path, "nope").expect_err("refused");
+
+        assert!(matches!(error, EditError::Unknown(name) if name == "nope"));
+        assert!(
+            std::fs::read_to_string(&path)
+                .expect("readable")
+                .contains("[profiles.work]")
+        );
     }
 
     #[test]

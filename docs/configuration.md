@@ -6,9 +6,28 @@ writes for you.
 
 ## Accounts and profiles
 
-An **account** holds a credential; a **profile** is an organisation seen through
-an account. One login can reach several organisations, and one organisation can
-be reached through several logins — so the two are separate.
+An **account** is a login: one Yandex identity, one OAuth token, kept in the OS
+keychain under the account's name. It says *who you are*.
+
+A **profile** is one organisation seen through one account, plus the defaults
+for working in it — the default queue, display settings, pinned custom fields.
+It says *where you are working, as whom*.
+
+They are separate because neither contains the other: one account can reach
+several organisations, and one organisation can be reached through several
+accounts (an admin identity and a read-only one, say). So:
+
+| | account | profile |
+|---|---|---|
+| holds | a token, in the keychain | organisation id, org kind, defaults — in the config file |
+| named by | `--account`, `auth logout` | `--profile`, `YTCLI_PROFILE`, `.tracker.toml`, `work/PROJ-1` |
+| created by | `auth login` | `auth login` (same run) |
+| deleted by | `auth logout --account NAME` | `auth remove NAME --yes` |
+
+Every command runs as exactly one profile, and prints which one on stderr; the
+account is only how that profile gets its token. Two profiles pointing at the
+same account share one credential: log out and both stop working, while removing
+one profile leaves the other untouched.
 
 ```bash
 ytcli auth login
@@ -100,6 +119,28 @@ it is shared with everyone else working in that checkout; and the credential
 itself, which is keyed by account in the keychain — `ytcli auth login` replaces
 that.
 
+## Removing a profile
+
+```bash
+ytcli auth remove sandbox --yes     # what would go: --dry-run
+```
+
+The counterpart to `auth login`, and not the same thing as `auth logout`:
+this drops the organisation and its defaults from the config file, while logout
+drops the credential from the keychain. Undoing a login completely takes both,
+in either order.
+
+`--yes` is required even for one profile. Nothing is sent anywhere, but
+`[profiles.x]` holds display settings and pinned custom fields that exist only
+in that file, and logging in again does not bring them back.
+
+If the profile was the default, `default_profile` goes with it rather than being
+pointed at another organisation — which one a bare command touches is a decision
+you make with `ytcli auth use NAME`. The account is left alone, because other
+profiles may still use it; when none do, the command says so and prints the
+`auth logout` line. A committed `.tracker.toml` naming the removed profile is
+reported rather than rewritten.
+
 ## Per repository
 
 In a repository, commit a `.tracker.toml`:
@@ -153,4 +194,7 @@ entering a directory sets it without anyone deciding to.
   command.
 - `ytcli auth list` shows the accounts and profiles and whether a token is
   stored for each. There is no command that prints a stored token.
-- `ytcli auth logout --account NAME` forgets one.
+- `ytcli auth logout --account NAME` forgets a token; the profiles using it
+  stay, and logging back in makes them work again.
+- `ytcli auth remove NAME --yes` deletes a profile; the account and its token
+  stay.

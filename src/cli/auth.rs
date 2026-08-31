@@ -40,6 +40,12 @@ pub enum AuthCommand {
     /// Change an existing profile: its name, its note, the organisation it points at.
     #[command(long_about = crate::cli::help::md(crate::cli::help::AUTH_EDIT))]
     Edit(EditArgs),
+    /// Delete a profile from the config file. The account and its token stay.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::AUTH_REMOVE))]
+    Remove {
+        /// Profile name, as `auth list` prints it.
+        profile: String,
+    },
     /// Check every profile: who the token belongs to, and what it can see.
     #[command(long_about = crate::cli::help::md(crate::cli::help::AUTH_STATUS))]
     Status {
@@ -146,6 +152,7 @@ pub async fn run(command: &AuthCommand, session: &Session) -> ExitCode {
         AuthCommand::List => list(session),
         AuthCommand::Use { profile } => use_profile(session, profile),
         AuthCommand::Edit(args) => edit(args, session),
+        AuthCommand::Remove { profile } => remove(session, profile),
     }
 }
 
@@ -1114,6 +1121,146 @@ fn edit(args: &EditArgs, session: &Session) -> ExitCode {
             };
             report(&error, code)
         }
+    }
+}
+
+/// Delete a profile.
+///
+/// The counterpart to `auth login`, and deliberately not the counterpart to
+/// `auth logout`: logout forgets a credential, this forgets an organisation
+/// someone was reaching through one. The token stays in the keychain, because
+/// one account usually backs several profiles.
+///
+/// `--yes` is required even for one profile. Nothing here is sent anywhere, but
+/// the `[profiles.x]` table carries display settings and pinned custom fields
+/// that only exist in this file, and re-logging in does not bring them back.
+fn remove(session: &Session, profile: &str) -> ExitCode {
+    let mut err = anstream::stderr();
+
+    let Some(current) = session.config.profiles.get(profile) else {
+        return unknown("profile", profile, session.config.profiles.keys());
+    };
+
+    // The same promise every write makes: say which organisation this is about
+    // before touching it. Here it matters more than usual — profile names are
+    // short and similar, and organisation ids are what actually differ.
+    let about = format!(
+        "account={} org={} ({:?})",
+        current.account, current.org_id, current.org_kind
+    );
+
+    if session.global.dry_run {
+        let _ = writeln!(
+            err,
+            "dry run: would remove profile `{profile}` ({about}) from {}",
+            session.config_file.display()
+        );
+        return ExitCode::Success;
+    }
+
+    if !session.global.yes {
+        let _ = writeln!(
+            err,
+            "refusing to remove profile `{profile}` ({about}) without --yes: \
+             its display settings and pinned fields live only in {}",
+            session.config_file.display()
+        );
+        return ExitCode::ConfirmationRequired;
+    }
+
+    let account = current.account.clone();
+
+    match store::remove(&session.config_file, profile) {
+        Ok(removed) => {
+            let _ = writeln!(err, "removed profile `{profile}` ({about})");
+            removal_side_effects(
+                session,
+                profile,
+                &account,
+                removed.cleared_default,
+                &mut err,
+            );
+            emit(&format!("{profile}\n"));
+            ExitCode::Success
+        }
+        Err(error) => {
+            let code = match error {
+                store::EditError::Unknown(_) => ExitCode::NotFound,
+                store::EditError::NameTaken(_) | store::EditError::Store(_) => ExitCode::Failure,
+            };
+            report(&error, code)
+        }
+    }
+}
+
+/// Everything outside the profile table that a removal leaves dangling.
+///
+/// Each of these is something the user would otherwise meet later, as a failure
+/// with a worse message than this one.
+fn removal_side_effects(
+    session: &Session,
+    profile: &str,
+    account: &str,
+    cleared_default: bool,
+    err: &mut impl std::io::Write,
+) {
+    let cache_path = crate::config::cache::path_for(&session.config_file);
+    let mut cache = crate::config::cache::Cache::load(&cache_path);
+    if cache.forget(profile) {
+        cache.save(&cache_path);
+    }
+
+    if cleared_default {
+        let remaining: Vec<&str> = session
+            .config
+            .profiles
+            .keys()
+            .map(String::as_str)
+            .filter(|name| *name != profile)
+            .collect();
+        let _ = writeln!(err, "default profile: {profile} → none");
+        match remaining.as_slice() {
+            [] => {
+                let _ = writeln!(err, "no profiles left; `ytcli auth login` makes another");
+            }
+            [only] => {
+                let _ = writeln!(err, "pick the next one: ytcli auth use {only}");
+            }
+            names => {
+                let _ = writeln!(
+                    err,
+                    "pick the next one: ytcli auth use <{}>",
+                    names.join("|")
+                );
+            }
+        }
+    }
+
+    // The credential outlives the profile on purpose; saying so is what keeps
+    // "I deleted it" from meaning two different things.
+    let still_used = session
+        .config
+        .profiles
+        .iter()
+        .any(|(name, other)| name != profile && other.account == account);
+    if !still_used && secrets::is_stored(account) {
+        let _ = writeln!(
+            err,
+            "note: account `{account}` still holds a token; ytcli auth logout --account {account} forgets it"
+        );
+    }
+
+    // Committed and shared with other checkouts, so it is reported rather than
+    // rewritten — the same rule a rename follows.
+    if let Some((path, _)) =
+        crate::config::paths::find_project_pin(&std::env::current_dir().unwrap_or_default())
+            .filter(|(_, pin)| pin.profile.as_deref() == Some(profile))
+    {
+        let _ = writeln!(
+            err,
+            "note: {} still names `{profile}`; update it by hand",
+            path.display()
+        );
     }
 }
 

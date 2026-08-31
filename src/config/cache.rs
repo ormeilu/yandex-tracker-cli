@@ -96,6 +96,23 @@ impl Cache {
         moved
     }
 
+    /// Drop everything remembered about a profile that no longer exists.
+    ///
+    /// `profiles_for` already ignores names that are not configured, so this is
+    /// about a later profile reusing the name: it must not inherit the queues
+    /// its namesake could see. Returns whether anything went, so an unchanged
+    /// cache is not rewritten.
+    pub fn forget(&mut self, profile: &str) -> bool {
+        let mut dropped = false;
+        for profiles in self.queues.values_mut() {
+            let before = profiles.len();
+            profiles.retain(|known| known != profile);
+            dropped |= profiles.len() != before;
+        }
+        self.queues.retain(|_, profiles| !profiles.is_empty());
+        dropped
+    }
+
     /// Which profiles see this queue, among those still configured.
     ///
     /// Filtering against the current config matters: a profile deleted from the

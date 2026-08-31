@@ -35,8 +35,12 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   ytcli auth edit NAME --name NEW [--org-id ID] [--org-kind KIND] [--account NAME] [--queue KEY]
                                         change an existing profile without logging in again;
                                         what you do not pass is not touched
-  ytcli auth logout --account NAME      forget a token
-  An account holds one credential. A profile is an organisation seen through an account.
+  ytcli auth remove NAME --yes          delete a profile from the config; the account and
+                                        its token stay. --dry-run says what would go
+  ytcli auth logout --account NAME      forget a token; the profiles using it stay
+  An account holds one credential — a login. A profile is one organisation seen through one
+  account, and is what --profile selects. `logout` forgets the credential, `remove` forgets
+  the organisation: both are needed to undo a login completely.
 
 ## issue
   ytcli issue get PROJ-1                summary, fields, links, first 10 description lines;

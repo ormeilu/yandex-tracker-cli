@@ -234,7 +234,9 @@ fn there_is_no_subcommand_that_prints_a_stored_token() {
 
     assert_eq!(
         subcommands,
-        ["login", "logout", "list", "use", "edit", "status", "help"]
+        [
+            "login", "logout", "list", "use", "edit", "remove", "status", "help"
+        ]
     );
 }
 
@@ -374,6 +376,101 @@ fn auth_edit_without_any_change_refuses_and_reports_the_profile() {
         .code(2)
         .stderr(predicate::str::contains("nothing to change"))
         .stderr(predicate::str::contains("org=12345"));
+}
+
+/// Removing a profile is the counterpart to `auth login`, and it is refused
+/// without `--yes`: what goes cannot be restored by logging in again.
+#[test]
+fn auth_remove_needs_yes_and_names_the_organisation_first() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let config = dir.path().join("config.toml");
+    std::fs::write(
+        &config,
+        "[accounts.admin]\n\n[profiles.work]\naccount = \"admin\"\norg_id = \"12345\"\norg_kind = \"cloud\"\n",
+    )
+    .expect("write config");
+
+    ytcli()
+        .args(["auth", "remove", "work", "--config"])
+        .arg(&config)
+        .current_dir(dir.path())
+        .env_remove("YTCLI_PROFILE")
+        .env_remove("YTCLI_TOKEN")
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("org=12345"));
+
+    let written = std::fs::read_to_string(&config).expect("readable");
+    assert!(written.contains("[profiles.work]"), "nothing was removed");
+}
+
+/// The profile goes, the account it used stays: one account can back several
+/// profiles, and forgetting a credential is `auth logout`.
+#[test]
+fn auth_remove_deletes_the_profile_and_keeps_the_account() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let config = dir.path().join("config.toml");
+    std::fs::write(
+        &config,
+        r#"default_profile = "work"
+
+[accounts.admin]
+
+[profiles.work]
+account = "admin"
+org_id = "12345"
+org_kind = "cloud"
+
+[profiles.work.display]
+width = 100
+
+[profiles.sandbox]
+account = "admin"
+org_id = "67890"
+org_kind = "cloud"
+"#,
+    )
+    .expect("write config");
+
+    ytcli()
+        .args(["auth", "remove", "work", "--yes", "--config"])
+        .arg(&config)
+        .current_dir(dir.path())
+        .env_remove("YTCLI_PROFILE")
+        .env_remove("YTCLI_TOKEN")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("removed profile `work`"))
+        .stderr(predicate::str::contains("default profile: work → none"))
+        .stderr(predicate::str::contains("ytcli auth use sandbox"));
+
+    let written = std::fs::read_to_string(&config).expect("readable");
+    assert!(!written.contains("[profiles.work]"));
+    assert!(!written.contains("width = 100"));
+    assert!(!written.contains("default_profile"));
+    assert!(written.contains("[accounts.admin]"), "the account stays");
+    assert!(written.contains("[profiles.sandbox]"));
+}
+
+#[test]
+fn auth_remove_refuses_a_profile_that_is_not_configured() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let config = dir.path().join("config.toml");
+    std::fs::write(
+        &config,
+        "[accounts.admin]\n\n[profiles.work]\naccount = \"admin\"\norg_id = \"12345\"\norg_kind = \"cloud\"\n",
+    )
+    .expect("write config");
+
+    ytcli()
+        .args(["auth", "remove", "nope", "--yes", "--config"])
+        .arg(&config)
+        .current_dir(dir.path())
+        .env_remove("YTCLI_PROFILE")
+        .env_remove("YTCLI_TOKEN")
+        .assert()
+        .code(4)
+        .stderr(predicate::str::contains("no profile called `nope`"));
 }
 
 #[test]

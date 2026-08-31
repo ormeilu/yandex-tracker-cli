@@ -6,20 +6,26 @@ canonical term below wins.
 
 ## Identity and access
 
-**Account** — an identity that holds one credential. `ytcli auth login` stores a
-token per account, in the OS keychain. An account is not tied to an organisation:
-the same login can be an admin in one organisation and a plain member in another.
+**Account** — an identity that holds one credential; *who you are*. `ytcli auth
+login` stores a token per account, in the OS keychain. An account is not tied to
+an organisation: the same login can be an admin in one organisation and a plain
+member in another. It is never selected directly — it is reached through the
+profile that names it — and it is removed by `auth logout`, which forgets the
+token and deletes no profile.
 
 **Organisation** — a Tracker tenant. It comes in two flavours that are addressed
 by *different HTTP headers*, which is why the flavour is configuration rather
 than something we detect: Yandex Cloud Organization (`X-Cloud-Org-Id`) and
 Yandex 360 for Business (`X-Org-Id`). Sending the wrong header is a 403.
 
-**Profile** — an organisation seen through an account, plus display defaults.
-Profiles are the unit users select (`--profile`); accounts are the unit
-credentials attach to. The relationship is many-to-many in both directions: one
-account can reach several organisations, and one organisation can be reached
-through several accounts (say, an admin identity and a read-only one).
+**Profile** — an organisation seen through an account, plus display defaults;
+*where you work, as whom*. Profiles are the unit users select (`--profile`);
+accounts are the unit credentials attach to. The relationship is many-to-many in
+both directions: one account can reach several organisations, and one
+organisation can be reached through several accounts (say, an admin identity and
+a read-only one). A profile is removed by `auth remove`, which deletes the
+organisation and its defaults from the config file and leaves the account and
+its token where they are — undoing a login completely takes both commands.
 
 **Repository pin** — a committed, secret-free `.tracker.toml` naming the profile
 a checkout belongs to. Found by walking up from the working directory, the way
@@ -75,4 +81,4 @@ construction: there is no pass-through verb through which a write could be
 smuggled. This is what makes an allowlist like `ytcli issue get:*` meaningful.
 
 **Write verb** — `create`, `update`, `comment`, `transition`, `upload`, `login`,
-`logout`. A write that touches more than one issue additionally requires `--yes`.
+`logout`, `remove`. A write that touches more than one issue additionally requires `--yes`.
