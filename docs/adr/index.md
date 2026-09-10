@@ -15,3 +15,5 @@ look odd until you know why.
   binary, and why it is still installable with `uvx`.
 - [6. Agent surface](0006-agent-surface.md) — why the skill is split into small
   files instead of one large reference.
+- [7. Yandex Wiki](0007-yandex-wiki.md) — why Wiki reads live behind this binary
+  as one command group, and why its lists tally without a total.

@@ -17,6 +17,7 @@
   - [4. Own HTTP client](adr/0004-own-http-client.md)
   - [5. Rust and a Python wheel](adr/0005-rust-with-a-python-wheel.md)
   - [6. Agent surface](adr/0006-agent-surface.md)
+  - [7. Yandex Wiki](adr/0007-yandex-wiki.md)
 
 ---
 
