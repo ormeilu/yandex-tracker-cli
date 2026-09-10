@@ -312,6 +312,57 @@ fn day(at: Option<&str>) -> String {
     at.map_or_else(|| "-".to_owned(), |at| at.chars().take(10).collect())
 }
 
+/// Who can read and edit a page: the policy, then every grant.
+///
+/// Each grant says which of the Wiki's three lists it came from, because
+/// "why can this person see it" is answered by the list, not the role. A
+/// group's name was chosen by somebody else and is styled as such.
+#[must_use]
+pub fn access(access: &crate::api::wiki::WikiAccess, ctx: &Context) -> String {
+    let paint = ctx.painter();
+    let label = |text: &str| paint.paint(text, Palette::label());
+    let mut out = String::with_capacity(128 + access.entries.len() * 80);
+
+    let policy = access.policy.as_deref().unwrap_or("-");
+    let inherited = access
+        .inherited_policy
+        .as_deref()
+        .filter(|_| policy == "inherited")
+        .map_or_else(String::new, |inherited| format!(" ({inherited})"));
+    let _ = writeln!(
+        out,
+        "{}  {} {policy}{inherited}   {} {}",
+        paint.paint(&access.slug, Palette::key()),
+        label("access:"),
+        label("all staff:"),
+        access.all_staff_role.as_deref().unwrap_or("-"),
+    );
+
+    let columns = [
+        Column::whole("ID", 24, Palette::key()),
+        Column::new("ROLE", 12, anstyle::Style::new()),
+        Column::new("KIND", 5, anstyle::Style::new()),
+        Column::new("VIA", 9, Palette::label()),
+        Column::whole("WHO", 30, Palette::untrusted()),
+    ];
+    let rows: Vec<Vec<String>> = access
+        .entries
+        .iter()
+        .map(|entry| {
+            vec![
+                entry.id.clone(),
+                entry.role.clone(),
+                entry.kind.clone(),
+                entry.via.clone(),
+                entry.who.clone(),
+            ]
+        })
+        .collect();
+    out.push_str(&render(&columns, &rows, ctx));
+    out.push_str(&cursor_tally(access.entries.len(), None, ctx));
+    out
+}
+
 /// The pages under one.
 ///
 /// The slug leads, because it is what `wiki get` takes; the id follows, because
@@ -619,6 +670,32 @@ mod tests {
             next_cursor: Some("eyJpZCI6OTAyfQ==".to_owned()),
         };
         insta::assert_snapshot!(resources(&list, &ctx()));
+    }
+
+    /// A custom policy with a direct grant to a user and an inherited one to
+    /// a group; the list each came from is part of the answer.
+    #[test]
+    fn access_view_is_stable() {
+        use crate::api::wiki::{AccessEntry, WikiAccess};
+        let entry = |id: &str, role: &str, kind: &str, who: &str, via: &str| AccessEntry {
+            id: id.to_owned(),
+            role: role.to_owned(),
+            kind: kind.to_owned(),
+            who: who.to_owned(),
+            via: via.to_owned(),
+            inheritance: None,
+        };
+        let page_access = WikiAccess {
+            slug: "users/ilubenets/runbook".to_owned(),
+            policy: Some("custom".to_owned()),
+            inherited_policy: None,
+            all_staff_role: None,
+            entries: vec![
+                entry("a1", "author", "user", "ilubenets", "direct"),
+                entry("g7", "reader", "group", "Backend team", "inherited"),
+            ],
+        };
+        insta::assert_snapshot!(access(&page_access, &ctx()));
     }
 
     /// The compact view is the contract with every caller, so it is pinned.

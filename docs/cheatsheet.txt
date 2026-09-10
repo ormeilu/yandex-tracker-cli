@@ -250,6 +250,11 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   ytcli wiki comment SLUG|URL "text"|- [--reply-to ID] [--quote "passage"]
   ytcli wiki delete-comment SLUG|URL ID --yes
                                         no undo, hence --yes; the Wiki has no edit or resolve
+  ytcli wiki access SLUG|URL            policy, then grants: id, role, user|group, via, who
+  ytcli wiki grant SLUG|URL --role reader|editor|extra_editor|author --user LOGIN|--uid U|--group dir:ID
+  ytcli wiki regrant SLUG|URL ACCESS [--role R] [--inheritance inherited|not_inherited]
+  ytcli wiki revoke SLUG|URL ACCESS | --all --yes
+                                        self-lock refused unless --allow-selflock
                                         Writes: profile and org announced first; --dry-run sends nothing
 
 ## format

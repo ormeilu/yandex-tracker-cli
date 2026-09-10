@@ -1,0 +1,8 @@
+---
+source: src/render/wiki.rs
+expression: "access(&page_access, &ctx())"
+---
+users/ilubenets/runbook  access: custom   all staff: -
+a1                       author       user  direct    ilubenets
+g7                       reader       group inherited Backend team
+shown 2 of 2

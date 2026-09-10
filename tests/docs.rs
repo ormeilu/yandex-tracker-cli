@@ -282,6 +282,10 @@ const UNRUNNABLE: &[(&str, &str)] = &[
     ("wiki delete", "a write"),
     ("wiki restore", "a write"),
     ("wiki comment", "a write"),
+    ("wiki access", "the same borrowed fixtures as wiki get"),
+    ("wiki grant", "a write"),
+    ("wiki regrant", "a write"),
+    ("wiki revoke", "a write"),
 ];
 
 /// Every `ytcli <group> <verb>` in README or the cheatsheet is either exercised

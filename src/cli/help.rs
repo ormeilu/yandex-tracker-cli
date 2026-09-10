@@ -1376,6 +1376,57 @@ ytcli wiki delete-comment users/ilubenets/runbook 7001 --yes
 There is no undo, so it needs `--yes`. Prints how many comments the page has
 left. Announced first; `--dry-run` sends nothing.";
 
+pub const WIKI_ACCESS: &str = "\
+Show who can read and edit a Yandex Wiki page.
+
+```
+ytcli wiki access users/ilubenets/runbook
+```
+
+The policy (inherited, all_staff or custom), then every grant: its id (what
+`wiki regrant` and `wiki revoke` take), role, whether it is for a user or a
+group, which list it came from (direct, by_link or inherited), and who holds
+it. A read: the Wiki carries access on the page itself.";
+
+pub const WIKI_GRANT: &str = "\
+Give a user or a group a role on a Yandex Wiki page.
+
+```
+ytcli wiki grant users/ilubenets/runbook --role editor --user anna
+ytcli wiki grant users/ilubenets/runbook --role reader --group dir:42 --no-inherit
+```
+
+Roles are reader, editor, extra_editor (editor plus managing access) and
+author. The Wiki takes a uid, so a `--user` login is looked up in Tracker.
+`--uid`, `--cloud-uid` and `--group SOURCE:ID` name someone directly.
+
+The Wiki refuses a change that would lock you out of the page yourself,
+unless `--allow-selflock` says otherwise. The profile and organisation are
+announced first, and `--dry-run` sends nothing, the Tracker lookup included.";
+
+pub const WIKI_REGRANT: &str = "\
+Change a grant on a Yandex Wiki page.
+
+```
+ytcli wiki regrant users/ilubenets/runbook a1 --role reader
+ytcli wiki regrant users/ilubenets/runbook a1 --inheritance not_inherited
+```
+
+Takes the grant's id from `wiki access`. Guarded against self-lock like
+`wiki grant`. Announced first; `--dry-run` sends nothing.";
+
+pub const WIKI_REVOKE: &str = "\
+Remove access to a Yandex Wiki page.
+
+```
+ytcli wiki revoke users/ilubenets/runbook a1
+ytcli wiki revoke users/ilubenets/runbook --all --yes
+```
+
+One grant by its id from `wiki access`, or every personal grant with `--all`,
+which needs `--yes`. Guarded against self-lock like `wiki grant`. Announced
+first; `--dry-run` sends nothing.";
+
 pub const WIKI_DOWNLOAD: &str = "\
 Download one file attached to a Yandex Wiki page.
 

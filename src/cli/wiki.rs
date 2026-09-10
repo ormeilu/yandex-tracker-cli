@@ -200,6 +200,70 @@ pub enum WikiCommand {
         /// The comment's id, as `wiki comments` shows it.
         comment: u64,
     },
+    /// Show who can read and edit a page.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_ACCESS))]
+    Access {
+        /// The page's slug, or its address.
+        page: String,
+    },
+    /// Give a user or a group a role on a page.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_GRANT))]
+    #[command(group(clap::ArgGroup::new("who").required(true).multiple(false)))]
+    Grant {
+        /// The page's slug, or its address.
+        page: String,
+        /// `reader`, `editor`, `extra_editor` (may also manage access) or `author`.
+        #[arg(long, value_parser = ["reader", "editor", "extra_editor", "author"])]
+        role: String,
+        /// A login; its uid is looked up in Tracker.
+        #[arg(long, group = "who")]
+        user: Option<String>,
+        /// A user's uid, as the organisation's directory has it.
+        #[arg(long, group = "who")]
+        uid: Option<String>,
+        /// A user's Yandex Cloud id.
+        #[arg(long, group = "who", value_name = "ID")]
+        cloud_uid: Option<String>,
+        /// A group, as SOURCE:ID; the source is dir, cloud, com or staff.
+        #[arg(long, group = "who", value_name = "SOURCE:ID")]
+        group: Option<String>,
+        /// Keep the role off the subpages.
+        #[arg(long)]
+        no_inherit: bool,
+        /// Allow a change that could lock you yourself out of the page.
+        #[arg(long)]
+        allow_selflock: bool,
+    },
+    /// Change a grant's role, or whether subpages inherit it.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_REGRANT))]
+    Regrant {
+        /// The page's slug, or its address.
+        page: String,
+        /// The grant's id, as `wiki access` lists it.
+        access: String,
+        #[arg(long, value_parser = ["reader", "editor", "extra_editor", "author"])]
+        role: Option<String>,
+        #[arg(long, value_parser = ["inherited", "not_inherited"])]
+        inheritance: Option<String>,
+        /// Allow a change that could lock you yourself out of the page.
+        #[arg(long)]
+        allow_selflock: bool,
+    },
+    /// Remove a grant, or every personal grant on a page.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_REVOKE))]
+    Revoke {
+        /// The page's slug, or its address.
+        page: String,
+        /// The grant's id, as `wiki access` lists it.
+        #[arg(required_unless_present = "all")]
+        access: Option<String>,
+        /// Every personal grant on the page. Needs --yes.
+        #[arg(long, conflicts_with = "access")]
+        all: bool,
+        /// Allow a change that could lock you yourself out of the page.
+        #[arg(long)]
+        allow_selflock: bool,
+    },
     /// Download one file attached to a page.
     #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_DOWNLOAD))]
     Download {
@@ -315,6 +379,64 @@ pub async fn run(command: &WikiCommand, session: &Session) -> ExitCode {
         WikiCommand::DeleteComment { page, comment } => {
             delete_comment(page, *comment, session).await
         }
+        WikiCommand::Access { page } => show_access(page, session).await,
+        WikiCommand::Grant {
+            page,
+            role,
+            user,
+            uid,
+            cloud_uid,
+            group,
+            no_inherit,
+            allow_selflock,
+        } => {
+            let who = match (user, uid, cloud_uid, group) {
+                (Some(login), ..) => Grantee::Login(login),
+                (_, Some(uid), ..) => Grantee::Uid(uid),
+                (_, _, Some(id), _) => Grantee::CloudUid(id),
+                (.., Some(group)) => Grantee::Group(group),
+                _ => {
+                    return report(
+                        &"name who: --user, --uid, --cloud-uid or --group",
+                        ExitCode::ConfirmationRequired,
+                    );
+                }
+            };
+            grant(page, role, who, *no_inherit, *allow_selflock, session).await
+        }
+        WikiCommand::Regrant {
+            page,
+            access,
+            role,
+            inheritance,
+            allow_selflock,
+        } => {
+            let body = match (role, inheritance) {
+                (None, None) => {
+                    return report(
+                        &"nothing to change: pass --role, --inheritance, or both",
+                        ExitCode::ConfirmationRequired,
+                    );
+                }
+                (role, inheritance) => {
+                    let mut body = serde_json::json!({});
+                    if let Some(role) = role {
+                        body["role"] = serde_json::Value::String(role.clone());
+                    }
+                    if let Some(inheritance) = inheritance {
+                        body["inheritance"] = serde_json::Value::String(inheritance.clone());
+                    }
+                    body
+                }
+            };
+            regrant(page, access, &body, *allow_selflock, session).await
+        }
+        WikiCommand::Revoke {
+            page,
+            access,
+            all: _,
+            allow_selflock,
+        } => revoke(page, access.as_deref(), *allow_selflock, session).await,
         WikiCommand::Download {
             page,
             file,
@@ -889,6 +1011,222 @@ async fn delete_comment(page: &str, comment: u64, session: &Session) -> ExitCode
         Ok(left) => {
             let left = left.map_or_else(String::new, |count| format!("; {count} left"));
             emit(&format!("deleted comment {comment} on {slug}{left}\n"));
+            ExitCode::Success
+        }
+        Err(error) => failed(&error),
+    }
+}
+
+/// Who can read and edit a page.
+async fn show_access(page: &str, session: &Session) -> ExitCode {
+    let slug = match named(page) {
+        Ok(slug) => slug,
+        Err(code) => return code,
+    };
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+
+    match client.wiki_access(&slug).await {
+        Ok(found) => finish(match session.render.format {
+            Format::Text => Ok(render::access(&found, &session.render)),
+            Format::JsonRaw => machine(&found, Format::Json),
+            other => machine(&found, other),
+        }),
+        Err(error) => failed(&error),
+    }
+}
+
+/// Whom a grant is for, as it was named.
+enum Grantee<'a> {
+    /// A login, whose uid Tracker knows.
+    Login(&'a str),
+    Uid(&'a str),
+    CloudUid(&'a str),
+    /// `SOURCE:ID`.
+    Group(&'a str),
+}
+
+/// Give a user or a group a role on a page.
+///
+/// The Wiki takes a uid, and people know logins; so a login is looked up in
+/// Tracker, which is in the same organisation. That lookup is a request, and
+/// it happens after the gate, so a dry run shows where the uid will go
+/// rather than making it.
+async fn grant(
+    page: &str,
+    role: &str,
+    who: Grantee<'_>,
+    no_inherit: bool,
+    allow_selflock: bool,
+    session: &Session,
+) -> ExitCode {
+    let slug = match named(page) {
+        Ok(slug) => slug,
+        Err(code) => return code,
+    };
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+
+    let mut body = serde_json::json!({ "role": role });
+    let named_as = match who {
+        Grantee::Login(login) => {
+            body["user"] = serde_json::json!({ "uid": format!("<uid of {login}, from Tracker>") });
+            login.to_owned()
+        }
+        Grantee::Uid(uid) => {
+            body["user"] = serde_json::json!({ "uid": uid });
+            format!("uid {uid}")
+        }
+        Grantee::CloudUid(id) => {
+            body["user"] = serde_json::json!({ "cloud_uid": id });
+            format!("cloud uid {id}")
+        }
+        Grantee::Group(spec) => {
+            let Some((source, id)) = spec.split_once(':').filter(|(source, id)| {
+                matches!(*source, "dir" | "cloud" | "com" | "staff") && !id.is_empty()
+            }) else {
+                return report(
+                    &format!(
+                        "--group takes SOURCE:ID, the source one of dir, cloud, com, staff; got `{spec}`"
+                    ),
+                    ExitCode::ConfirmationRequired,
+                );
+            };
+            body["group"] = serde_json::json!({ "id": id, "src": source });
+            format!("group {id}")
+        }
+    };
+    if no_inherit {
+        body["inheritance"] = serde_json::Value::String("not_inherited".to_owned());
+    }
+    if let Some(code) = gated(
+        &format!("grant {role} on wiki page `{slug}` to {named_as}"),
+        &body,
+        false,
+        session,
+    ) {
+        return code;
+    }
+
+    if let Grantee::Login(login) = who {
+        match client.user(login).await {
+            Ok(person) if !person.uid.is_empty() => {
+                body["user"] = serde_json::json!({ "uid": person.uid });
+            }
+            Ok(_) => {
+                return report(
+                    &format!("Tracker knows {login} but gives no uid for them; pass --uid"),
+                    ExitCode::NotFound,
+                );
+            }
+            Err(error) => return failed(&error),
+        }
+    }
+    let id = match client.wiki_page_id(&slug).await {
+        Ok(id) => id,
+        Err(error) => return failed(&error),
+    };
+    match client.wiki_grant(id, &body, allow_selflock).await {
+        Ok(entry) => {
+            emit(&format!(
+                "granted {role} on {slug} to {named_as} (access {})\n",
+                entry.id
+            ));
+            ExitCode::Success
+        }
+        Err(error) => failed(&error),
+    }
+}
+
+/// Change one grant.
+async fn regrant(
+    page: &str,
+    access: &str,
+    body: &serde_json::Value,
+    allow_selflock: bool,
+    session: &Session,
+) -> ExitCode {
+    let slug = match named(page) {
+        Ok(slug) => slug,
+        Err(code) => return code,
+    };
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+    if let Some(code) = gated(
+        &format!("change access {access} on wiki page `{slug}`"),
+        body,
+        false,
+        session,
+    ) {
+        return code;
+    }
+
+    let id = match client.wiki_page_id(&slug).await {
+        Ok(id) => id,
+        Err(error) => return failed(&error),
+    };
+    match client.wiki_regrant(id, access, body, allow_selflock).await {
+        Ok(entry) => {
+            emit(&format!(
+                "changed access {access} on {slug}: {}\n",
+                if entry.role.is_empty() {
+                    "-"
+                } else {
+                    &entry.role
+                }
+            ));
+            ExitCode::Success
+        }
+        Err(error) => failed(&error),
+    }
+}
+
+/// Remove one grant, or — with no grant named — every personal one, which
+/// is a larger mistake to make by accident and so needs `--yes`.
+async fn revoke(
+    page: &str,
+    access: Option<&str>,
+    allow_selflock: bool,
+    session: &Session,
+) -> ExitCode {
+    let slug = match named(page) {
+        Ok(slug) => slug,
+        Err(code) => return code,
+    };
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+    let (action, body) = match access {
+        Some(access) => (
+            format!("revoke access {access} on wiki page `{slug}`"),
+            serde_json::json!({ "access": access }),
+        ),
+        None => (
+            format!("revoke every personal access on wiki page `{slug}`"),
+            serde_json::json!({ "access": "all personal" }),
+        ),
+    };
+    if let Some(code) = gated(&action, &body, access.is_none(), session) {
+        return code;
+    }
+
+    let id = match client.wiki_page_id(&slug).await {
+        Ok(id) => id,
+        Err(error) => return failed(&error),
+    };
+    match client.wiki_revoke(id, access, allow_selflock).await {
+        Ok(()) => {
+            emit(&match access {
+                Some(access) => format!("revoked access {access} on {slug}\n"),
+                None => format!("revoked every personal access on {slug}\n"),
+            });
             ExitCode::Success
         }
         Err(error) => failed(&error),

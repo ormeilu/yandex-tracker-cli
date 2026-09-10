@@ -492,6 +492,92 @@ pub struct GridQuery<'a> {
     pub revision: Option<u64>,
 }
 
+/// Who can read and edit a page, in our schema.
+///
+/// The Wiki has no access endpoint to read: the page carries it when asked,
+/// in three lists — direct grants, grants by link, and those inherited from a
+/// parent. They are flattened into one, each entry saying which list it was.
+#[derive(Debug, Clone, Serialize)]
+pub struct WikiAccess {
+    pub slug: String,
+    /// `inherited`, `all_staff` or `custom`.
+    pub policy: Option<String>,
+    /// What an inherited policy comes to: `all_staff` or `custom`.
+    pub inherited_policy: Option<String>,
+    /// The role everyone in the organisation has, when the policy is `all_staff`.
+    pub all_staff_role: Option<String>,
+    pub entries: Vec<AccessEntry>,
+}
+
+/// One grant: a role, held by a user or a group.
+#[derive(Debug, Clone, Serialize)]
+pub struct AccessEntry {
+    /// What `wiki regrant` and `wiki revoke` take.
+    pub id: String,
+    /// `reader`, `editor`, `extra_editor` or `author`.
+    pub role: String,
+    /// `user` or `group`.
+    pub kind: String,
+    /// A user's login, or a group's name.
+    pub who: String,
+    /// `direct`, `by_link` or `inherited`.
+    pub via: String,
+    pub inheritance: Option<String>,
+}
+
+/// A string field, or a number written as one: the Wiki is not consistent.
+fn scalar(value: Option<&serde_json::Value>) -> Option<String> {
+    match value? {
+        serde_json::Value::String(text) => Some(text.clone()),
+        serde_json::Value::Null => None,
+        other => Some(other.to_string()),
+    }
+}
+
+impl WikiAccess {
+    fn from_page(slug: &str, page: &serde_json::Value) -> Self {
+        let policy = page.get("access_policy");
+        let field = |name: &str| scalar(policy.and_then(|policy| policy.get(name)));
+        let mut entries = Vec::new();
+        if let Some(lists) = page.get("access_lists") {
+            for via in ["direct", "by_link", "inherited"] {
+                let items = lists.get(via).and_then(serde_json::Value::as_array);
+                for item in items.into_iter().flatten() {
+                    entries.push(AccessEntry::from_item(item, via));
+                }
+            }
+        }
+        Self {
+            slug: slug.to_owned(),
+            policy: field("access_type"),
+            inherited_policy: field("inherited_access_type"),
+            all_staff_role: field("all_staff_role"),
+            entries,
+        }
+    }
+}
+
+impl AccessEntry {
+    fn from_item(item: &serde_json::Value, via: &str) -> Self {
+        let present = |name: &str| item.get(name).filter(|value| !value.is_null());
+        let (kind, who) = if let Some(user) = present("user") {
+            ("user", scalar(user.get("username")))
+        } else if let Some(group) = present("group") {
+            ("group", scalar(group.get("name")))
+        } else {
+            ("-", None)
+        };
+        Self {
+            id: scalar(item.get("id")).unwrap_or_default(),
+            role: scalar(item.get("role")).unwrap_or_default(),
+            kind: kind.to_owned(),
+            who: who.unwrap_or_default(),
+            via: via.to_owned(),
+            inheritance: scalar(item.get("inheritance")),
+        }
+    }
+}
+
 /// Which comments to list.
 #[derive(Debug, Clone, Copy)]
 pub enum CommentScope<'a> {
@@ -925,6 +1011,99 @@ impl Client {
             )
             .await?;
         Ok(left.comments_count)
+    }
+
+    /// Who can read and edit a page: the page read, asked for its access.
+    pub async fn wiki_access(&self, slug: &str) -> Result<WikiAccess, ApiError> {
+        let url = format!(
+            "{}/v1/pages?slug={}&fields=access_policy,access_lists",
+            self.wiki_url,
+            encode(slug)
+        );
+        let (value, _) = self
+            .send_url(
+                reqwest::Method::GET,
+                &url,
+                None,
+                &format!("wiki page `{slug}`"),
+            )
+            .await
+            .map_err(refused)?;
+        Ok(WikiAccess::from_page(slug, &value))
+    }
+
+    /// `POST /v1/pages/{id}/access`. Unless `allow_selflock`, the Wiki is
+    /// asked to refuse a change that would lock the caller out.
+    pub async fn wiki_grant(
+        &self,
+        page: u64,
+        body: &serde_json::Value,
+        allow_selflock: bool,
+    ) -> Result<AccessEntry, ApiError> {
+        let url = format!(
+            "{}/v1/pages/{page}/access{}",
+            self.wiki_url,
+            query(&[(!allow_selflock).then_some("prevent_selflock=true")])
+        );
+        let item: serde_json::Value = self
+            .wiki_write(
+                reqwest::Method::POST,
+                &url,
+                Some(body),
+                &format!("access to wiki page {page}"),
+            )
+            .await?;
+        Ok(AccessEntry::from_item(&item, "direct"))
+    }
+
+    /// `POST /v1/pages/{id}/access/{access}`: another role, or inheritance.
+    pub async fn wiki_regrant(
+        &self,
+        page: u64,
+        access: &str,
+        body: &serde_json::Value,
+        allow_selflock: bool,
+    ) -> Result<AccessEntry, ApiError> {
+        let url = format!(
+            "{}/v1/pages/{page}/access/{}{}",
+            self.wiki_url,
+            encode(access),
+            query(&[(!allow_selflock).then_some("prevent_selflock=true")])
+        );
+        let item: serde_json::Value = self
+            .wiki_write(
+                reqwest::Method::POST,
+                &url,
+                Some(body),
+                &format!("access {access} on wiki page {page}"),
+            )
+            .await?;
+        Ok(AccessEntry::from_item(&item, "direct"))
+    }
+
+    /// `DELETE /v1/pages/{id}/access/{access}`, or every personal grant on
+    /// the page when no access is named.
+    pub async fn wiki_revoke(
+        &self,
+        page: u64,
+        access: Option<&str>,
+        allow_selflock: bool,
+    ) -> Result<(), ApiError> {
+        let one = access.map_or_else(String::new, |access| format!("/{}", encode(access)));
+        let url = format!(
+            "{}/v1/pages/{page}/access{one}{}",
+            self.wiki_url,
+            query(&[(!allow_selflock).then_some("prevent_selflock=true")])
+        );
+        let _: serde_json::Value = self
+            .wiki_write(
+                reqwest::Method::DELETE,
+                &url,
+                None,
+                &format!("access to wiki page {page}"),
+            )
+            .await?;
+        Ok(())
     }
 
     /// `POST /v1/recovery_tokens/{token}/recover`.
