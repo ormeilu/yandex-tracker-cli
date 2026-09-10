@@ -233,17 +233,6 @@ async fn listing_under_a_missing_page_is_not_found() {
         ));
 }
 
-/// Declared before they work, so help and completions are honest about the
-/// group — and each says so rather than pretending to succeed.
-#[tokio::test]
-async fn the_verbs_not_built_yet_say_so() {
-    let harness = Harness::new().await;
-    harness
-        .run(&["wiki", "attachments", "users/ilubenets/runbook"])
-        .assert()
-        .code(64);
-}
-
 /// An organisation the Wiki was never opened in is refused with a 403 that
 /// is not about the token, and the message must not send anyone to sign in.
 #[tokio::test]

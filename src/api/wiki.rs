@@ -289,6 +289,57 @@ impl From<CommentAnswer> for WikiComment {
     }
 }
 
+/// A file attached to a page, in our schema.
+#[derive(Debug, Clone, Serialize)]
+pub struct WikiAttachment {
+    pub id: u64,
+    /// Chosen by whoever uploaded it.
+    pub name: String,
+    /// As the Wiki sends it: a string, in units it does not name.
+    pub size: String,
+    pub mimetype: Option<String>,
+    pub created_at: Option<String>,
+    /// The uploader's login.
+    pub author: Option<String>,
+    pub download_url: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct AttachmentAnswer {
+    id: u64,
+    name: String,
+    #[serde(default)]
+    size: serde_json::Value,
+    #[serde(default)]
+    mimetype: Option<String>,
+    #[serde(default)]
+    created_at: Option<String>,
+    #[serde(default)]
+    user: Option<Person>,
+    #[serde(default)]
+    download_url: Option<String>,
+}
+
+impl From<AttachmentAnswer> for WikiAttachment {
+    fn from(answer: AttachmentAnswer) -> Self {
+        Self {
+            id: answer.id,
+            name: answer.name,
+            // Documented as a string; a number is taken too rather than
+            // failing the whole listing over one field's type.
+            size: match answer.size {
+                serde_json::Value::String(size) => size,
+                serde_json::Value::Null => "-".to_owned(),
+                other => other.to_string(),
+            },
+            mimetype: answer.mimetype,
+            created_at: answer.created_at,
+            author: answer.user.map(|person| person.username),
+            download_url: answer.download_url,
+        }
+    }
+}
+
 /// Which comments to list.
 #[derive(Debug, Clone, Copy)]
 pub enum CommentScope<'a> {
@@ -351,6 +402,29 @@ impl Client {
             .await?;
         Ok(CursorPage {
             results: page.results.into_iter().map(WikiComment::from).collect(),
+            next_cursor: page.next_cursor,
+        })
+    }
+
+    /// The files attached to a page.
+    pub async fn wiki_attachments(
+        &self,
+        slug: &str,
+        cursor: Option<&str>,
+        page_size: u32,
+    ) -> Result<CursorPage<WikiAttachment>, ApiError> {
+        let id = self.wiki_page_id(slug).await?;
+        let page: CursorPage<AttachmentAnswer> = self
+            .wiki_listing(
+                id,
+                "attachments?",
+                cursor,
+                page_size,
+                &format!("attachments of wiki page `{slug}`"),
+            )
+            .await?;
+        Ok(CursorPage {
+            results: page.results.into_iter().map(WikiAttachment::from).collect(),
             next_cursor: page.next_cursor,
         })
     }

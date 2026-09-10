@@ -1,14 +1,12 @@
 //! Wiki commands: the pages of the Yandex Wiki next to the organisation's
 //! Tracker, read through the same profile.
 //!
-//! Read verbs only (`docs/adr/0007-yandex-wiki.md`). All of them are declared,
-//! so help and completions say what the group will hold; the ones not built yet
-//! say so when run.
+//! Read verbs only (`docs/adr/0007-yandex-wiki.md`).
 
 use clap::Subcommand;
 
 use crate::api::wiki::{CommentScope, LAST_SEARCH_PAGE, slug_of};
-use crate::cli::{Session, emit, not_implemented, report};
+use crate::cli::{Session, emit, report};
 use crate::exit::ExitCode;
 use crate::render::{Format, RenderError, machine, wiki as render};
 
@@ -61,6 +59,9 @@ pub enum WikiCommand {
     Attachments {
         /// The page's slug, or its address.
         page: String,
+        /// Where the previous page of this listing ended, as its tally named it.
+        #[arg(long)]
+        cursor: Option<String>,
     },
 }
 
@@ -83,7 +84,9 @@ pub async fn run(command: &WikiCommand, session: &Session) -> ExitCode {
             };
             comments(page, scope, cursor.as_deref(), session).await
         }
-        WikiCommand::Attachments { .. } => not_implemented("wiki attachments"),
+        WikiCommand::Attachments { page, cursor } => {
+            attachments(page, cursor.as_deref(), session).await
+        }
     }
 }
 
@@ -189,6 +192,33 @@ async fn comments(
     {
         Ok(found) => finish(match session.render.format {
             Format::Text => Ok(render::comments(&slug, &found, &session.render)),
+            Format::JsonRaw => machine(&found, Format::Json),
+            other => machine(&found, other),
+        }),
+        Err(error) => {
+            let code = error.exit_code();
+            report(&error, code)
+        }
+    }
+}
+
+/// The files attached to a page.
+async fn attachments(page: &str, cursor: Option<&str>, session: &Session) -> ExitCode {
+    let slug = match named(page) {
+        Ok(slug) => slug,
+        Err(code) => return code,
+    };
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+
+    match client
+        .wiki_attachments(&slug, cursor, page_size(session))
+        .await
+    {
+        Ok(found) => finish(match session.render.format {
+            Format::Text => Ok(render::attachments(&found, &session.render)),
             Format::JsonRaw => machine(&found, Format::Json),
             other => machine(&found, other),
         }),

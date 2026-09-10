@@ -1239,7 +1239,12 @@ List the files attached to a Yandex Wiki page.
 ytcli wiki attachments users/ilubenets/runbook
 ```
 
-Not built yet (#84): it answers \"not implemented\" and exits 64.";
+Each file's id, size, type, upload date and name. The size is printed as the
+Wiki sends it, which is a string in units it does not state. `--format json`
+adds the uploader and the download address.
+
+The Wiki gives no total: the list ends with `shown N of more than N — next:
+--cursor C` while more follow. Costs two requests: the slug is looked up first.";
 
 pub const AUTH_LOGOUT: &str = "\
 Remove a stored token.

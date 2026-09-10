@@ -2,7 +2,7 @@
 
 use std::fmt::Write as _;
 
-use crate::api::wiki::{CursorPage, WikiComment, WikiHits, WikiPage, WikiPageRef};
+use crate::api::wiki::{CursorPage, WikiAttachment, WikiComment, WikiHits, WikiPage, WikiPageRef};
 use crate::render::Context;
 use crate::render::style::Palette;
 use crate::render::table::{Column, cursor_tally, open_page_tally, render};
@@ -84,6 +84,46 @@ pub fn comments(slug: &str, list: &CursorPage<WikiComment>, ctx: &Context) -> St
         );
     }
 
+    out.push_str(&cursor_tally(
+        list.results.len(),
+        list.next_cursor.as_deref(),
+        ctx,
+    ));
+    out
+}
+
+/// A page's attachments.
+///
+/// The name was chosen by whoever uploaded it, so it gets the styling of
+/// somebody else's text, as Tracker's attachment names do. The size is shown as
+/// the Wiki sends it: it is a string in units the Wiki does not name, and
+/// guessing them would print a wrong number with confidence.
+#[must_use]
+pub fn attachments(list: &CursorPage<WikiAttachment>, ctx: &Context) -> String {
+    let columns = [
+        Column::whole("ID", 10, Palette::key()),
+        Column::whole("SIZE", 10, anstyle::Style::new()),
+        Column::new("TYPE", 18, anstyle::Style::new()),
+        Column::new("CREATED", 10, Palette::label()),
+        Column::whole("NAME", 40, Palette::untrusted()),
+    ];
+    let rows: Vec<Vec<String>> = list
+        .results
+        .iter()
+        .map(|file| {
+            vec![
+                file.id.to_string(),
+                file.size.clone(),
+                file.mimetype.as_deref().unwrap_or("-").to_owned(),
+                file.created_at
+                    .as_deref()
+                    .map_or_else(|| "-".to_owned(), |at| at.chars().take(10).collect()),
+                file.name.clone(),
+            ]
+        })
+        .collect();
+
+    let mut out = render(&columns, &rows, ctx);
     out.push_str(&cursor_tally(
         list.results.len(),
         list.next_cursor.as_deref(),
@@ -269,6 +309,35 @@ mod tests {
             next_cursor: None,
         };
         insta::assert_snapshot!(comments("users/ilubenets/runbook", &list, &ctx()));
+    }
+
+    /// Files with more to come; a missing type and date fall back to a dash.
+    #[test]
+    fn attachments_view_is_stable() {
+        let list = CursorPage {
+            results: vec![
+                WikiAttachment {
+                    id: 901,
+                    name: "rollback.pdf".to_owned(),
+                    size: "0.25".to_owned(),
+                    mimetype: Some("application/pdf".to_owned()),
+                    created_at: Some("2026-09-01T11:00:00Z".to_owned()),
+                    author: Some("ilubenets".to_owned()),
+                    download_url: None,
+                },
+                WikiAttachment {
+                    id: 902,
+                    name: "notes.txt".to_owned(),
+                    size: "-".to_owned(),
+                    mimetype: None,
+                    created_at: None,
+                    author: None,
+                    download_url: None,
+                },
+            ],
+            next_cursor: Some("eyJpZCI6OTAyfQ==".to_owned()),
+        };
+        insta::assert_snapshot!(attachments(&list, &ctx()));
     }
 
     /// The compact view is the contract with every caller, so it is pinned.

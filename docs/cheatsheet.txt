@@ -228,6 +228,9 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   ytcli wiki comments SLUG|URL [--status resolved|unresolved] [--thread ID] [--cursor C]
                                         comments, fenced, each headed by id, author, time;
                                         a longer thread names the --thread that reads it
+  ytcli wiki attachments SLUG|URL [--cursor C]
+                                        files on a page: id, size (as the Wiki sends it), type,
+                                        upload date, name
 
 ## format
   text      compact key/value; fixed field order so caches and scripts hold
