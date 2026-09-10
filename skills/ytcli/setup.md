@@ -42,6 +42,12 @@ profile gets its token. So the two are also removed separately:
 
 Undoing a login completely takes both.
 
+Signing in needs nothing registered. In a terminal, `ytcli auth login` offers a
+browser sign-in with a short code. Without one — as an agent — run
+`ytcli auth login --device --account NAME --org-id ID`, show the user the URL and
+code it prints, and wait: it returns once they confirm. `ytcli auth refresh`
+renews a signed-in token; changing what a token may do is another `auth login`.
+
 ```bash
 ytcli auth status        # every profile: identity, org, queues, projects, your open issues
 ytcli auth status --brief --active-only

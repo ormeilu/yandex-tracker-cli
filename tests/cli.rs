@@ -235,7 +235,7 @@ fn there_is_no_subcommand_that_prints_a_stored_token() {
     assert_eq!(
         subcommands,
         [
-            "login", "logout", "list", "use", "edit", "remove", "status", "help"
+            "login", "refresh", "logout", "list", "use", "edit", "remove", "status", "help"
         ]
     );
 }

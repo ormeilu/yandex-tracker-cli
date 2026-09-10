@@ -84,6 +84,38 @@ pub fn account(existing: &[String]) -> Result<String, WizardError> {
     Ok(name.trim().to_owned())
 }
 
+/// Sign in through the browser, or paste a token?
+///
+/// The browser comes first and is the default: nothing to register, nothing to
+/// copy, and the token never passes through the clipboard.
+pub fn sign_in_in_browser() -> Result<bool, WizardError> {
+    let choice = Select::with_theme(&theme())
+        .with_prompt("How do you want to sign in?")
+        .default(0)
+        .items([
+            "In the browser, with a short code — nothing to set up",
+            "Paste an OAuth token",
+        ])
+        .interact()?;
+    Ok(choice == 0)
+}
+
+/// Wait for Enter.
+///
+/// A browser that opens the moment the code is printed covers the terminal
+/// before anyone has read the code off it.
+pub fn press_enter(prompt: &str) -> Result<(), WizardError> {
+    let mut err = anstream::stderr();
+    let _ = write!(err, "{prompt}");
+    let _ = err.flush();
+
+    let mut line = String::new();
+    std::io::stdin()
+        .read_line(&mut line)
+        .map_err(|error| WizardError::Io(dialoguer::Error::IO(error)))?;
+    Ok(())
+}
+
 /// The token itself, entered as a password.
 ///
 /// `Password` is the whole point of doing this interactively: a token typed as

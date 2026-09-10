@@ -1148,6 +1148,22 @@ another organisation: which one a bare command touches is your decision, and
 `ytcli auth use NAME` is where you make it. A committed `.tracker.toml` naming
 it is reported rather than rewritten.";
 
+pub const AUTH_REFRESH: &str = "\
+Renew a token that `auth login` got by signing in through the browser.
+
+```
+ytcli auth refresh
+ytcli auth refresh --account work
+```
+
+Exchanges the refresh token kept next to the token in the OS keychain for a new
+token. Only a signed-in token has one; a pasted token is renewed by logging in
+again. Yandex hands back the same token when it has long enough left, and the
+command says so rather than claiming a renewal.
+
+Changing what a token may do — adding Wiki access, or dropping to read-only —
+is not a refresh. It is `ytcli auth login` again.";
+
 pub const AUTH_LOGOUT: &str = "\
 Remove a stored token.
 

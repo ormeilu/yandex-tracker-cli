@@ -120,14 +120,47 @@ pub fn store(account: &str, token: &str) -> Result<(), SecretError> {
     Ok(())
 }
 
-/// Remove the stored token. Removing a token that is not there is not an error.
+/// Remove the stored token, and what renews it. Removing a token that is not
+/// there is not an error.
 pub fn forget(account: &str) -> Result<(), SecretError> {
     if let Ok(mut cached) = cache().lock() {
         cached.remove(account);
     }
     match entry(account)?.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Ok(()) | Err(keyring::Error::NoEntry) => {}
+        Err(err) => return Err(SecretError::Backend(err)),
+    }
+    store_refresh(account, None)
+}
+
+/// Refresh tokens live under a service of their own, so no account name can
+/// ever collide with one.
+const REFRESH_SERVICE: &str = "ytcli-refresh";
+
+fn refresh_entry(account: &str) -> Result<keyring::Entry, SecretError> {
+    keyring::Entry::new(REFRESH_SERVICE, account).map_err(SecretError::Unavailable)
+}
+
+/// The refresh token for an account — there is one only when its token came
+/// from signing in, not from pasting.
+pub fn refresh_token(account: &str) -> Result<Option<String>, SecretError> {
+    match refresh_entry(account)?.get_password() {
+        Ok(token) => Ok(Some(token)),
+        Err(keyring::Error::NoEntry) => Ok(None),
         Err(err) => Err(SecretError::Backend(err)),
+    }
+}
+
+/// Store the refresh token that came with a token, or remove the one that no
+/// longer belongs to it.
+pub fn store_refresh(account: &str, token: Option<&str>) -> Result<(), SecretError> {
+    let entry = refresh_entry(account)?;
+    match token {
+        Some(token) => entry.set_password(token).map_err(SecretError::Backend),
+        None => match entry.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(err) => Err(SecretError::Backend(err)),
+        },
     }
 }
 

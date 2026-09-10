@@ -18,6 +18,11 @@ use std::io::IsTerminal;
 pub const TOKEN: &str = "\
 ## Get an OAuth token
 
+The quickest way needs none of this: in a terminal, `ytcli auth login` offers to
+sign you in through the browser with a short code, and `--device` does the same
+where there is no terminal. The steps below are for pasting a token yourself —
+CI, or an organisation that does not allow third-party applications.
+
 1. Create an application at https://oauth.yandex.ru/client/new — pick
    **For API access or debugging**, and grant `tracker:write` for full access
    or `tracker:read` to stay read-only.

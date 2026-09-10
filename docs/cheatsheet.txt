@@ -27,6 +27,11 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
                                         Outside a terminal: flags only, token from stdin.
                                         --org-kind is detected if omitted; --dry-run checks only
                                         `ytcli auth login --help` says where to get both values
+  ytcli auth login --device [--read-only]
+                                        sign in through the browser with a code, no terminal
+                                        needed; in a terminal, login offers this first
+  ytcli auth refresh [--account NAME]   renew a signed-in token; a pasted one has nothing
+                                        to renew with. New scopes mean logging in again
   ytcli auth use NAME                   make a profile the default; a local edit,
                                         no token read and no request made
   ytcli auth edit NAME --description "TEXT"

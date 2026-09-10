@@ -17,3 +17,5 @@ look odd until you know why.
   files instead of one large reference.
 - [7. Yandex Wiki](0007-yandex-wiki.md) — why Wiki reads live behind this binary
   as one command group, and why its lists tally without a total.
+- [8. Device sign-in](0008-device-sign-in.md) — why login goes through a shared
+  OAuth application whose secret ships inside the binary.

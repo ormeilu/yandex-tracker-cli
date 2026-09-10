@@ -222,6 +222,7 @@ async fn the_documented_examples_still_produce_the_documented_output() {
 const UNRUNNABLE: &[(&str, &str)] = &[
     ("auth login", "interactive; asks for a token"),
     ("auth logout", "would touch the keychain"),
+    ("auth refresh", "reads the keychain before anything else"),
     (
         "auth status",
         "several requests per profile, and prints identity",
