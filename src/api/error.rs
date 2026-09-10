@@ -30,6 +30,13 @@ pub enum ApiError {
          signed in to it, and try again"
     )]
     WikiNotEnabled,
+    // Reading and writing are separate permissions, and a token signed in for
+    // reading only is refused every write: naming the one it lacks is the fix.
+    #[error(
+        "the Wiki refused this write: the token needs the wiki:write permission — sign in \
+         again with `ytcli auth login` — or this account may not edit that page"
+    )]
+    WikiWriteForbidden,
     #[error("{0} not found")]
     NotFound(String),
     #[error("rate limited by Tracker (429)")]
@@ -47,7 +54,7 @@ impl ApiError {
     #[must_use]
     pub fn exit_code(&self) -> ExitCode {
         match self {
-            Self::Unauthorized | Self::WikiForbidden => ExitCode::Auth,
+            Self::Unauthorized | Self::WikiForbidden | Self::WikiWriteForbidden => ExitCode::Auth,
             Self::NotFound(_) => ExitCode::NotFound,
             Self::Forbidden | Self::WikiNotEnabled | Self::RateLimited | Self::Rejected { .. } => {
                 ExitCode::ApiRejected

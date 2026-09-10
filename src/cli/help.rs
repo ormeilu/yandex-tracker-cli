@@ -1288,6 +1288,69 @@ Each item's type, id, creation date and name. `wiki download` takes a file's
 id, and `wiki grid` takes a grid's id. The Wiki gives no total: the list ends
 with `shown N of more than N — next: --cursor C` while more follow.";
 
+pub const WIKI_CREATE: &str = "\
+Create a Yandex Wiki page.
+
+```
+ytcli wiki create users/ilubenets/notes --title \"Notes\" --from notes.md
+cat notes.md | ytcli wiki create users/ilubenets/notes --title \"Notes\" --from -
+```
+
+The slug's path decides the parent. The text comes from a file, or from stdin
+with `-`, and never from an argument. `--silent` spares the subscribers a
+notification. The profile and organisation are announced first, and
+`--dry-run` prints the request without sending it. Prints the new page's slug
+and id.";
+
+pub const WIKI_UPDATE: &str = "\
+Replace a Yandex Wiki page's text, or retitle it.
+
+```
+ytcli wiki update users/ilubenets/notes --from notes.md
+ytcli wiki update users/ilubenets/notes --title \"Old notes\"
+ytcli wiki update users/ilubenets/notes --from - --merge < notes.md
+```
+
+`--from` replaces the whole text; `wiki append` adds to it instead. If someone
+else edited the page since, the Wiki refuses, unless `--merge` asks it to fold
+their edits in. Announced first; `--dry-run` sends nothing, not even the
+lookup of the page.";
+
+pub const WIKI_APPEND: &str = "\
+Add text to a Yandex Wiki page.
+
+```
+ytcli wiki append users/ilubenets/notes --from entry.md
+ytcli wiki append users/ilubenets/notes --from - --top
+ytcli wiki append users/ilubenets/notes --from entry.md --anchor \"#deploy\"
+```
+
+At the bottom by default, the top with `--top`, or at an anchor in the page.
+The rest of the page is left as it is. Text comes from a file or stdin.
+Announced first; `--dry-run` sends nothing.";
+
+pub const WIKI_DELETE: &str = "\
+Delete a Yandex Wiki page.
+
+```
+ytcli wiki delete users/ilubenets/notes
+ytcli wiki delete users/ilubenets/old --recursive --yes
+```
+
+Prints the recovery token and the exact `wiki restore` command. Nothing else
+ever shows that token again, so keep the output. Taking the subpages too needs
+`--recursive` and `--yes`. Announced first; `--dry-run` sends nothing.";
+
+pub const WIKI_RESTORE: &str = "\
+Restore a deleted Yandex Wiki page.
+
+```
+ytcli wiki restore 0b6c2a4e-1f3d-4e5a-9b7c-8d9e0f1a2b3c
+```
+
+Takes the token that `wiki delete` printed. Prints the restored page and how
+many pages came back with it.";
+
 pub const WIKI_DOWNLOAD: &str = "\
 Download one file attached to a Yandex Wiki page.
 

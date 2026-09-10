@@ -1,7 +1,10 @@
 //! Wiki commands: the pages of the Yandex Wiki next to the organisation's
 //! Tracker, read through the same profile.
 //!
-//! Read verbs only (`docs/adr/0007-yandex-wiki.md`).
+//! The read verbs never write (`docs/adr/0007-yandex-wiki.md`). The writes —
+//! create, update, append, delete, restore — are verbs of their own and pass
+//! the same gate as Tracker's: profile and organisation announced first,
+//! `--dry-run` honoured, page text from a file or stdin.
 
 use std::path::{Path, PathBuf};
 
@@ -9,6 +12,7 @@ use clap::Subcommand;
 
 use crate::api::wiki::{CommentScope, GridQuery, LAST_SEARCH_PAGE, slug_of};
 use crate::cli::attachment::safe_filename;
+use crate::cli::write::{Gate, Intent, check};
 use crate::cli::{Session, emit, report};
 use crate::exit::ExitCode;
 use crate::render::{Format, RenderError, machine, wiki as render};
@@ -113,6 +117,67 @@ pub enum WikiCommand {
         #[arg(long)]
         cursor: Option<String>,
     },
+    /// Create a page; its parent is whatever the slug's path says.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_CREATE))]
+    Create {
+        /// Where the page goes: users/me/notes, or an address.
+        page: String,
+        #[arg(long, short = 't')]
+        title: String,
+        /// The page's text: a file, or `-` for stdin.
+        #[arg(long, value_name = "PATH")]
+        from: Option<String>,
+        /// Do not notify subscribers.
+        #[arg(long)]
+        silent: bool,
+    },
+    /// Replace a page's text, or retitle it.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_UPDATE))]
+    Update {
+        /// The page's slug, or its address.
+        page: String,
+        #[arg(long, short = 't')]
+        title: Option<String>,
+        /// The page's new text in full: a file, or `-` for stdin.
+        #[arg(long, value_name = "PATH")]
+        from: Option<String>,
+        /// Fold in edits made since, rather than be refused over them.
+        #[arg(long)]
+        merge: bool,
+        /// Do not notify subscribers.
+        #[arg(long)]
+        silent: bool,
+    },
+    /// Add text to a page: at the bottom, the top, or an anchor.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_APPEND))]
+    Append {
+        /// The page's slug, or its address.
+        page: String,
+        /// The text to add: a file, or `-` for stdin.
+        #[arg(long, value_name = "PATH")]
+        from: String,
+        /// At the top rather than the bottom.
+        #[arg(long, conflicts_with = "anchor")]
+        top: bool,
+        /// At this anchor in the page, such as #deploy.
+        #[arg(long)]
+        anchor: Option<String>,
+        /// Do not notify subscribers.
+        #[arg(long)]
+        silent: bool,
+    },
+    /// Delete a page, printing the token that restores it.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_DELETE))]
+    Delete {
+        /// The page's slug, or its address.
+        page: String,
+        /// Its subpages too. Needs --yes.
+        #[arg(long)]
+        recursive: bool,
+    },
+    /// Restore a deleted page by the token its deletion printed.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_RESTORE))]
+    Restore { token: String },
     /// Download one file attached to a page.
     #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_DOWNLOAD))]
     Download {
@@ -185,6 +250,36 @@ pub async fn run(command: &WikiCommand, session: &Session) -> ExitCode {
             )
             .await
         }
+        WikiCommand::Create {
+            page,
+            title,
+            from,
+            silent,
+        } => create(page, title, from.as_deref(), *silent, session).await,
+        WikiCommand::Update {
+            page,
+            title,
+            from,
+            merge,
+            silent,
+        } => {
+            let change = Change {
+                title: title.as_deref(),
+                from: from.as_deref(),
+                merge: *merge,
+                silent: *silent,
+            };
+            update(page, change, session).await
+        }
+        WikiCommand::Append {
+            page,
+            from,
+            top,
+            anchor,
+            silent,
+        } => append(page, from, place(*top, anchor.as_deref()), *silent, session).await,
+        WikiCommand::Delete { page, recursive } => delete(page, *recursive, session).await,
+        WikiCommand::Restore { token } => restore(token, session).await,
         WikiCommand::Download {
             page,
             file,
@@ -407,6 +502,266 @@ async fn resources(
             let code = error.exit_code();
             report(&error, code)
         }
+    }
+}
+
+/// A page's text for a write: from a file, or `-` for stdin — never from an
+/// argument, where a runbook would have to survive shell quoting.
+fn content(from: &str) -> Result<String, ExitCode> {
+    if from == "-" {
+        let mut text = String::new();
+        return match std::io::Read::read_to_string(&mut std::io::stdin(), &mut text) {
+            Ok(_) => Ok(text),
+            Err(error) => Err(report(&error, ExitCode::Failure)),
+        };
+    }
+    std::fs::read_to_string(from)
+        .map_err(|error| report(&format!("cannot read {from}: {error}"), ExitCode::Failure))
+}
+
+/// Announce the write and apply `--dry-run` and `--yes`, before any request:
+/// a dry run of a write under a page does not even look the page up.
+fn gated(
+    action: &str,
+    body: &serde_json::Value,
+    confirm: bool,
+    session: &Session,
+) -> Option<ExitCode> {
+    let intent = Intent {
+        action,
+        targets: &[],
+        body,
+        always_confirm: confirm,
+    };
+    match check(&intent, session) {
+        Gate::Proceed => None,
+        Gate::Stop(code) => Some(code),
+    }
+}
+
+fn failed(error: &crate::api::error::ApiError) -> ExitCode {
+    report(error, error.exit_code())
+}
+
+/// Create a page.
+async fn create(
+    page: &str,
+    title: &str,
+    from: Option<&str>,
+    silent: bool,
+    session: &Session,
+) -> ExitCode {
+    let slug = match named(page) {
+        Ok(slug) => slug,
+        Err(code) => return code,
+    };
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+    let mut body = serde_json::json!({ "slug": slug, "title": title });
+    if let Some(from) = from {
+        match content(from) {
+            Ok(text) => body["content"] = serde_json::Value::String(text),
+            Err(code) => return code,
+        }
+    }
+    if let Some(code) = gated(&format!("create wiki page `{slug}`"), &body, false, session) {
+        return code;
+    }
+
+    match client.wiki_create(&body, silent).await {
+        Ok(made) => {
+            emit(&format!("created {} (id {})\n", made.slug, made.id));
+            ExitCode::Success
+        }
+        Err(error) => failed(&error),
+    }
+}
+
+/// What `wiki update` was asked to change.
+struct Change<'a> {
+    title: Option<&'a str>,
+    from: Option<&'a str>,
+    merge: bool,
+    silent: bool,
+}
+
+/// Replace a page's text, retitle it, or both.
+async fn update(page: &str, change: Change<'_>, session: &Session) -> ExitCode {
+    let slug = match named(page) {
+        Ok(slug) => slug,
+        Err(code) => return code,
+    };
+    if change.title.is_none() && change.from.is_none() {
+        return report(
+            &"nothing to change: pass --title, --from, or both",
+            ExitCode::ConfirmationRequired,
+        );
+    }
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+    let mut body = serde_json::json!({});
+    if let Some(title) = change.title {
+        body["title"] = serde_json::Value::String(title.to_owned());
+    }
+    if let Some(from) = change.from {
+        match content(from) {
+            Ok(text) => body["content"] = serde_json::Value::String(text),
+            Err(code) => return code,
+        }
+    }
+    if let Some(code) = gated(&format!("update wiki page `{slug}`"), &body, false, session) {
+        return code;
+    }
+
+    let id = match client.wiki_page_id(&slug).await {
+        Ok(id) => id,
+        Err(error) => return failed(&error),
+    };
+    match client
+        .wiki_update(id, &body, change.merge, change.silent)
+        .await
+    {
+        Ok(page) => {
+            emit(&format!("updated {} (id {})\n", page.slug, page.id));
+            ExitCode::Success
+        }
+        Err(error) => failed(&error),
+    }
+}
+
+/// Where appended text goes, as the Wiki names it.
+fn place(top: bool, anchor: Option<&str>) -> serde_json::Value {
+    match anchor {
+        Some(anchor) => serde_json::json!({ "anchor": { "name": anchor } }),
+        None => serde_json::json!({
+            "body": { "location": if top { "top" } else { "bottom" } }
+        }),
+    }
+}
+
+/// Add text to a page.
+async fn append(
+    page: &str,
+    from: &str,
+    place: serde_json::Value,
+    silent: bool,
+    session: &Session,
+) -> ExitCode {
+    let slug = match named(page) {
+        Ok(slug) => slug,
+        Err(code) => return code,
+    };
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+    let text = match content(from) {
+        Ok(text) => text,
+        Err(code) => return code,
+    };
+    if text.is_empty() {
+        return report(
+            &"nothing to append: the text is empty",
+            ExitCode::ConfirmationRequired,
+        );
+    }
+    let mut body = place;
+    body["content"] = serde_json::Value::String(text);
+    if let Some(code) = gated(
+        &format!("append to wiki page `{slug}`"),
+        &body,
+        false,
+        session,
+    ) {
+        return code;
+    }
+
+    let id = match client.wiki_page_id(&slug).await {
+        Ok(id) => id,
+        Err(error) => return failed(&error),
+    };
+    match client.wiki_append(id, &body, silent).await {
+        Ok(page) => {
+            emit(&format!("appended to {} (id {})\n", page.slug, page.id));
+            ExitCode::Success
+        }
+        Err(error) => failed(&error),
+    }
+}
+
+/// Delete a page, and print the only thing that can bring it back.
+///
+/// The recovery token is shown once, by this command, and by nothing else
+/// ever again; so it goes to stdout with the exact command that uses it.
+/// Taking the subpages too is a different size of mistake, and needs `--yes`.
+async fn delete(page: &str, recursive: bool, session: &Session) -> ExitCode {
+    let slug = match named(page) {
+        Ok(slug) => slug,
+        Err(code) => return code,
+    };
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+    let body = serde_json::json!({ "recursive": recursive });
+    let action = if recursive {
+        format!("delete wiki page `{slug}` and every page under it")
+    } else {
+        format!("delete wiki page `{slug}`")
+    };
+    if let Some(code) = gated(&action, &body, recursive, session) {
+        return code;
+    }
+
+    let id = match client.wiki_page_id(&slug).await {
+        Ok(id) => id,
+        Err(error) => return failed(&error),
+    };
+    match client.wiki_delete(id, recursive).await {
+        Ok(token) => {
+            emit(&format!(
+                "deleted {slug} (id {id})\n\
+                 recovery token {token} — shown only now; to restore:\n  \
+                 ytcli wiki restore {token}\n"
+            ));
+            ExitCode::Success
+        }
+        Err(error) => failed(&error),
+    }
+}
+
+/// Bring a deleted page back.
+async fn restore(token: &str, session: &Session) -> ExitCode {
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+    let body = serde_json::json!({});
+    if let Some(code) = gated(
+        &format!("restore the wiki page deleted under token {token}"),
+        &body,
+        false,
+        session,
+    ) {
+        return code;
+    }
+
+    match client.wiki_restore(token.trim()).await {
+        Ok(restored) => {
+            let pages = restored
+                .pages_count
+                .map_or_else(String::new, |count| format!(", {count} pages"));
+            emit(&format!(
+                "restored {} (id {}{pages})\n",
+                restored.slug, restored.id
+            ));
+            ExitCode::Success
+        }
+        Err(error) => failed(&error),
     }
 }
 

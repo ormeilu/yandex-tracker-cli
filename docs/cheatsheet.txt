@@ -240,6 +240,14 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
                                         cut like a description (--full). The Wiki filters; no paging
   ytcli wiki resources SLUG|URL [--type attachment|grid] [--query Q] [--cursor C]
                                         files and grids in one list: type, id, created, name
+  ytcli wiki create SLUG --title T [--from PATH|-] [--silent]
+  ytcli wiki update SLUG|URL [--title T] [--from PATH|-] [--merge] [--silent]
+                                        --from replaces the whole text; --merge folds in others' edits
+  ytcli wiki append SLUG|URL --from PATH|- [--top | --anchor "#name"] [--silent]
+  ytcli wiki delete SLUG|URL [--recursive --yes]
+                                        prints the recovery token once, and the command that uses it
+  ytcli wiki restore TOKEN              undo a delete
+                                        Writes: profile and org announced first; --dry-run sends nothing
 
 ## format
   text      compact key/value; fixed field order so caches and scripts hold

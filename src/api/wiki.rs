@@ -781,6 +781,152 @@ impl Client {
     }
 }
 
+/// A page brought back from deletion.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WikiRestored {
+    pub id: u64,
+    pub slug: String,
+    /// The page and the subpages restored with it.
+    #[serde(default)]
+    pub pages_count: Option<u64>,
+}
+
+impl Client {
+    /// `POST /v1/pages`. The parent is whatever the slug's path says.
+    pub async fn wiki_create(
+        &self,
+        body: &serde_json::Value,
+        silent: bool,
+    ) -> Result<WikiPageRef, ApiError> {
+        let url = format!(
+            "{}/v1/pages{}",
+            self.wiki_url,
+            query(&[silent.then_some("is_silent=true")])
+        );
+        self.wiki_write(reqwest::Method::POST, &url, Some(body), "the new wiki page")
+            .await
+    }
+
+    /// `POST /v1/pages/{id}` — an update, whatever the method says. Content
+    /// replaces the page's text in full; `merge` lets the Wiki fold in edits
+    /// made since, where it would otherwise refuse.
+    pub async fn wiki_update(
+        &self,
+        id: u64,
+        body: &serde_json::Value,
+        merge: bool,
+        silent: bool,
+    ) -> Result<WikiPageRef, ApiError> {
+        let url = format!(
+            "{}/v1/pages/{id}{}",
+            self.wiki_url,
+            query(&[
+                merge.then_some("allow_merge=true"),
+                silent.then_some("is_silent=true"),
+            ])
+        );
+        self.wiki_write(
+            reqwest::Method::POST,
+            &url,
+            Some(body),
+            &format!("wiki page {id}"),
+        )
+        .await
+    }
+
+    /// `POST /v1/pages/{id}/append-content`.
+    pub async fn wiki_append(
+        &self,
+        id: u64,
+        body: &serde_json::Value,
+        silent: bool,
+    ) -> Result<WikiPageRef, ApiError> {
+        let url = format!(
+            "{}/v1/pages/{id}/append-content{}",
+            self.wiki_url,
+            query(&[silent.then_some("is_silent=true")])
+        );
+        self.wiki_write(
+            reqwest::Method::POST,
+            &url,
+            Some(body),
+            &format!("wiki page {id}"),
+        )
+        .await
+    }
+
+    /// `DELETE /v1/pages/{id}`, answering with the one token that restores it.
+    pub async fn wiki_delete(&self, id: u64, recursive: bool) -> Result<String, ApiError> {
+        #[derive(Deserialize)]
+        struct Deleted {
+            recovery_token: String,
+        }
+
+        // The reference names both flags and not the difference between them;
+        // a recursive delete sends both, a plain one neither.
+        let url = format!(
+            "{}/v1/pages/{id}{}",
+            self.wiki_url,
+            query(&[
+                recursive.then_some("recursive=true"),
+                recursive.then_some("allow_recursive=true"),
+            ])
+        );
+        let deleted: Deleted = self
+            .wiki_write(
+                reqwest::Method::DELETE,
+                &url,
+                None,
+                &format!("wiki page {id}"),
+            )
+            .await?;
+        Ok(deleted.recovery_token)
+    }
+
+    /// `POST /v1/recovery_tokens/{token}/recover`.
+    pub async fn wiki_restore(&self, token: &str) -> Result<WikiRestored, ApiError> {
+        let url = format!(
+            "{}/v1/recovery_tokens/{}/recover",
+            self.wiki_url,
+            encode(token)
+        );
+        self.wiki_write(
+            reqwest::Method::POST,
+            &url,
+            Some(&serde_json::json!({})),
+            &format!("recovery token `{token}`"),
+        )
+        .await
+    }
+
+    async fn wiki_write<T: serde::de::DeserializeOwned>(
+        &self,
+        method: reqwest::Method,
+        url: &str,
+        body: Option<&serde_json::Value>,
+        what: &str,
+    ) -> Result<T, ApiError> {
+        let (value, _) =
+            self.send_url(method, url, body, what)
+                .await
+                .map_err(|error| match error {
+                    ApiError::Forbidden | ApiError::Unauthorized => ApiError::WikiWriteForbidden,
+                    other => other,
+                })?;
+        serde_json::from_value(value).map_err(ApiError::Decode)
+    }
+}
+
+/// `?a&b` from whichever parts are present, or nothing at all.
+fn query(parts: &[Option<&str>]) -> String {
+    let present: Vec<&str> = parts.iter().flatten().copied().collect();
+    if present.is_empty() {
+        String::new()
+    } else {
+        format!("?{}", present.join("&"))
+    }
+}
+
 /// A refusal from the Wiki, told apart from Tracker's.
 ///
 /// The Wiki answers 401 to a token it will not serve — the documented case — and
