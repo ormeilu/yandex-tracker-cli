@@ -1468,6 +1468,123 @@ The status (scheduled, in_progress, success or failed), the percentage while
 it runs, and what it made once it is done. Takes what `wiki clone --no-wait`
 printed.";
 
+pub const WIKI_GRID_CREATE: &str = "\
+Create an empty grid on a Yandex Wiki page.
+
+```
+ytcli wiki grid-create users/ilubenets/runbook --title \"Releases\"
+```
+
+The grid starts with no columns: `wiki columns-add` gives it some. The Wiki
+makes a grid a resource of the page, and showing it inside the page's text is
+done in the Wiki's editor. Prints the new grid's id and revision. The profile
+and organisation are announced first, and `--dry-run` sends nothing.";
+
+pub const WIKI_GRID_UPDATE: &str = "\
+Retitle a Yandex Wiki grid, or set the order its rows show in.
+
+```
+ytcli wiki grid-update 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f --title \"Releases 2027\"
+ytcli wiki grid-update 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f --sort version:desc
+```
+
+Every grid write is made against a revision. The Wiki refuses one that is no
+longer current, which stops a write from overwriting someone else's edit made
+in between. Without `--revision`, the grid is read first for its current
+revision; with it, the change is made against the one you read. Prints the new
+revision. Announced first; `--dry-run` sends nothing.";
+
+pub const WIKI_GRID_DELETE: &str = "\
+Delete a Yandex Wiki grid.
+
+```
+ytcli wiki grid-delete 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f --yes
+```
+
+There is no undo, so it needs `--yes`. Announced first; `--dry-run` sends
+nothing.";
+
+pub const WIKI_ROWS_ADD: &str = "\
+Add rows to a Yandex Wiki grid.
+
+```
+ytcli wiki rows-add 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f --from rows.json
+echo '[{\"version\": \"1.4.0\"}]' | ytcli wiki rows-add 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f --from - --after 2
+```
+
+The rows are a JSON array of objects keyed by column slug. Add them at the
+end, after a row with `--after`, or at a position with `--position`. Made
+against a revision like every grid write (`--revision`). Prints the new rows'
+ids and the new revision.";
+
+pub const WIKI_ROWS_DELETE: &str = "\
+Delete rows from a Yandex Wiki grid.
+
+```
+ytcli wiki rows-delete 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f 3 4 --yes
+```
+
+Rows are named by the ids `wiki grid --format json` shows. There is no undo, so
+it needs `--yes`. Made against a revision like every grid write.";
+
+pub const WIKI_ROWS_MOVE: &str = "\
+Move rows in a Yandex Wiki grid.
+
+```
+ytcli wiki rows-move 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f 4 --after 1
+ytcli wiki rows-move 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f 4 --position 0 --count 2
+```
+
+Moves one row, or this row and the ones after it with `--count`. The
+destination is either after another row or a position. Made against a revision
+like every grid write.";
+
+pub const WIKI_COLUMNS_ADD: &str = "\
+Add columns to a Yandex Wiki grid.
+
+```
+ytcli wiki columns-add 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f --from columns.json
+```
+
+The columns are a JSON array of definitions, each with at least `slug`,
+`title`, `type` and `required`. The type is one of string, number, date,
+select, staff, checkbox, ticket or ticket_field. `--position` places them.
+Made against a revision like every grid write.";
+
+pub const WIKI_COLUMNS_DELETE: &str = "\
+Delete columns from a Yandex Wiki grid.
+
+```
+ytcli wiki columns-delete 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f notes --yes
+```
+
+Named by slug, as `wiki grid` lists them. The values in them go too, and there
+is no undo, so it needs `--yes`. Made against a revision like every grid
+write.";
+
+pub const WIKI_COLUMNS_MOVE: &str = "\
+Move a column in a Yandex Wiki grid.
+
+```
+ytcli wiki columns-move 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f owner --position 0
+```
+
+To a position, with the columns after it too when given `--count`. Made
+against a revision like every grid write.";
+
+pub const WIKI_CELLS_SET: &str = "\
+Set cells in a Yandex Wiki grid.
+
+```
+ytcli wiki cells-set 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f --set 1:done=true --set 2:version=1.3.1
+ytcli wiki cells-set 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f --set '2:version:=\"2\"'
+```
+
+Each cell is given as `ROW:SLUG=VALUE`: the row's id, the column's slug, and
+the value. The value is read as `issue update --set` reads one: JSON when it
+parses as JSON, text otherwise, and `:=` to insist on JSON. Every cell goes in
+one request, against one revision.";
+
 pub const WIKI_DOWNLOAD: &str = "\
 Download one file attached to a Yandex Wiki page.
 

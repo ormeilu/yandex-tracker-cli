@@ -305,6 +305,140 @@ pub enum WikiCommand {
         kind: String,
         id: String,
     },
+    /// Create an empty grid on a page.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_GRID_CREATE))]
+    GridCreate {
+        /// The page's slug, or its address.
+        page: String,
+        #[arg(long, short = 't')]
+        title: String,
+    },
+    /// Retitle a grid, or set the order its rows show in.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_GRID_UPDATE))]
+    GridUpdate {
+        /// The grid's id, as `wiki grids` lists it.
+        grid: String,
+        #[arg(long, short = 't')]
+        title: Option<String>,
+        /// Default order: slug:asc,other:desc.
+        #[arg(long, value_name = "SLUG:DIR,...")]
+        sort: Option<String>,
+        /// The revision the change is made against; read first when omitted.
+        #[arg(long)]
+        revision: Option<String>,
+    },
+    /// Delete a grid. There is no undo, so it needs --yes.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_GRID_DELETE))]
+    GridDelete {
+        /// The grid's id, as `wiki grids` lists it.
+        grid: String,
+    },
+    /// Add rows from JSON: an array of objects keyed by column slug.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_ROWS_ADD))]
+    RowsAdd {
+        /// The grid's id, as `wiki grids` lists it.
+        grid: String,
+        /// The rows as JSON: a file, or `-` for stdin.
+        #[arg(long, value_name = "PATH")]
+        from: String,
+        /// Put them after this row.
+        #[arg(long, value_name = "ROW", conflicts_with = "position")]
+        after: Option<String>,
+        /// Put them at this position, from 0.
+        #[arg(long)]
+        position: Option<u64>,
+        /// The revision the change is made against; read first when omitted.
+        #[arg(long)]
+        revision: Option<String>,
+    },
+    /// Delete rows by id. There is no undo, so it needs --yes.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_ROWS_DELETE))]
+    RowsDelete {
+        /// The grid's id, as `wiki grids` lists it.
+        grid: String,
+        #[arg(required = true, value_name = "ROW")]
+        rows: Vec<String>,
+        /// The revision the change is made against; read first when omitted.
+        #[arg(long)]
+        revision: Option<String>,
+    },
+    /// Move a row — and the rows after it, with --count.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_ROWS_MOVE))]
+    RowsMove {
+        /// The grid's id, as `wiki grids` lists it.
+        grid: String,
+        row: String,
+        /// After this row.
+        #[arg(
+            long,
+            value_name = "ROW",
+            conflicts_with = "position",
+            required_unless_present = "position"
+        )]
+        after: Option<String>,
+        /// To this position, from 0.
+        #[arg(long)]
+        position: Option<u64>,
+        /// How many rows to move, starting with this one.
+        #[arg(long)]
+        count: Option<u64>,
+        /// The revision the change is made against; read first when omitted.
+        #[arg(long)]
+        revision: Option<String>,
+    },
+    /// Add columns from JSON: an array of column definitions.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_COLUMNS_ADD))]
+    ColumnsAdd {
+        /// The grid's id, as `wiki grids` lists it.
+        grid: String,
+        /// The columns as JSON: a file, or `-` for stdin.
+        #[arg(long, value_name = "PATH")]
+        from: String,
+        /// Put them at this position, from 0.
+        #[arg(long)]
+        position: Option<u64>,
+        /// The revision the change is made against; read first when omitted.
+        #[arg(long)]
+        revision: Option<String>,
+    },
+    /// Delete columns by slug. There is no undo, so it needs --yes.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_COLUMNS_DELETE))]
+    ColumnsDelete {
+        /// The grid's id, as `wiki grids` lists it.
+        grid: String,
+        #[arg(required = true, value_name = "SLUG")]
+        columns: Vec<String>,
+        /// The revision the change is made against; read first when omitted.
+        #[arg(long)]
+        revision: Option<String>,
+    },
+    /// Move a column to a position.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_COLUMNS_MOVE))]
+    ColumnsMove {
+        /// The grid's id, as `wiki grids` lists it.
+        grid: String,
+        column: String,
+        /// Where to, from 0.
+        #[arg(long)]
+        position: u64,
+        /// How many columns to move, starting with this one.
+        #[arg(long)]
+        count: Option<u64>,
+        /// The revision the change is made against; read first when omitted.
+        #[arg(long)]
+        revision: Option<String>,
+    },
+    /// Set cells: --set ROW:SLUG=VALUE, as many as needed.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_CELLS_SET))]
+    CellsSet {
+        /// The grid's id, as `wiki grids` lists it.
+        grid: String,
+        #[arg(long = "set", value_name = "ROW:SLUG=VALUE", required = true)]
+        set: Vec<String>,
+        /// The revision the change is made against; read first when omitted.
+        #[arg(long)]
+        revision: Option<String>,
+    },
     /// Download one file attached to a page.
     #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_DOWNLOAD))]
     Download {
@@ -517,6 +651,146 @@ pub async fn run(command: &WikiCommand, session: &Session) -> ExitCode {
             };
             show_operation(&operation, session).await
         }
+        WikiCommand::GridCreate { page, title } => grid_create(page, title, session).await,
+        WikiCommand::GridUpdate {
+            grid,
+            title,
+            sort,
+            revision,
+        } => {
+            grid_update(
+                grid,
+                title.as_deref(),
+                sort.as_deref(),
+                revision.as_deref(),
+                session,
+            )
+            .await
+        }
+        WikiCommand::GridDelete { grid } => grid_delete(grid, session).await,
+        WikiCommand::RowsAdd {
+            grid,
+            from,
+            after,
+            position,
+            revision,
+        } => {
+            let mut place = serde_json::json!({});
+            if let Some(after) = after {
+                place["after_row_id"] = serde_json::Value::String(after.clone());
+            }
+            if let Some(position) = position {
+                place["position"] = serde_json::json!(position);
+            }
+            rows_add(grid, from, place, revision.as_deref(), session).await
+        }
+        WikiCommand::RowsDelete {
+            grid,
+            rows,
+            revision,
+        } => {
+            let change = GridChange {
+                grid,
+                action: format!(
+                    "delete {} from wiki grid `{grid}`",
+                    counted(rows.len(), "row")
+                ),
+                done: format!("deleted {} from grid {grid}", counted(rows.len(), "row")),
+                method: reqwest::Method::DELETE,
+                tail: "/rows",
+                body: serde_json::json!({ "row_ids": rows }),
+                confirm: true,
+                revision: revision.as_deref(),
+            };
+            change_grid(change, session).await
+        }
+        WikiCommand::RowsMove {
+            grid,
+            row,
+            after,
+            position,
+            count,
+            revision,
+        } => {
+            let mut body = serde_json::json!({ "row_id": row });
+            if let Some(after) = after {
+                body["after_row_id"] = serde_json::Value::String(after.clone());
+            }
+            if let Some(position) = position {
+                body["position"] = serde_json::json!(position);
+            }
+            if let Some(count) = count {
+                body["rows_count"] = serde_json::json!(count);
+            }
+            let change = GridChange {
+                grid,
+                action: format!("move row {row} in wiki grid `{grid}`"),
+                done: format!("moved row {row} in grid {grid}"),
+                method: reqwest::Method::POST,
+                tail: "/rows/move",
+                body,
+                confirm: false,
+                revision: revision.as_deref(),
+            };
+            change_grid(change, session).await
+        }
+        WikiCommand::ColumnsAdd {
+            grid,
+            from,
+            position,
+            revision,
+        } => columns_add(grid, from, *position, revision.as_deref(), session).await,
+        WikiCommand::ColumnsDelete {
+            grid,
+            columns,
+            revision,
+        } => {
+            let change = GridChange {
+                grid,
+                action: format!(
+                    "delete {} from wiki grid `{grid}`",
+                    counted(columns.len(), "column")
+                ),
+                done: format!(
+                    "deleted {} from grid {grid}",
+                    counted(columns.len(), "column")
+                ),
+                method: reqwest::Method::DELETE,
+                tail: "/columns",
+                body: serde_json::json!({ "column_slugs": columns }),
+                confirm: true,
+                revision: revision.as_deref(),
+            };
+            change_grid(change, session).await
+        }
+        WikiCommand::ColumnsMove {
+            grid,
+            column,
+            position,
+            count,
+            revision,
+        } => {
+            let mut body = serde_json::json!({ "column_slug": column, "position": position });
+            if let Some(count) = count {
+                body["columns_count"] = serde_json::json!(count);
+            }
+            let change = GridChange {
+                grid,
+                action: format!("move column {column} in wiki grid `{grid}`"),
+                done: format!("moved column {column} in grid {grid}"),
+                method: reqwest::Method::POST,
+                tail: "/columns/move",
+                body,
+                confirm: false,
+                revision: revision.as_deref(),
+            };
+            change_grid(change, session).await
+        }
+        WikiCommand::CellsSet {
+            grid,
+            set,
+            revision,
+        } => cells_set(grid, set, revision.as_deref(), session).await,
         WikiCommand::Download {
             page,
             file,
@@ -1516,6 +1790,319 @@ async fn show_operation(
         }),
         Err(error) => failed(&error),
     }
+}
+
+/// `1 row`, `3 rows`.
+fn counted(count: usize, what: &str) -> String {
+    if count == 1 {
+        format!("1 {what}")
+    } else {
+        format!("{count} {what}s")
+    }
+}
+
+/// One change to a grid, made against the revision it was read at.
+///
+/// The Wiki refuses a write whose revision is no longer the grid's, which is
+/// the whole protection against overwriting somebody's edit made in between.
+/// So every change carries one: the caller's, when they read the grid
+/// themselves and say so with `--revision`; otherwise the grid's current one,
+/// read just before. The read comes after the gate, so a dry run sends
+/// nothing and says where the revision will come from.
+struct GridChange<'a> {
+    grid: &'a str,
+    action: String,
+    done: String,
+    method: reqwest::Method,
+    tail: &'static str,
+    body: serde_json::Value,
+    confirm: bool,
+    revision: Option<&'a str>,
+}
+
+async fn change_grid(change: GridChange<'_>, session: &Session) -> ExitCode {
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+    let grid = change.grid.trim();
+    let mut body = change.body;
+    body["revision"] = serde_json::Value::String(
+        change
+            .revision
+            .map_or_else(|| "<current, read first>".to_owned(), str::to_owned),
+    );
+    if let Some(code) = gated(&change.action, &body, change.confirm, session) {
+        return code;
+    }
+
+    if change.revision.is_none() {
+        match client.wiki_grid(grid, GridQuery::default()).await {
+            Ok(current) => body["revision"] = serde_json::Value::String(current.revision),
+            Err(error) => return failed(&error),
+        }
+    }
+    match client
+        .wiki_grid_write(change.method, grid, change.tail, Some(&body))
+        .await
+    {
+        Ok(answer) => {
+            emit(&changed(&change.done, &answer));
+            ExitCode::Success
+        }
+        Err(error) => failed(&error),
+    }
+}
+
+/// What a grid write did, the rows it made, and the revision it left.
+fn changed(done: &str, answer: &serde_json::Value) -> String {
+    let text = |value: Option<&serde_json::Value>| match value {
+        Some(serde_json::Value::String(text)) => Some(text.clone()),
+        Some(serde_json::Value::Null) | None => None,
+        Some(other) => Some(other.to_string()),
+    };
+    let made: Vec<String> = answer
+        .get("results")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|row| text(row.get("id")))
+        .collect();
+    let made = if made.is_empty() {
+        String::new()
+    } else {
+        format!(" (rows {})", made.join(", "))
+    };
+    let revision = text(answer.get("revision")).unwrap_or_else(|| "-".to_owned());
+    format!("{done}{made}; revision {revision}\n")
+}
+
+/// JSON from a file or stdin that has to be a non-empty array.
+fn json_list(from: &str, what: &str) -> Result<Vec<serde_json::Value>, ExitCode> {
+    let text = content(from)?;
+    match serde_json::from_str::<serde_json::Value>(&text) {
+        Ok(serde_json::Value::Array(items)) if !items.is_empty() => Ok(items),
+        Ok(_) => Err(report(
+            &format!("{from} holds no {what}: expected a JSON array with at least one"),
+            ExitCode::ConfirmationRequired,
+        )),
+        Err(error) => Err(report(
+            &format!("{from} is not JSON: {error}"),
+            ExitCode::ConfirmationRequired,
+        )),
+    }
+}
+
+async fn grid_create(page: &str, title: &str, session: &Session) -> ExitCode {
+    let slug = match named(page) {
+        Ok(slug) => slug,
+        Err(code) => return code,
+    };
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+    let body = serde_json::json!({ "page": { "slug": slug }, "title": title });
+    if let Some(code) = gated(
+        &format!("create a grid on wiki page `{slug}`"),
+        &body,
+        false,
+        session,
+    ) {
+        return code;
+    }
+
+    match client.wiki_grid_create(&body).await {
+        Ok(grid) => {
+            emit(&format!(
+                "created grid {} on {slug}; revision {}\n",
+                grid.id, grid.revision
+            ));
+            ExitCode::Success
+        }
+        Err(error) => failed(&error),
+    }
+}
+
+async fn grid_update(
+    grid: &str,
+    title: Option<&str>,
+    sort: Option<&str>,
+    revision: Option<&str>,
+    session: &Session,
+) -> ExitCode {
+    let mut body = serde_json::json!({});
+    if let Some(title) = title {
+        body["title"] = serde_json::Value::String(title.to_owned());
+    }
+    if let Some(sort) = sort {
+        let mut order = serde_json::Map::new();
+        for part in sort
+            .split(',')
+            .map(str::trim)
+            .filter(|part| !part.is_empty())
+        {
+            match part.split_once(':') {
+                Some((slug, direction @ ("asc" | "desc"))) if !slug.is_empty() => {
+                    order.insert(
+                        slug.to_owned(),
+                        serde_json::Value::String(direction.to_owned()),
+                    );
+                }
+                _ => {
+                    return report(
+                        &format!(
+                            "--sort takes slug:asc or slug:desc, comma-separated; got `{part}`"
+                        ),
+                        ExitCode::ConfirmationRequired,
+                    );
+                }
+            }
+        }
+        body["default_sort"] = serde_json::Value::Object(order);
+    }
+    if title.is_none() && sort.is_none() {
+        return report(
+            &"nothing to change: pass --title, --sort, or both",
+            ExitCode::ConfirmationRequired,
+        );
+    }
+    let change = GridChange {
+        grid,
+        action: format!("change wiki grid `{grid}`"),
+        done: format!("changed grid {grid}"),
+        method: reqwest::Method::POST,
+        tail: "",
+        body,
+        confirm: false,
+        revision,
+    };
+    change_grid(change, session).await
+}
+
+/// Delete a grid. The Wiki keeps nothing to restore it from.
+async fn grid_delete(grid: &str, session: &Session) -> ExitCode {
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+    let grid = grid.trim();
+    let body = serde_json::json!({ "grid": grid });
+    if let Some(code) = gated(&format!("delete wiki grid `{grid}`"), &body, true, session) {
+        return code;
+    }
+
+    match client
+        .wiki_grid_write(reqwest::Method::DELETE, grid, "", None)
+        .await
+    {
+        Ok(_) => {
+            emit(&format!("deleted grid {grid}\n"));
+            ExitCode::Success
+        }
+        Err(error) => failed(&error),
+    }
+}
+
+async fn rows_add(
+    grid: &str,
+    from: &str,
+    mut body: serde_json::Value,
+    revision: Option<&str>,
+    session: &Session,
+) -> ExitCode {
+    let rows = match json_list(from, "rows") {
+        Ok(rows) => rows,
+        Err(code) => return code,
+    };
+    let count = counted(rows.len(), "row");
+    body["rows"] = serde_json::Value::Array(rows);
+    let change = GridChange {
+        grid,
+        action: format!("add {count} to wiki grid `{grid}`"),
+        done: format!("added {count} to grid {grid}"),
+        method: reqwest::Method::POST,
+        tail: "/rows",
+        body,
+        confirm: false,
+        revision,
+    };
+    change_grid(change, session).await
+}
+
+async fn columns_add(
+    grid: &str,
+    from: &str,
+    position: Option<u64>,
+    revision: Option<&str>,
+    session: &Session,
+) -> ExitCode {
+    let columns = match json_list(from, "columns") {
+        Ok(columns) => columns,
+        Err(code) => return code,
+    };
+    let count = counted(columns.len(), "column");
+    let mut body = serde_json::json!({ "columns": columns });
+    if let Some(position) = position {
+        body["position"] = serde_json::json!(position);
+    }
+    let change = GridChange {
+        grid,
+        action: format!("add {count} to wiki grid `{grid}`"),
+        done: format!("added {count} to grid {grid}"),
+        method: reqwest::Method::POST,
+        tail: "/columns",
+        body,
+        confirm: false,
+        revision,
+    };
+    change_grid(change, session).await
+}
+
+/// Set cells from `ROW:SLUG=VALUE` pairs.
+///
+/// The value is read the way `issue update --set` reads one: JSON when it
+/// parses as JSON, text otherwise, and `ROW:SLUG:=json` to say which.
+async fn cells_set(
+    grid: &str,
+    set: &[String],
+    revision: Option<&str>,
+    session: &Session,
+) -> ExitCode {
+    let mut cells = Vec::with_capacity(set.len());
+    for raw in set {
+        let parsed = raw.split_once(':').and_then(|(row, rest)| {
+            let row: u64 = row.trim().parse().ok()?;
+            Some((row, crate::cli::write::parse_assignment(rest)))
+        });
+        match parsed {
+            // The Wiki takes the row as a number here, and a string everywhere else.
+            Some((row, Ok((slug, value)))) => cells.push(serde_json::json!({
+                "row_id": row, "column_slug": slug, "value": value
+            })),
+            Some((_, Err(problem))) => {
+                return report(&problem, ExitCode::ConfirmationRequired);
+            }
+            None => {
+                return report(
+                    &format!("--set takes ROW:SLUG=VALUE, the row a number; got `{raw}`"),
+                    ExitCode::ConfirmationRequired,
+                );
+            }
+        }
+    }
+    let count = counted(cells.len(), "cell");
+    let change = GridChange {
+        grid,
+        action: format!("set {count} in wiki grid `{grid}`"),
+        done: format!("set {count} in grid {grid}"),
+        method: reqwest::Method::POST,
+        tail: "/cells",
+        body: serde_json::json!({ "cells": cells }),
+        confirm: false,
+        revision,
+    };
+    change_grid(change, session).await
 }
 
 /// Where a download's bytes come from.

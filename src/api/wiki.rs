@@ -429,12 +429,14 @@ struct GridAnswer {
     page: Option<WikiPageRef>,
     #[serde(default, deserialize_with = "text_id")]
     revision: String,
+    // A grid just created may come back before it has any structure to show.
+    #[serde(default)]
     structure: Structure,
     #[serde(default)]
     rows: Vec<RowAnswer>,
 }
 
-#[derive(Deserialize)]
+#[derive(Default, Deserialize)]
 struct Structure {
     #[serde(default)]
     columns: Vec<GridColumn>,
@@ -1217,6 +1219,29 @@ impl Client {
                 .filter(|result| !result.is_null())
                 .cloned(),
         })
+    }
+
+    /// `POST /v1/grids`: a new grid on a page, with no columns yet.
+    pub async fn wiki_grid_create(&self, body: &serde_json::Value) -> Result<WikiGrid, ApiError> {
+        let url = format!("{}/v1/grids", self.wiki_url);
+        let answer: GridAnswer = self
+            .wiki_write(reqwest::Method::POST, &url, Some(body), "the new wiki grid")
+            .await?;
+        Ok(WikiGrid::from(answer))
+    }
+
+    /// One change under `/v1/grids/{id}`, answered with what the Wiki says —
+    /// the new revision among it.
+    pub async fn wiki_grid_write(
+        &self,
+        method: reqwest::Method,
+        grid: &str,
+        tail: &str,
+        body: Option<&serde_json::Value>,
+    ) -> Result<serde_json::Value, ApiError> {
+        let url = format!("{}/v1/grids/{}{tail}", self.wiki_url, encode(grid));
+        self.wiki_write(method, &url, body, &format!("wiki grid `{grid}`"))
+            .await
     }
 
     /// `POST /v1/recovery_tokens/{token}/recover`.
