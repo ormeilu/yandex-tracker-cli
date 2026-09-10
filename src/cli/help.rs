@@ -1585,6 +1585,34 @@ the value. The value is read as `issue update --set` reads one: JSON when it
 parses as JSON, text otherwise, and `:=` to insist on JSON. Every cell goes in
 one request, against one revision.";
 
+pub const WIKI_UPLOAD: &str = "\
+Attach files to a Yandex Wiki page.
+
+```
+ytcli wiki upload users/ilubenets/runbook rollback.pdf
+ytcli wiki upload users/ilubenets/runbook diagram.png notes.txt
+```
+
+Each file goes through the Wiki's upload session: opened, sent in 8 MB parts,
+finished, then attached. Progress shows on stderr when there is a terminal. If
+anything fails part way, the session is aborted so it does not keep holding
+the account's upload quota. Files already attached stay attached, and each
+gets its own line with the new attachment's id.
+
+Every file is read before anything is sent, so a missing one stops the
+command at the start. The profile and organisation are announced first, and
+`--dry-run` sends nothing.";
+
+pub const WIKI_DELETE_ATTACHMENT: &str = "\
+Delete a file attached to a Yandex Wiki page.
+
+```
+ytcli wiki delete-attachment users/ilubenets/runbook rollback.pdf --yes
+```
+
+By id or by name, as `wiki attachments` lists them. There is no undo, so it
+needs `--yes`. Announced first; `--dry-run` sends nothing.";
+
 pub const WIKI_DOWNLOAD: &str = "\
 Download one file attached to a Yandex Wiki page.
 

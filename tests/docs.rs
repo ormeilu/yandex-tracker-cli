@@ -287,6 +287,7 @@ const UNRUNNABLE: &[(&str, &str)] = &[
     ("wiki regrant", "a write"),
     ("wiki revoke", "a write"),
     ("wiki clone", "a write"),
+    ("wiki upload", "a write"),
     ("wiki operation", "names an operation only a real clone has"),
 ];
 

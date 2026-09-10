@@ -273,6 +273,8 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
                                         every grid write carries a revision: yours with
                                         --revision, else the current one read first; a grid
                                         changed in between is refused, not overwritten
+  ytcli wiki upload SLUG|URL FILE...    upload session per file, 8 MB parts, aborted on failure
+  ytcli wiki delete-attachment SLUG|URL ID|NAME --yes
                                         Writes: profile and org announced first; --dry-run sends nothing
 
 ## format

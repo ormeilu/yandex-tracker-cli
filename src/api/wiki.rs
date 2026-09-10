@@ -619,6 +619,41 @@ impl OperationStatus {
     }
 }
 
+/// An upload the Wiki has opened for one file.
+#[derive(Debug, Clone, Deserialize)]
+pub struct UploadSession {
+    pub session_id: String,
+}
+
+/// The size of each part of an upload but the last.
+///
+/// The Wiki takes parts of 5 to 16 MB, the last one smaller; this sits in
+/// the middle, so a file needs few requests and no part is refused for size.
+pub const UPLOAD_PART: usize = 8 * 1024 * 1024;
+
+/// The byte ranges an upload of `len` bytes is sent in: one part for a file
+/// smaller than a part, otherwise parts of `size` and a shorter last one.
+#[must_use]
+pub fn upload_parts(len: usize, size: usize) -> Vec<std::ops::Range<usize>> {
+    if len == 0 {
+        // An empty file is still one part: the Wiki needs part 1 to finish.
+        return std::iter::once(0..0).collect();
+    }
+    let size = size.max(1);
+    (0..len)
+        .step_by(size)
+        .map(|start| start..(start + size).min(len))
+        .collect()
+}
+
+/// A write refused for want of rights, told apart from a read refused.
+fn write_refused(error: ApiError) -> ApiError {
+    match error {
+        ApiError::Forbidden | ApiError::Unauthorized => ApiError::WikiWriteForbidden,
+        other => other,
+    }
+}
+
 /// Which comments to list.
 #[derive(Debug, Clone, Copy)]
 pub enum CommentScope<'a> {
@@ -1244,6 +1279,130 @@ impl Client {
             .await
     }
 
+    /// `POST /v1/upload_sessions`: the first of the four requests a file takes.
+    pub async fn wiki_upload_start(
+        &self,
+        name: &str,
+        size: usize,
+    ) -> Result<UploadSession, ApiError> {
+        let url = format!("{}/v1/upload_sessions", self.wiki_url);
+        let body = serde_json::json!({ "file_name": name, "file_size": size });
+        self.wiki_write(
+            reqwest::Method::POST,
+            &url,
+            Some(&body),
+            &format!("an upload of {name}"),
+        )
+        .await
+    }
+
+    /// `PUT /v1/upload_sessions/{id}/upload_part`: raw bytes, not JSON, so it
+    /// goes around the JSON sender.
+    pub async fn wiki_upload_part(
+        &self,
+        session: &str,
+        part: u32,
+        bytes: Vec<u8>,
+    ) -> Result<(), ApiError> {
+        let url = format!(
+            "{}/v1/upload_sessions/{}/upload_part?part_number={part}",
+            self.wiki_url,
+            encode(session)
+        );
+        let response = self
+            .http
+            .put(&url)
+            .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+            .body(bytes)
+            .send()
+            .await?;
+        super::classify(response, &format!("upload session {session}"))
+            .await
+            .map(|_| ())
+            .map_err(write_refused)
+    }
+
+    /// `POST /v1/upload_sessions/{id}/finish`.
+    pub async fn wiki_upload_finish(&self, session: &str) -> Result<(), ApiError> {
+        let url = format!(
+            "{}/v1/upload_sessions/{}/finish",
+            self.wiki_url,
+            encode(session)
+        );
+        let _: serde_json::Value = self
+            .wiki_write(
+                reqwest::Method::POST,
+                &url,
+                None,
+                &format!("upload session {session}"),
+            )
+            .await?;
+        Ok(())
+    }
+
+    /// `POST /v1/upload_sessions/{id}/abort`: so a failed upload does not go
+    /// on holding the account's upload quota.
+    pub async fn wiki_upload_abort(&self, session: &str) -> Result<(), ApiError> {
+        let url = format!(
+            "{}/v1/upload_sessions/{}/abort",
+            self.wiki_url,
+            encode(session)
+        );
+        let _: serde_json::Value = self
+            .wiki_write(
+                reqwest::Method::POST,
+                &url,
+                None,
+                &format!("upload session {session}"),
+            )
+            .await?;
+        Ok(())
+    }
+
+    /// `POST /v1/pages/{id}/attachments`: finished uploads become the page's
+    /// files.
+    pub async fn wiki_attach(
+        &self,
+        page: u64,
+        sessions: &[String],
+    ) -> Result<Vec<WikiAttachment>, ApiError> {
+        #[derive(Deserialize)]
+        struct Attached {
+            #[serde(default)]
+            results: Vec<AttachmentAnswer>,
+        }
+
+        let url = format!("{}/v1/pages/{page}/attachments", self.wiki_url);
+        let body = serde_json::json!({ "upload_sessions": sessions });
+        let attached: Attached = self
+            .wiki_write(
+                reqwest::Method::POST,
+                &url,
+                Some(&body),
+                &format!("wiki page {page}"),
+            )
+            .await?;
+        Ok(attached
+            .results
+            .into_iter()
+            .map(WikiAttachment::from)
+            .collect())
+    }
+
+    /// `DELETE /v1/pages/{id}/attachments/{file}`.
+    pub async fn wiki_delete_attachment(&self, page: u64, file: u64) -> Result<(), ApiError> {
+        let url = format!("{}/v1/pages/{page}/attachments/{file}", self.wiki_url);
+        let _: serde_json::Value = self
+            .wiki_write(
+                reqwest::Method::DELETE,
+                &url,
+                None,
+                &format!("attachment {file}"),
+            )
+            .await?;
+        Ok(())
+    }
+
     /// `POST /v1/recovery_tokens/{token}/recover`.
     pub async fn wiki_restore(&self, token: &str) -> Result<WikiRestored, ApiError> {
         let url = format!(
@@ -1366,6 +1525,17 @@ fn encode(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A file under one part goes in one; a larger one in full parts and a
+    /// shorter last one, with every byte in exactly one part.
+    #[test]
+    fn an_upload_is_cut_into_parts_the_wiki_accepts() {
+        let one = |range: std::ops::Range<usize>| std::iter::once(range).collect::<Vec<_>>();
+        assert_eq!(upload_parts(5, UPLOAD_PART), one(0..5));
+        assert_eq!(upload_parts(0, UPLOAD_PART), one(0..0));
+        assert_eq!(upload_parts(10, 4), vec![0..4, 4..8, 8..10]);
+        assert_eq!(upload_parts(8, 4), vec![0..4, 4..8]);
+    }
 
     #[test]
     fn a_slug_is_taken_as_it_is() {

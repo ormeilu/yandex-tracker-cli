@@ -439,6 +439,22 @@ pub enum WikiCommand {
         #[arg(long)]
         revision: Option<String>,
     },
+    /// Attach files to a page.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_UPLOAD))]
+    Upload {
+        /// The page's slug, or its address.
+        page: String,
+        #[arg(required = true, value_name = "FILE")]
+        files: Vec<PathBuf>,
+    },
+    /// Delete a file attached to a page. There is no undo, so it needs --yes.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_DELETE_ATTACHMENT))]
+    DeleteAttachment {
+        /// The page's slug, or its address.
+        page: String,
+        /// The file's id or name, as `wiki attachments` lists them.
+        file: String,
+    },
     /// Download one file attached to a page.
     #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_DOWNLOAD))]
     Download {
@@ -791,6 +807,10 @@ pub async fn run(command: &WikiCommand, session: &Session) -> ExitCode {
             set,
             revision,
         } => cells_set(grid, set, revision.as_deref(), session).await,
+        WikiCommand::Upload { page, files } => upload(page, files, session).await,
+        WikiCommand::DeleteAttachment { page, file } => {
+            delete_attachment(page, file, session).await
+        }
         WikiCommand::Download {
             page,
             file,
@@ -2103,6 +2123,161 @@ async fn cells_set(
         revision,
     };
     change_grid(change, session).await
+}
+
+/// Attach files to a page, one upload each.
+///
+/// Every file is read before the gate, so a missing one is a refusal before
+/// anything is sent, and the gate can say how many bytes are about to go.
+/// Each file is then attached as soon as its upload finishes: a failure part
+/// way through a list leaves the earlier files attached, and says so line by
+/// line, rather than losing them all.
+async fn upload(page: &str, files: &[PathBuf], session: &Session) -> ExitCode {
+    let slug = match named(page) {
+        Ok(slug) => slug,
+        Err(code) => return code,
+    };
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+
+    let mut loaded = Vec::with_capacity(files.len());
+    for file in files {
+        let bytes = match std::fs::read(file) {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                return report(
+                    &format!("cannot read {}: {error}", file.display()),
+                    ExitCode::Failure,
+                );
+            }
+        };
+        let name = file.file_name().map_or_else(
+            || "upload".to_owned(),
+            |name| name.to_string_lossy().into_owned(),
+        );
+        loaded.push((name, bytes));
+    }
+    let body = serde_json::json!({
+        "files": loaded
+            .iter()
+            .map(|(name, bytes)| serde_json::json!({ "file_name": name, "file_size": bytes.len() }))
+            .collect::<Vec<_>>()
+    });
+    if let Some(code) = gated(
+        &format!(
+            "upload {} to wiki page `{slug}`",
+            counted(loaded.len(), "file")
+        ),
+        &body,
+        false,
+        session,
+    ) {
+        return code;
+    }
+
+    let id = match client.wiki_page_id(&slug).await {
+        Ok(id) => id,
+        Err(error) => return failed(&error),
+    };
+    for (name, bytes) in &loaded {
+        let upload = match sent(&client, name, bytes).await {
+            Ok(upload) => upload,
+            Err(code) => return code,
+        };
+        match client.wiki_attach(id, std::slice::from_ref(&upload)).await {
+            Ok(attached) => {
+                for file in attached {
+                    emit(&format!(
+                        "uploaded {} to {slug}: attachment {}\n",
+                        file.name, file.id
+                    ));
+                }
+            }
+            Err(error) => {
+                abandon(&client, &upload).await;
+                return failed(&error);
+            }
+        }
+    }
+    ExitCode::Success
+}
+
+/// One file through an upload session: opened, sent in parts, finished.
+/// Anything failing after the session is open aborts it.
+async fn sent(client: &crate::api::Client, name: &str, bytes: &[u8]) -> Result<String, ExitCode> {
+    use crate::api::wiki::{UPLOAD_PART, upload_parts};
+
+    let upload = match client.wiki_upload_start(name, bytes.len()).await {
+        Ok(upload) => upload.session_id,
+        Err(error) => return Err(failed(&error)),
+    };
+    let parts = upload_parts(bytes.len(), UPLOAD_PART);
+    let walk = crate::render::progress::Walk::start(&format!("uploading {name}"));
+    for (index, range) in parts.iter().enumerate() {
+        walk.say(&format!(
+            "uploading {name}: part {} of {}",
+            index + 1,
+            parts.len()
+        ));
+        let number = u32::try_from(index + 1).unwrap_or(u32::MAX);
+        let part = bytes.get(range.clone()).unwrap_or_default().to_vec();
+        if let Err(error) = client.wiki_upload_part(&upload, number, part).await {
+            walk.finish();
+            abandon(client, &upload).await;
+            return Err(failed(&error));
+        }
+    }
+    walk.finish();
+    if let Err(error) = client.wiki_upload_finish(&upload).await {
+        abandon(client, &upload).await;
+        return Err(failed(&error));
+    }
+    Ok(upload)
+}
+
+/// Give a failed upload's session back. Its own failure is not reported:
+/// the error worth showing is the one that made it necessary.
+async fn abandon(client: &crate::api::Client, upload: &str) {
+    let _ = client.wiki_upload_abort(upload).await;
+}
+
+/// Delete a file attached to a page. The Wiki keeps nothing to restore it
+/// from, so it needs `--yes`.
+async fn delete_attachment(page: &str, file: &str, session: &Session) -> ExitCode {
+    let slug = match named(page) {
+        Ok(slug) => slug,
+        Err(code) => return code,
+    };
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+    let body = serde_json::json!({ "file": file });
+    if let Some(code) = gated(
+        &format!("delete attachment `{file}` from wiki page `{slug}`"),
+        &body,
+        true,
+        session,
+    ) {
+        return code;
+    }
+
+    let (id, found) = match client.wiki_attachment_named(&slug, file).await {
+        Ok(pair) => pair,
+        Err(error) => return failed(&error),
+    };
+    match client.wiki_delete_attachment(id, found.id).await {
+        Ok(()) => {
+            emit(&format!(
+                "deleted attachment {} ({}) from {slug}\n",
+                found.name, found.id
+            ));
+            ExitCode::Success
+        }
+        Err(error) => failed(&error),
+    }
 }
 
 /// Where a download's bytes come from.
