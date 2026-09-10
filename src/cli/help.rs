@@ -1246,6 +1246,21 @@ adds the uploader and the download address.
 The Wiki gives no total: the list ends with `shown N of more than N — next:
 --cursor C` while more follow. Costs two requests: the slug is looked up first.";
 
+pub const WIKI_DOWNLOAD: &str = "\
+Download one file attached to a Yandex Wiki page.
+
+```
+ytcli wiki download users/ilubenets/runbook rollback.pdf -o ./tmp
+ytcli wiki download users/ilubenets/runbook 901 -o ./tmp --force
+ytcli wiki download users/ilubenets/runbook/.files/rollback.pdf -o ./tmp
+```
+
+Name the file by its id or its name, as `wiki attachments` lists them, or pass
+the file's own address instead of the page's. The destination directory is
+required. The file keeps its name, with anything that could steer it out of
+that directory removed. An existing file is kept unless `--force` says
+otherwise. Prints the path it wrote.";
+
 pub const AUTH_LOGOUT: &str = "\
 Remove a stored token.
 

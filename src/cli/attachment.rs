@@ -94,7 +94,7 @@ async fn list(target: &str, session: &Session) -> ExitCode {
 /// The filename comes from whoever uploaded the file. It decides only the *name*
 /// inside a directory the caller named explicitly, never the directory itself,
 /// and a name that survives this as empty is replaced rather than trusted.
-fn safe_filename(raw: &str, fallback: &str) -> String {
+pub(crate) fn safe_filename(raw: &str, fallback: &str) -> String {
     let base = raw
         .rsplit(['/', '\\'])
         .next()

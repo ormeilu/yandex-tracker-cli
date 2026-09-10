@@ -231,6 +231,9 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   ytcli wiki attachments SLUG|URL [--cursor C]
                                         files on a page: id, size (as the Wiki sends it), type,
                                         upload date, name
+  ytcli wiki download SLUG|URL ID|NAME -o DIR [--force]
+  ytcli wiki download SLUG/.files/NAME -o DIR
+                                        one file into DIR, under its own cleaned name; prints the path
 
 ## format
   text      compact key/value; fixed field order so caches and scripts hold

@@ -429,6 +429,85 @@ impl Client {
         })
     }
 
+    /// One file on a page, by its id or its name, and the page's id with it.
+    ///
+    /// The Wiki has no lookup by name, so the listing is read until the file
+    /// turns up.
+    pub async fn wiki_attachment_named(
+        &self,
+        slug: &str,
+        wanted: &str,
+    ) -> Result<(u64, WikiAttachment), ApiError> {
+        // Enough for any page a person picks a file from by name; past it the
+        // search stops instead of reading an unbounded listing.
+        const PAGES: usize = 20;
+
+        let id = self.wiki_page_id(slug).await?;
+        let what = format!("attachments of wiki page `{slug}`");
+        let mut cursor: Option<String> = None;
+        for _ in 0..PAGES {
+            let page: CursorPage<AttachmentAnswer> = self
+                .wiki_listing(id, "attachments?", cursor.as_deref(), 100, &what)
+                .await?;
+            if let Some(found) = page
+                .results
+                .into_iter()
+                .map(WikiAttachment::from)
+                .find(|file| file.id.to_string() == wanted || file.name == wanted)
+            {
+                return Ok((id, found));
+            }
+            match page.next_cursor {
+                Some(next) => cursor = Some(next),
+                None => break,
+            }
+        }
+        Err(ApiError::NotFound(format!(
+            "attachment `{wanted}` on wiki page `{slug}`"
+        )))
+    }
+
+    /// A file's bytes, by page id and file id.
+    pub async fn wiki_attachment_bytes(&self, page: u64, file: u64) -> Result<Vec<u8>, ApiError> {
+        let url = format!(
+            "{}/v1/pages/{page}/attachments/{file}/download",
+            self.wiki_url
+        );
+        self.wiki_bytes(&url, &format!("attachment {file}")).await
+    }
+
+    /// A file's bytes, by its address: `<slug>/.files/<name>`. The Wiki follows
+    /// a page that has moved.
+    pub async fn wiki_file_bytes(&self, path: &str) -> Result<Vec<u8>, ApiError> {
+        let url = format!(
+            "{}/v1/pages/attachments/download_by_url?url={}",
+            self.wiki_url,
+            encode(path)
+        );
+        self.wiki_bytes(&url, &format!("wiki file `{path}`")).await
+    }
+
+    /// The body of a download, as bytes.
+    ///
+    /// The address is always built from the configured Wiki host, never taken
+    /// from a payload, so the token goes nowhere else; a redirect to storage
+    /// on another host loses the `Authorization` header on the way.
+    async fn wiki_bytes(&self, url: &str, what: &str) -> Result<Vec<u8>, ApiError> {
+        let response = self.http.get(url).send().await?;
+        let status = response.status();
+        if !status.is_success() {
+            return Err(match status.as_u16() {
+                401 | 403 => ApiError::WikiForbidden,
+                404 => ApiError::NotFound(what.to_owned()),
+                _ => ApiError::Rejected {
+                    status,
+                    message: String::new(),
+                },
+            });
+        }
+        Ok(response.bytes().await?.to_vec())
+    }
+
     /// `GET /v1/pages/{id}/{tail}page_size=…&cursor=…`: one page of a listing
     /// under a page. `tail` ends in `?` or `&`, ready for the paging.
     async fn wiki_listing<T: serde::de::DeserializeOwned>(
