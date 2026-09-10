@@ -238,12 +238,10 @@ async fn listing_under_a_missing_page_is_not_found() {
 #[tokio::test]
 async fn the_verbs_not_built_yet_say_so() {
     let harness = Harness::new().await;
-    for verb in [
-        &["wiki", "comments", "users/ilubenets/runbook"][..],
-        &["wiki", "attachments", "users/ilubenets/runbook"],
-    ] {
-        harness.run(verb).assert().code(64);
-    }
+    harness
+        .run(&["wiki", "attachments", "users/ilubenets/runbook"])
+        .assert()
+        .code(64);
 }
 
 /// An organisation the Wiki was never opened in is refused with a 403 that

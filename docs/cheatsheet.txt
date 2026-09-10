@@ -225,6 +225,9 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   ytcli wiki find TEXT [--type page|file] [--page N]
                                         search pages and files: slug, type, last change, title.
                                         No total here either; search stops at page 500
+  ytcli wiki comments SLUG|URL [--status resolved|unresolved] [--thread ID] [--cursor C]
+                                        comments, fenced, each headed by id, author, time;
+                                        a longer thread names the --thread that reads it
 
 ## format
   text      compact key/value; fixed field order so caches and scripts hold

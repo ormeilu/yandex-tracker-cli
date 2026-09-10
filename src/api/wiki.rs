@@ -225,6 +225,169 @@ impl Client {
     }
 }
 
+/// One comment, in our schema.
+///
+/// The author is reduced to the login, which is what the rest of the CLI
+/// takes; the thread's size is lifted out of `thread_info`, and only the list
+/// of a page's comments sends it.
+#[derive(Debug, Clone, Serialize)]
+pub struct WikiComment {
+    pub id: u64,
+    pub author: Option<String>,
+    pub created_at: Option<String>,
+    /// Somebody else's words, in markup the Wiki does not name.
+    pub body: String,
+    pub resolved: bool,
+    pub deleted: bool,
+    /// The passage of the page an inline comment is anchored to.
+    pub quote: Option<String>,
+    /// Posts in this comment's thread, itself included.
+    pub thread_posts: Option<u64>,
+}
+
+#[derive(Deserialize)]
+struct CommentAnswer {
+    id: u64,
+    #[serde(default)]
+    body: String,
+    #[serde(default)]
+    author: Option<Person>,
+    #[serde(default)]
+    created_at: Option<String>,
+    #[serde(default)]
+    is_deleted: bool,
+    #[serde(default)]
+    resolve_status: Option<String>,
+    #[serde(default)]
+    inline_text: Option<String>,
+    #[serde(default)]
+    thread_info: Option<ThreadInfo>,
+}
+
+#[derive(Deserialize)]
+struct Person {
+    username: String,
+}
+
+#[derive(Deserialize)]
+struct ThreadInfo {
+    total_posts: u64,
+}
+
+impl From<CommentAnswer> for WikiComment {
+    fn from(answer: CommentAnswer) -> Self {
+        Self {
+            id: answer.id,
+            author: answer.author.map(|person| person.username),
+            created_at: answer.created_at,
+            body: answer.body,
+            resolved: answer.resolve_status.as_deref() == Some("resolved"),
+            deleted: answer.is_deleted,
+            quote: answer.inline_text.filter(|text| !text.is_empty()),
+            thread_posts: answer.thread_info.map(|info| info.total_posts),
+        }
+    }
+}
+
+/// Which comments to list.
+#[derive(Debug, Clone, Copy)]
+pub enum CommentScope<'a> {
+    /// The page's comments, optionally only `resolved` or `unresolved` ones.
+    Page { status: Option<&'a str> },
+    /// Every post in one comment's thread.
+    Thread(u64),
+}
+
+impl Client {
+    /// The numeric id behind a slug.
+    ///
+    /// Only the page read and the descendants listing take a slug; everything
+    /// else under a page wants its id, so this costs one request first.
+    pub async fn wiki_page_id(&self, slug: &str) -> Result<u64, ApiError> {
+        #[derive(Deserialize)]
+        struct Identity {
+            id: u64,
+        }
+
+        let url = format!("{}/v1/pages?slug={}", self.wiki_url, encode(slug));
+        let (value, _) = self
+            .send_url(
+                reqwest::Method::GET,
+                &url,
+                None,
+                &format!("wiki page `{slug}`"),
+            )
+            .await
+            .map_err(refused)?;
+        serde_json::from_value::<Identity>(value)
+            .map(|identity| identity.id)
+            .map_err(ApiError::Decode)
+    }
+
+    /// A page's comments, or one thread of them.
+    pub async fn wiki_comments(
+        &self,
+        slug: &str,
+        scope: CommentScope<'_>,
+        cursor: Option<&str>,
+        page_size: u32,
+    ) -> Result<CursorPage<WikiComment>, ApiError> {
+        let id = self.wiki_page_id(slug).await?;
+        let (tail, what) = match scope {
+            CommentScope::Page { status } => (
+                format!(
+                    "comments?{}",
+                    status.map_or_else(String::new, |status| format!("status_filter={status}&"))
+                ),
+                format!("comments on wiki page `{slug}`"),
+            ),
+            CommentScope::Thread(comment) => (
+                format!("comments/{comment}/thread?"),
+                format!("comment {comment} on wiki page `{slug}`"),
+            ),
+        };
+        let page: CursorPage<CommentAnswer> = self
+            .wiki_listing(id, &tail, cursor, page_size, &what)
+            .await?;
+        Ok(CursorPage {
+            results: page.results.into_iter().map(WikiComment::from).collect(),
+            next_cursor: page.next_cursor,
+        })
+    }
+
+    /// `GET /v1/pages/{id}/{tail}page_size=…&cursor=…`: one page of a listing
+    /// under a page. `tail` ends in `?` or `&`, ready for the paging.
+    async fn wiki_listing<T: serde::de::DeserializeOwned>(
+        &self,
+        id: u64,
+        tail: &str,
+        cursor: Option<&str>,
+        page_size: u32,
+        what: &str,
+    ) -> Result<CursorPage<T>, ApiError> {
+        use std::fmt::Write as _;
+
+        let mut url = format!(
+            "{}/v1/pages/{id}/{tail}page_size={page_size}",
+            self.wiki_url
+        );
+        if let Some(cursor) = cursor {
+            let _ = write!(url, "&cursor={}", encode(cursor));
+        }
+        let (value, _) = self
+            .send_url(reqwest::Method::GET, &url, None, what)
+            .await
+            .map_err(refused)?;
+        let page: CursorPage<T> = serde_json::from_value(value).map_err(ApiError::Decode)?;
+        // An empty string is how some listings say "no more"; to the tally it
+        // must mean the same as null.
+        Ok(CursorPage {
+            next_cursor: page.next_cursor.filter(|cursor| !cursor.is_empty()),
+            results: page.results,
+        })
+    }
+}
+
 /// A refusal from the Wiki, told apart from Tracker's.
 ///
 /// The Wiki answers 401 to a token it will not serve — the documented case — and

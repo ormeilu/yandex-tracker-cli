@@ -7,7 +7,7 @@
 
 use clap::Subcommand;
 
-use crate::api::wiki::{LAST_SEARCH_PAGE, slug_of};
+use crate::api::wiki::{CommentScope, LAST_SEARCH_PAGE, slug_of};
 use crate::cli::{Session, emit, not_implemented, report};
 use crate::exit::ExitCode;
 use crate::render::{Format, RenderError, machine, wiki as render};
@@ -46,6 +46,15 @@ pub enum WikiCommand {
     Comments {
         /// The page's slug, or its address.
         page: String,
+        /// Every post in one comment's thread, by the comment's id.
+        #[arg(long, conflicts_with = "status")]
+        thread: Option<u64>,
+        /// Only resolved, or only unresolved, comments.
+        #[arg(long, value_parser = ["resolved", "unresolved"])]
+        status: Option<String>,
+        /// Where the previous page of this listing ended, as its tally named it.
+        #[arg(long)]
+        cursor: Option<String>,
     },
     /// List a page's attachments.
     #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_ATTACHMENTS))]
@@ -60,7 +69,20 @@ pub async fn run(command: &WikiCommand, session: &Session) -> ExitCode {
         WikiCommand::Get { page } => get(page, session).await,
         WikiCommand::List { page, cursor } => list(page, cursor.as_deref(), session).await,
         WikiCommand::Find { text, kind, page } => find(text, kind.as_deref(), *page, session).await,
-        WikiCommand::Comments { .. } => not_implemented("wiki comments"),
+        WikiCommand::Comments {
+            page,
+            thread,
+            status,
+            cursor,
+        } => {
+            let scope = match thread {
+                Some(comment) => CommentScope::Thread(*comment),
+                None => CommentScope::Page {
+                    status: status.as_deref(),
+                },
+            };
+            comments(page, scope, cursor.as_deref(), session).await
+        }
         WikiCommand::Attachments { .. } => not_implemented("wiki attachments"),
     }
 }
@@ -100,10 +122,10 @@ async fn list(page: &str, cursor: Option<&str>, session: &Session) -> ExitCode {
         Err(code) => return code,
     };
 
-    // The profile's list length, within the 1..100 the Wiki accepts.
-    let page_size = u32::try_from(session.display().limit.clamp(1, 100)).unwrap_or(100);
-
-    match client.wiki_descendants(&slug, cursor, page_size).await {
+    match client
+        .wiki_descendants(&slug, cursor, page_size(session))
+        .await
+    {
         Ok(found) => finish(match session.render.format {
             Format::Text => Ok(render::pages(&found, &session.render)),
             Format::JsonRaw => machine(&found, Format::Json),
@@ -143,6 +165,43 @@ async fn find(text: &str, kind: Option<&str>, page: u32, session: &Session) -> E
             report(&error, code)
         }
     }
+}
+
+/// A page's comments, or one thread of them.
+async fn comments(
+    page: &str,
+    scope: CommentScope<'_>,
+    cursor: Option<&str>,
+    session: &Session,
+) -> ExitCode {
+    let slug = match named(page) {
+        Ok(slug) => slug,
+        Err(code) => return code,
+    };
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+
+    match client
+        .wiki_comments(&slug, scope, cursor, page_size(session))
+        .await
+    {
+        Ok(found) => finish(match session.render.format {
+            Format::Text => Ok(render::comments(&slug, &found, &session.render)),
+            Format::JsonRaw => machine(&found, Format::Json),
+            other => machine(&found, other),
+        }),
+        Err(error) => {
+            let code = error.exit_code();
+            report(&error, code)
+        }
+    }
+}
+
+/// The profile's list length, within the 1..100 the Wiki's listings accept.
+fn page_size(session: &Session) -> u32 {
+    u32::try_from(session.display().limit.clamp(1, 100)).unwrap_or(100)
 }
 
 /// The slug a command was given, or the refusal to guess one.

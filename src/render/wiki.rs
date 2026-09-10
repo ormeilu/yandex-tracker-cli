@@ -2,7 +2,7 @@
 
 use std::fmt::Write as _;
 
-use crate::api::wiki::{CursorPage, WikiHits, WikiPage, WikiPageRef};
+use crate::api::wiki::{CursorPage, WikiComment, WikiHits, WikiPage, WikiPageRef};
 use crate::render::Context;
 use crate::render::style::Palette;
 use crate::render::table::{Column, cursor_tally, open_page_tally, render};
@@ -39,6 +39,56 @@ pub fn hits(found: &WikiHits, ctx: &Context) -> String {
 
     let mut out = render(&columns, &rows, ctx);
     out.push_str(&open_page_tally(found.results.len(), found.next_page, ctx));
+    out
+}
+
+/// A page's comments, each fenced as somebody else's words.
+///
+/// The header line is ours: who, when, whether it is resolved, and — when a
+/// thread holds more than the one post — the flag that reads the rest. A
+/// deleted comment keeps its header, so the thread around it still makes
+/// sense, and loses its fence, since there is nothing left to quote.
+#[must_use]
+pub fn comments(slug: &str, list: &CursorPage<WikiComment>, ctx: &Context) -> String {
+    let mut out = String::with_capacity(list.results.len() * 200 + 64);
+    let paint = ctx.painter();
+
+    for comment in &list.results {
+        let author = comment.author.as_deref().unwrap_or("-");
+        let mut header = format!(
+            "--- {} by {author} at {}",
+            comment.id,
+            comment.created_at.as_deref().unwrap_or("-")
+        );
+        if comment.resolved {
+            header.push_str(" (resolved)");
+        }
+        if comment.deleted {
+            header.push_str(" (deleted)");
+        }
+        if let Some(posts) = comment.thread_posts.filter(|posts| *posts > 1) {
+            let _ = write!(header, " — {posts} in thread: --thread {}", comment.id);
+        }
+        let _ = writeln!(out, "{}", paint.paint(&header, Palette::label()));
+
+        if comment.deleted || comment.body.is_empty() {
+            continue;
+        }
+        crate::render::text::quoted_block(
+            &mut out,
+            &format!("wiki:{slug}/comment/{} by {author}", comment.id),
+            crate::render::untrusted::Author::Wiki,
+            &comment.body,
+            0,
+            ctx,
+        );
+    }
+
+    out.push_str(&cursor_tally(
+        list.results.len(),
+        list.next_cursor.as_deref(),
+        ctx,
+    ));
     out
 }
 
@@ -185,6 +235,40 @@ mod tests {
             next_page: Some(2),
         };
         insta::assert_snapshot!(hits(&found, &ctx()));
+    }
+
+    /// A thread worth opening, a resolved comment, and a deleted one that
+    /// keeps its place but has nothing to fence.
+    #[test]
+    fn comments_view_is_stable() {
+        let comment = |id: u64, body: &str| WikiComment {
+            id,
+            author: Some("ilubenets".to_owned()),
+            created_at: Some("2026-09-02T08:00:00Z".to_owned()),
+            body: body.to_owned(),
+            resolved: false,
+            deleted: false,
+            quote: None,
+            thread_posts: Some(1),
+        };
+        let list = CursorPage {
+            results: vec![
+                WikiComment {
+                    thread_posts: Some(3),
+                    ..comment(7001, "Step 2 needs the canary first.")
+                },
+                WikiComment {
+                    resolved: true,
+                    ..comment(7002, "Typo in the title.")
+                },
+                WikiComment {
+                    deleted: true,
+                    ..comment(7003, "")
+                },
+            ],
+            next_cursor: None,
+        };
+        insta::assert_snapshot!(comments("users/ilubenets/runbook", &list, &ctx()));
     }
 
     /// The compact view is the contract with every caller, so it is pinned.

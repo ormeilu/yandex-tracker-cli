@@ -1220,9 +1220,17 @@ Show the comments on a Yandex Wiki page.
 
 ```
 ytcli wiki comments users/ilubenets/runbook
+ytcli wiki comments users/ilubenets/runbook --status unresolved
+ytcli wiki comments users/ilubenets/runbook --thread 7001
 ```
 
-Not built yet (#83): it answers \"not implemented\" and exits 64.";
+Each comment's header is ours — id, author, time, and whether it is resolved or
+deleted — and its text is fenced as written by Wiki users. A comment that
+starts a longer thread says so and names the `--thread` that reads it.
+
+The Wiki gives no total: the list ends with `shown N of more than N — next:
+--cursor C` while more follow. Costs two requests, since comments are listed
+by the page's id and the slug has to be looked up first.";
 
 pub const WIKI_ATTACHMENTS: &str = "\
 List the files attached to a Yandex Wiki page.
