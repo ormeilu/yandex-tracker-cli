@@ -340,6 +340,158 @@ impl From<AttachmentAnswer> for WikiAttachment {
     }
 }
 
+/// A grid named by a listing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WikiGridRef {
+    /// A uuid, where pages have numbers.
+    #[serde(deserialize_with = "text_id")]
+    pub id: String,
+    pub title: String,
+    #[serde(default)]
+    pub created_at: Option<String>,
+}
+
+/// One thing a page holds: a file or a grid, told apart by `kind`.
+#[derive(Debug, Clone, Serialize)]
+pub struct WikiResource {
+    /// `attachment` or `grid`.
+    pub kind: String,
+    pub id: String,
+    /// A file's name, or a grid's title.
+    pub name: String,
+    pub created_at: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ResourceAnswer {
+    #[serde(rename = "type")]
+    kind: String,
+    item: serde_json::Value,
+}
+
+impl From<ResourceAnswer> for WikiResource {
+    fn from(answer: ResourceAnswer) -> Self {
+        let text = |field: &str| {
+            answer.item.get(field).and_then(|value| match value {
+                serde_json::Value::String(text) => Some(text.clone()),
+                serde_json::Value::Null => None,
+                other => Some(other.to_string()),
+            })
+        };
+        Self {
+            id: text("id").unwrap_or_default(),
+            name: text("name").or_else(|| text("title")).unwrap_or_default(),
+            created_at: text("created_at"),
+            kind: answer.kind,
+        }
+    }
+}
+
+/// One dynamic table, in our schema.
+///
+/// Rows keep their cells in column order, as the Wiki sends them, so the
+/// columns and the cells pair by position; the values stay as the Wiki typed
+/// them — a user, a ticket, a list — for a script to use.
+#[derive(Debug, Clone, Serialize)]
+pub struct WikiGrid {
+    pub id: String,
+    pub title: String,
+    pub page: Option<WikiPageRef>,
+    /// Changes with every edit; a write can name the one it was made against.
+    pub revision: String,
+    pub columns: Vec<GridColumn>,
+    pub rows: Vec<GridRow>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GridColumn {
+    /// What `--columns` and `--filter` name the column by.
+    pub slug: String,
+    pub title: String,
+    /// `string`, `number`, `date`, `select`, `staff`, `checkbox`, `ticket`,
+    /// `ticket_field`.
+    #[serde(rename = "type")]
+    pub kind: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct GridRow {
+    pub id: String,
+    pub cells: Vec<serde_json::Value>,
+}
+
+#[derive(Deserialize)]
+struct GridAnswer {
+    #[serde(deserialize_with = "text_id")]
+    id: String,
+    title: String,
+    #[serde(default)]
+    page: Option<WikiPageRef>,
+    #[serde(default, deserialize_with = "text_id")]
+    revision: String,
+    structure: Structure,
+    #[serde(default)]
+    rows: Vec<RowAnswer>,
+}
+
+#[derive(Deserialize)]
+struct Structure {
+    #[serde(default)]
+    columns: Vec<GridColumn>,
+}
+
+#[derive(Deserialize)]
+struct RowAnswer {
+    #[serde(deserialize_with = "text_id")]
+    id: String,
+    #[serde(default)]
+    row: Vec<serde_json::Value>,
+}
+
+impl From<GridAnswer> for WikiGrid {
+    fn from(answer: GridAnswer) -> Self {
+        Self {
+            id: answer.id,
+            title: answer.title,
+            page: answer.page,
+            revision: answer.revision,
+            columns: answer.structure.columns,
+            rows: answer
+                .rows
+                .into_iter()
+                .map(|row| GridRow {
+                    id: row.id,
+                    cells: row.row,
+                })
+                .collect(),
+        }
+    }
+}
+
+/// An id the Wiki documents as a string and sometimes sends as a number.
+fn text_id<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
+    Ok(match serde_json::Value::deserialize(deserializer)? {
+        serde_json::Value::String(text) => text,
+        serde_json::Value::Null => String::new(),
+        other => other.to_string(),
+    })
+}
+
+/// What to read of a grid. The Wiki does the filtering, so a narrow question
+/// costs a narrow answer.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct GridQuery<'a> {
+    /// `[slug] ~ text AND [n] < 3`, in the Wiki's own syntax.
+    pub filter: Option<&'a str>,
+    /// `slug, -other`.
+    pub sort: Option<&'a str>,
+    /// Column slugs, comma-separated.
+    pub columns: Option<&'a str>,
+    /// Row ids, comma-separated.
+    pub rows: Option<&'a str>,
+    pub revision: Option<u64>,
+}
+
 /// Which comments to list.
 #[derive(Debug, Clone, Copy)]
 pub enum CommentScope<'a> {
@@ -427,6 +579,94 @@ impl Client {
             results: page.results.into_iter().map(WikiAttachment::from).collect(),
             next_cursor: page.next_cursor,
         })
+    }
+
+    /// The grids on a page.
+    pub async fn wiki_grids(
+        &self,
+        slug: &str,
+        cursor: Option<&str>,
+        page_size: u32,
+    ) -> Result<CursorPage<WikiGridRef>, ApiError> {
+        let id = self.wiki_page_id(slug).await?;
+        self.wiki_listing(
+            id,
+            "grids?",
+            cursor,
+            page_size,
+            &format!("grids of wiki page `{slug}`"),
+        )
+        .await
+    }
+
+    /// What a page holds, files and grids together, optionally one kind or
+    /// only those whose title matches `query`.
+    pub async fn wiki_resources(
+        &self,
+        slug: &str,
+        kind: Option<&str>,
+        query: Option<&str>,
+        cursor: Option<&str>,
+        page_size: u32,
+    ) -> Result<CursorPage<WikiResource>, ApiError> {
+        use std::fmt::Write as _;
+
+        let id = self.wiki_page_id(slug).await?;
+        let mut tail = "resources?".to_owned();
+        if let Some(kind) = kind {
+            let _ = write!(tail, "types={}&", encode(kind));
+        }
+        if let Some(query) = query {
+            let _ = write!(tail, "q={}&", encode(query));
+        }
+        let page: CursorPage<ResourceAnswer> = self
+            .wiki_listing(
+                id,
+                &tail,
+                cursor,
+                page_size,
+                &format!("resources of wiki page `{slug}`"),
+            )
+            .await?;
+        Ok(CursorPage {
+            results: page.results.into_iter().map(WikiResource::from).collect(),
+            next_cursor: page.next_cursor,
+        })
+    }
+
+    /// `GET /v1/grids/{id}`: every row that matches — the Wiki does not page
+    /// a grid.
+    pub async fn wiki_grid(&self, id: &str, query: GridQuery<'_>) -> Result<WikiGrid, ApiError> {
+        use std::fmt::Write as _;
+
+        let mut url = format!("{}/v1/grids/{}", self.wiki_url, encode(id));
+        let mut separator = '?';
+        for (name, value) in [
+            ("filter", query.filter),
+            ("sort", query.sort),
+            ("only_cols", query.columns),
+            ("only_rows", query.rows),
+        ] {
+            if let Some(value) = value {
+                let _ = write!(url, "{separator}{name}={}", encode(value));
+                separator = '&';
+            }
+        }
+        if let Some(revision) = query.revision {
+            let _ = write!(url, "{separator}revision={revision}");
+        }
+        let (value, _) = self
+            .send_url(
+                reqwest::Method::GET,
+                &url,
+                None,
+                &format!("wiki grid `{id}`"),
+            )
+            .await
+            .map_err(refused)?;
+        serde_json::from_value::<GridAnswer>(value)
+            .map(WikiGrid::from)
+            .map_err(ApiError::Decode)
     }
 
     /// One file on a page, by its id or its name, and the page's id with it.

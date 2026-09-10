@@ -1,0 +1,7 @@
+---
+source: src/render/wiki.rs
+expression: "resources(&list, &ctx())"
+---
+attachment 901                                  2026-09-01 rollback.pdf
+grid       8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f -          Releases
+shown 2 of more than 2 — next: --cursor eyJpZCI6OTAyfQ==

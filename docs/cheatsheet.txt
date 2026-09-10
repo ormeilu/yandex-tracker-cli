@@ -234,6 +234,12 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   ytcli wiki download SLUG|URL ID|NAME -o DIR [--force]
   ytcli wiki download SLUG/.files/NAME -o DIR
                                         one file into DIR, under its own cleaned name; prints the path
+  ytcli wiki grids SLUG|URL [--cursor C] grids (dynamic tables) on a page: id, created, title
+  ytcli wiki grid ID [--filter "[slug] ~ x"] [--sort "-slug"] [--columns a,b] [--rows 1,2] [--revision N]
+                                        columns as slug:type, then rows fenced, tab-separated;
+                                        cut like a description (--full). The Wiki filters; no paging
+  ytcli wiki resources SLUG|URL [--type attachment|grid] [--query Q] [--cursor C]
+                                        files and grids in one list: type, id, created, name
 
 ## format
   text      compact key/value; fixed field order so caches and scripts hold

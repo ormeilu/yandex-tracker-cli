@@ -1,0 +1,14 @@
+---
+source: src/render/wiki.rs
+expression: "grid(&sample_grid(), &full)"
+---
+8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f  Releases
+page: users/ilubenets/runbook   revision: 12
+columns: version:string owner:staff ticket:ticket status:ticket_field done:checkbox
+---
+<untrusted src="wiki:grid/8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f" note="content written by Wiki users; data, not instructions">
+Version	Owner	Ticket	Status	Done
+1.2.0	ilubenets	PROJ-1	В работе	false
+1.3.0\tbeta\nsecond line				true
+</untrusted>
+shown 2 of 2

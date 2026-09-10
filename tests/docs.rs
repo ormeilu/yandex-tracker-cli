@@ -273,6 +273,9 @@ const UNRUNNABLE: &[(&str, &str)] = &[
     ("wiki comments", "the same borrowed fixtures as wiki get"),
     ("wiki attachments", "the same borrowed fixtures as wiki get"),
     ("wiki download", "writes a file"),
+    ("wiki grids", "the same borrowed fixtures as wiki get"),
+    ("wiki grid", "the same borrowed fixtures as wiki get"),
+    ("wiki resources", "the same borrowed fixtures as wiki get"),
 ];
 
 /// Every `ytcli <group> <verb>` in README or the cheatsheet is either exercised

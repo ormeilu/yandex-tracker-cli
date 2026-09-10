@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use clap::Subcommand;
 
-use crate::api::wiki::{CommentScope, LAST_SEARCH_PAGE, slug_of};
+use crate::api::wiki::{CommentScope, GridQuery, LAST_SEARCH_PAGE, slug_of};
 use crate::cli::attachment::safe_filename;
 use crate::cli::{Session, emit, report};
 use crate::exit::ExitCode;
@@ -66,6 +66,53 @@ pub enum WikiCommand {
         #[arg(long)]
         cursor: Option<String>,
     },
+    /// List the grids — dynamic tables — on a page.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_GRIDS))]
+    Grids {
+        /// The page's slug, or its address.
+        page: String,
+        /// Where the previous page of this listing ended, as its tally named it.
+        #[arg(long)]
+        cursor: Option<String>,
+    },
+    /// Show one grid: its columns, then its rows.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_GRID))]
+    Grid {
+        /// The grid's id, as `wiki grids` lists it.
+        grid: String,
+        /// Only matching rows, in the Wiki's syntax: `[slug] ~ text AND [n] < 3`.
+        #[arg(long)]
+        filter: Option<String>,
+        /// Order of the rows: `slug, -other`.
+        // A descending sort starts with `-`, which is the Wiki's syntax, not a
+        // flag of ours.
+        #[arg(long, allow_hyphen_values = true)]
+        sort: Option<String>,
+        /// Only these columns, by slug, comma-separated.
+        #[arg(long)]
+        columns: Option<String>,
+        /// Only these rows, by id, comma-separated.
+        #[arg(long)]
+        rows: Option<String>,
+        /// The grid as it was at this revision.
+        #[arg(long)]
+        revision: Option<u64>,
+    },
+    /// List what a page holds: files and grids together.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_RESOURCES))]
+    Resources {
+        /// The page's slug, or its address.
+        page: String,
+        /// Only files, or only grids.
+        #[arg(long = "type", value_parser = ["attachment", "grid"])]
+        kind: Option<String>,
+        /// Only those whose name or title matches.
+        #[arg(long)]
+        query: Option<String>,
+        /// Where the previous page of this listing ended, as its tally named it.
+        #[arg(long)]
+        cursor: Option<String>,
+    },
     /// Download one file attached to a page.
     #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_DOWNLOAD))]
     Download {
@@ -104,6 +151,39 @@ pub async fn run(command: &WikiCommand, session: &Session) -> ExitCode {
         }
         WikiCommand::Attachments { page, cursor } => {
             attachments(page, cursor.as_deref(), session).await
+        }
+        WikiCommand::Grids { page, cursor } => grids(page, cursor.as_deref(), session).await,
+        WikiCommand::Grid {
+            grid: id,
+            filter,
+            sort,
+            columns,
+            rows,
+            revision,
+        } => {
+            let query = GridQuery {
+                filter: filter.as_deref(),
+                sort: sort.as_deref(),
+                columns: columns.as_deref(),
+                rows: rows.as_deref(),
+                revision: *revision,
+            };
+            grid(id, query, session).await
+        }
+        WikiCommand::Resources {
+            page,
+            kind,
+            query,
+            cursor,
+        } => {
+            resources(
+                page,
+                kind.as_deref(),
+                query.as_deref(),
+                cursor.as_deref(),
+                session,
+            )
+            .await
         }
         WikiCommand::Download {
             page,
@@ -243,6 +323,83 @@ async fn attachments(page: &str, cursor: Option<&str>, session: &Session) -> Exi
     {
         Ok(found) => finish(match session.render.format {
             Format::Text => Ok(render::attachments(&found, &session.render)),
+            Format::JsonRaw => machine(&found, Format::Json),
+            other => machine(&found, other),
+        }),
+        Err(error) => {
+            let code = error.exit_code();
+            report(&error, code)
+        }
+    }
+}
+
+/// The grids on a page.
+async fn grids(page: &str, cursor: Option<&str>, session: &Session) -> ExitCode {
+    let slug = match named(page) {
+        Ok(slug) => slug,
+        Err(code) => return code,
+    };
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+
+    match client.wiki_grids(&slug, cursor, page_size(session)).await {
+        Ok(found) => finish(match session.render.format {
+            Format::Text => Ok(render::grids(&found, &session.render)),
+            Format::JsonRaw => machine(&found, Format::Json),
+            other => machine(&found, other),
+        }),
+        Err(error) => {
+            let code = error.exit_code();
+            report(&error, code)
+        }
+    }
+}
+
+/// One grid.
+async fn grid(id: &str, query: GridQuery<'_>, session: &Session) -> ExitCode {
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+
+    match client.wiki_grid(id.trim(), query).await {
+        Ok(found) => finish(match session.render.format {
+            Format::Text => Ok(render::grid(&found, &session.render)),
+            Format::JsonRaw => machine(&found, Format::Json),
+            other => machine(&found, other),
+        }),
+        Err(error) => {
+            let code = error.exit_code();
+            report(&error, code)
+        }
+    }
+}
+
+/// What a page holds.
+async fn resources(
+    page: &str,
+    kind: Option<&str>,
+    query: Option<&str>,
+    cursor: Option<&str>,
+    session: &Session,
+) -> ExitCode {
+    let slug = match named(page) {
+        Ok(slug) => slug,
+        Err(code) => return code,
+    };
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+
+    match client
+        .wiki_resources(&slug, kind, query, cursor, page_size(session))
+        .await
+    {
+        Ok(found) => finish(match session.render.format {
+            Format::Text => Ok(render::resources(&found, &session.render)),
             Format::JsonRaw => machine(&found, Format::Json),
             other => machine(&found, other),
         }),

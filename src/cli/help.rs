@@ -1246,6 +1246,48 @@ adds the uploader and the download address.
 The Wiki gives no total: the list ends with `shown N of more than N — next:
 --cursor C` while more follow. Costs two requests: the slug is looked up first.";
 
+pub const WIKI_GRIDS: &str = "\
+List the grids (dynamic tables) on a Yandex Wiki page.
+
+```
+ytcli wiki grids users/ilubenets/runbook
+```
+
+Each grid's id — what `wiki grid` takes — its creation date and its title. The
+Wiki gives no total: the list ends with `shown N of more than N — next:
+--cursor C` while more follow.";
+
+pub const WIKI_GRID: &str = "\
+Show one Yandex Wiki grid: its columns, then its rows.
+
+```
+ytcli wiki grid 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f
+ytcli wiki grid 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f --filter \"[owner] ~ ilubenets\" --sort \"-version\"
+ytcli wiki grid 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f --columns version,owner --full
+```
+
+A header of ours — id, title, page, revision, and each column as `slug:type` —
+then the rows, fenced as written by Wiki users: one line per row, cells
+tab-separated under a line of column titles. A tab, newline or backslash inside
+a cell is written `\\t`, `\\n`, `\\\\`. Users show as logins, tickets as keys,
+Tracker fields as what they display; `--format json` keeps the typed values.
+
+The Wiki returns every matching row, so narrow the question with `--filter`,
+`--columns` and `--rows` rather than reading the lot. Rows are cut like a
+description; `--full` shows them all. The tally counts the rows shown.";
+
+pub const WIKI_RESOURCES: &str = "\
+List what a Yandex Wiki page holds: files and grids in one list.
+
+```
+ytcli wiki resources users/ilubenets/runbook
+ytcli wiki resources users/ilubenets/runbook --type grid --query release
+```
+
+Each item's type, id, creation date and name. `wiki download` takes a file's
+id, and `wiki grid` takes a grid's id. The Wiki gives no total: the list ends
+with `shown N of more than N — next: --cursor C` while more follow.";
+
 pub const WIKI_DOWNLOAD: &str = "\
 Download one file attached to a Yandex Wiki page.
 
