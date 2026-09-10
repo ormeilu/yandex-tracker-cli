@@ -883,6 +883,50 @@ impl Client {
         Ok(deleted.recovery_token)
     }
 
+    /// `POST /v1/pages/{id}/comments`: a comment, or a reply when the body
+    /// names a `parent_id`.
+    pub async fn wiki_comment(
+        &self,
+        page: u64,
+        body: &serde_json::Value,
+    ) -> Result<WikiComment, ApiError> {
+        let url = format!("{}/v1/pages/{page}/comments", self.wiki_url);
+        let answer: CommentAnswer = self
+            .wiki_write(
+                reqwest::Method::POST,
+                &url,
+                Some(body),
+                &format!("wiki page {page}"),
+            )
+            .await?;
+        Ok(WikiComment::from(answer))
+    }
+
+    /// `DELETE /v1/pages/{id}/comments/{comment}`, answering how many
+    /// comments the page has left.
+    pub async fn wiki_delete_comment(
+        &self,
+        page: u64,
+        comment: u64,
+    ) -> Result<Option<u64>, ApiError> {
+        #[derive(Deserialize)]
+        struct Left {
+            #[serde(default)]
+            comments_count: Option<u64>,
+        }
+
+        let url = format!("{}/v1/pages/{page}/comments/{comment}", self.wiki_url);
+        let left: Left = self
+            .wiki_write(
+                reqwest::Method::DELETE,
+                &url,
+                None,
+                &format!("comment {comment} on wiki page {page}"),
+            )
+            .await?;
+        Ok(left.comments_count)
+    }
+
     /// `POST /v1/recovery_tokens/{token}/recover`.
     pub async fn wiki_restore(&self, token: &str) -> Result<WikiRestored, ApiError> {
         let url = format!(

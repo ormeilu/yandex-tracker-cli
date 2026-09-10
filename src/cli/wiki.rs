@@ -178,6 +178,28 @@ pub enum WikiCommand {
     /// Restore a deleted page by the token its deletion printed.
     #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_RESTORE))]
     Restore { token: String },
+    /// Comment on a page, or reply to a comment.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_COMMENT))]
+    Comment {
+        /// The page's slug, or its address.
+        page: String,
+        /// The comment; `-` reads it from stdin.
+        text: String,
+        /// Reply to this comment, by its id.
+        #[arg(long, value_name = "ID")]
+        reply_to: Option<u64>,
+        /// The passage of the page the comment is about.
+        #[arg(long)]
+        quote: Option<String>,
+    },
+    /// Delete a comment. There is no undo, so it needs --yes.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_DELETE_COMMENT))]
+    DeleteComment {
+        /// The page's slug, or its address.
+        page: String,
+        /// The comment's id, as `wiki comments` shows it.
+        comment: u64,
+    },
     /// Download one file attached to a page.
     #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_DOWNLOAD))]
     Download {
@@ -195,6 +217,10 @@ pub enum WikiCommand {
     },
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "one arm per verb; splitting the dispatch would only hide the list"
+)]
 pub async fn run(command: &WikiCommand, session: &Session) -> ExitCode {
     match command {
         WikiCommand::Get { page } => get(page, session).await,
@@ -280,6 +306,15 @@ pub async fn run(command: &WikiCommand, session: &Session) -> ExitCode {
         } => append(page, from, place(*top, anchor.as_deref()), *silent, session).await,
         WikiCommand::Delete { page, recursive } => delete(page, *recursive, session).await,
         WikiCommand::Restore { token } => restore(token, session).await,
+        WikiCommand::Comment {
+            page,
+            text,
+            reply_to,
+            quote,
+        } => comment(page, text, *reply_to, quote.as_deref(), session).await,
+        WikiCommand::DeleteComment { page, comment } => {
+            delete_comment(page, *comment, session).await
+        }
         WikiCommand::Download {
             page,
             file,
@@ -759,6 +794,101 @@ async fn restore(token: &str, session: &Session) -> ExitCode {
                 "restored {} (id {}{pages})\n",
                 restored.slug, restored.id
             ));
+            ExitCode::Success
+        }
+        Err(error) => failed(&error),
+    }
+}
+
+/// Comment on a page, or reply to one of its comments.
+///
+/// Like `issue comment`, the text is the argument, or stdin with `-`: a
+/// comment is short more often than a page is.
+async fn comment(
+    page: &str,
+    text: &str,
+    reply_to: Option<u64>,
+    quote: Option<&str>,
+    session: &Session,
+) -> ExitCode {
+    let slug = match named(page) {
+        Ok(slug) => slug,
+        Err(code) => return code,
+    };
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+    let said = if text == "-" {
+        match content("-") {
+            Ok(text) => text,
+            Err(code) => return code,
+        }
+    } else {
+        text.to_owned()
+    };
+    if said.trim().is_empty() {
+        return report(
+            &"nothing to say: the comment is empty",
+            ExitCode::ConfirmationRequired,
+        );
+    }
+    let mut body = serde_json::json!({ "body": said });
+    if let Some(parent) = reply_to {
+        body["parent_id"] = serde_json::json!(parent);
+    }
+    if let Some(quote) = quote {
+        body["inline_text"] = serde_json::Value::String(quote.to_owned());
+    }
+    let action = match reply_to {
+        Some(parent) => format!("reply to comment {parent} on wiki page `{slug}`"),
+        None => format!("comment on wiki page `{slug}`"),
+    };
+    if let Some(code) = gated(&action, &body, false, session) {
+        return code;
+    }
+
+    let id = match client.wiki_page_id(&slug).await {
+        Ok(id) => id,
+        Err(error) => return failed(&error),
+    };
+    match client.wiki_comment(id, &body).await {
+        Ok(made) => {
+            emit(&format!("commented on {slug}: comment {}\n", made.id));
+            ExitCode::Success
+        }
+        Err(error) => failed(&error),
+    }
+}
+
+/// Delete a comment. The Wiki keeps nothing to restore it from.
+async fn delete_comment(page: &str, comment: u64, session: &Session) -> ExitCode {
+    let slug = match named(page) {
+        Ok(slug) => slug,
+        Err(code) => return code,
+    };
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+    let body = serde_json::json!({ "comment": comment });
+    if let Some(code) = gated(
+        &format!("delete comment {comment} on wiki page `{slug}`"),
+        &body,
+        true,
+        session,
+    ) {
+        return code;
+    }
+
+    let id = match client.wiki_page_id(&slug).await {
+        Ok(id) => id,
+        Err(error) => return failed(&error),
+    };
+    match client.wiki_delete_comment(id, comment).await {
+        Ok(left) => {
+            let left = left.map_or_else(String::new, |count| format!("; {count} left"));
+            emit(&format!("deleted comment {comment} on {slug}{left}\n"));
             ExitCode::Success
         }
         Err(error) => failed(&error),

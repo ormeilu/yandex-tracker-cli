@@ -247,6 +247,9 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   ytcli wiki delete SLUG|URL [--recursive --yes]
                                         prints the recovery token once, and the command that uses it
   ytcli wiki restore TOKEN              undo a delete
+  ytcli wiki comment SLUG|URL "text"|- [--reply-to ID] [--quote "passage"]
+  ytcli wiki delete-comment SLUG|URL ID --yes
+                                        no undo, hence --yes; the Wiki has no edit or resolve
                                         Writes: profile and org announced first; --dry-run sends nothing
 
 ## format

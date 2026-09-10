@@ -1351,6 +1351,31 @@ ytcli wiki restore 0b6c2a4e-1f3d-4e5a-9b7c-8d9e0f1a2b3c
 Takes the token that `wiki delete` printed. Prints the restored page and how
 many pages came back with it.";
 
+pub const WIKI_COMMENT: &str = "\
+Comment on a Yandex Wiki page, or reply to a comment.
+
+```
+ytcli wiki comment users/ilubenets/runbook \"Step 2 needs the canary first.\"
+ytcli wiki comment users/ilubenets/runbook - --reply-to 7001 < reply.md
+ytcli wiki comment users/ilubenets/runbook \"Out of date\" --quote \"Watch the pipeline.\"
+```
+
+The text is the argument, or stdin with `-`. `--reply-to` answers a comment by
+its id, as `wiki comments` shows it. `--quote` anchors the comment to a passage
+of the page. The Wiki has no way to edit, resolve or react to a comment, so
+none is offered. The profile and organisation are announced first, and
+`--dry-run` sends nothing.";
+
+pub const WIKI_DELETE_COMMENT: &str = "\
+Delete a comment on a Yandex Wiki page.
+
+```
+ytcli wiki delete-comment users/ilubenets/runbook 7001 --yes
+```
+
+There is no undo, so it needs `--yes`. Prints how many comments the page has
+left. Announced first; `--dry-run` sends nothing.";
+
 pub const WIKI_DOWNLOAD: &str = "\
 Download one file attached to a Yandex Wiki page.
 
