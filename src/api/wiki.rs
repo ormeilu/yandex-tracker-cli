@@ -223,6 +223,24 @@ impl Client {
             .map(|_| ())
             .map_err(refused)
     }
+
+    /// Ask the Wiki something directly, at a path under its host.
+    ///
+    /// The Wiki's counterpart of [`Client::probe_get`] and friends: compiled
+    /// only for the `live` feature, so the questions the live suite asks — does
+    /// a payload still have the shape the fixtures claim — cost the binary
+    /// nothing.
+    #[cfg(feature = "live")]
+    pub async fn probe_wiki(
+        &self,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<&serde_json::Value>,
+    ) -> Result<serde_json::Value, ApiError> {
+        let url = format!("{}{path}", self.wiki_url);
+        let (value, _) = self.send_url(method, &url, body, path).await?;
+        Ok(value)
+    }
 }
 
 /// One comment, in our schema.

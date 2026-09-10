@@ -23,6 +23,9 @@
 //! Reads are unconditional. Writes happen only when `YTCLI_TEST_QUEUE` names a
 //! queue you are willing to have issues created in — Tracker has no delete, so
 //! whatever a write test makes is permanent.
+//!
+//! The Wiki writes happen only under `YTCLI_TEST_WIKI_AREA`, a page slug whose
+//! subpages the suite may create — and does delete again, since the Wiki can.
 
 #![cfg(feature = "live")]
 // A test that cannot reach its fixture has nothing to say; failing loudly is the
@@ -1924,5 +1927,218 @@ async fn sprint_board(client: &Client, unreached: &mut Vec<String>) -> Option<St
             ));
             None
         }
+    }
+}
+
+/// The Wiki, end to end, in a place somebody named for it.
+///
+/// Every Wiki fixture was written from the API reference, not recorded, so
+/// this is the only test that can say whether they describe what the Wiki
+/// sends (ADR 7). It makes one of everything under `YTCLI_TEST_WIKI_AREA` — a
+/// page, a comment, a file and a grid — reads each back both through the
+/// client and raw, compares the raw keys with the fixtures, and then deletes
+/// the page and restores it once, which is the only way to see a recovery
+/// token work. The page is deleted again at the end, and a failure anywhere
+/// in between still deletes it.
+#[tokio::test]
+#[ignore = "creates and deletes Wiki pages; needs YTCLI_TEST_WIKI_AREA"]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one scenario: every step needs the page the first one made"
+)]
+async fn the_wiki_fixtures_have_the_shape_the_wiki_answers_with() {
+    use reqwest::Method;
+    use ytcli::api::wiki::{CommentScope, GridQuery};
+
+    fn fail(what: &str, error: impl std::fmt::Display) -> String {
+        format!("{what}: {error}")
+    }
+
+    let Some(area) = setting("YTCLI_TEST_WIKI_AREA") else {
+        return;
+    };
+    let client = client();
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock")
+        .as_secs();
+    let slug = format!("{}/ytcli-live-{stamp}", area.trim_end_matches('/'));
+
+    let made = client
+        .wiki_create(
+            &serde_json::json!({
+                "slug": slug,
+                "title": "ytcli live test — safe to delete",
+                "content": "# Heading\n\nA **bold** line.\n\n- one\n- two\n",
+            }),
+            true,
+        )
+        .await
+        .expect("create a page");
+    let page = made.id;
+    // Whatever fails below, the page is not left behind. A panic inside the
+    // body is caught so the delete still runs, then re-raised.
+    // Whatever fails below, the page is not left behind: the body reports a
+    // failure instead of panicking, so the delete after it always runs.
+    let body = async {
+        let read = client
+            .wiki_page(&slug)
+            .await
+            .map_err(|error| fail("read the page back", error))?;
+        if read.title != "ytcli live test — safe to delete" {
+            return Err(format!("the title came back as {:?}", read.title));
+        }
+        println!("page_type={:?}", read.page_type);
+        println!("content={:?}", read.content);
+
+        let comment = client
+            .wiki_comment(page, &serde_json::json!({ "body": "ytcli live comment" }))
+            .await
+            .map_err(|error| fail("comment", error))?;
+        let listed = client
+            .wiki_comments(&slug, CommentScope::Page { status: None }, None, 50)
+            .await
+            .map_err(|error| fail("comments", error))?;
+        if !listed.results.iter().any(|one| one.id == comment.id) {
+            return Err("the comment is not in the listing".to_owned());
+        }
+
+        let bytes = b"ytcli live file\n".to_vec();
+        let upload = client
+            .wiki_upload_start("ytcli-live.txt", bytes.len())
+            .await
+            .map_err(|error| fail("open an upload", error))?;
+        client
+            .wiki_upload_part(&upload.session_id, 1, bytes.clone())
+            .await
+            .map_err(|error| fail("send the part", error))?;
+        client
+            .wiki_upload_finish(&upload.session_id)
+            .await
+            .map_err(|error| fail("finish the upload", error))?;
+        let attached = client
+            .wiki_attach(page, std::slice::from_ref(&upload.session_id))
+            .await
+            .map_err(|error| fail("attach", error))?;
+        let file = attached.first().ok_or("no attachment came back")?.id;
+        let back = client
+            .wiki_attachment_bytes(page, file)
+            .await
+            .map_err(|error| fail("download", error))?;
+        if back != bytes {
+            return Err("the file came back different".to_owned());
+        }
+
+        let grid = client
+            .wiki_grid_create(&serde_json::json!({
+                "page": { "slug": slug }, "title": "ytcli live grid"
+            }))
+            .await
+            .map_err(|error| fail("create a grid", error))?;
+        let read_grid = client
+            .wiki_grid(&grid.id, GridQuery::default())
+            .await
+            .map_err(|error| fail("read the grid", error))?;
+        if read_grid.id != grid.id {
+            return Err(format!("asked for grid {}, got {}", grid.id, read_grid.id));
+        }
+
+        let mut drift = Vec::new();
+        let pairs = [
+            (
+                "wiki_page.json",
+                Method::GET,
+                format!("/v1/pages?slug={slug}&fields=content,attributes"),
+                None,
+            ),
+            (
+                "wiki_descendants.json",
+                Method::GET,
+                format!("/v1/pages/descendants?slug={area}&page_size=5"),
+                None,
+            ),
+            (
+                "wiki_comments.json",
+                Method::GET,
+                format!("/v1/pages/{page}/comments"),
+                None,
+            ),
+            (
+                "wiki_attachments.json",
+                Method::GET,
+                format!("/v1/pages/{page}/attachments"),
+                None,
+            ),
+            (
+                "wiki_grid.json",
+                Method::GET,
+                format!("/v1/grids/{}", grid.id),
+                None,
+            ),
+            (
+                "wiki_search.json",
+                Method::POST,
+                "/v1/search".to_owned(),
+                Some(serde_json::json!({ "query": "ytcli", "limit": 5 })),
+            ),
+        ];
+        for (fixture, method, path, body) in pairs {
+            let live = client
+                .probe_wiki(method, &path, body.as_ref())
+                .await
+                .map_err(|error| fail(&path, error))?;
+            println!("{fixture} ← {path}\n{live:#}");
+            let recorded = fixture_value(fixture);
+            let (Some(recorded), Some(live)) = (wiki_object(&recorded), wiki_object(&live)) else {
+                println!("unchecked — {fixture}: {path} answered with nothing to compare");
+                continue;
+            };
+            if let Some(missing) = fixture_gap_between(recorded, &keys(live)) {
+                drift.push(format!(
+                    "{fixture} claims {missing:?}, which {path} does not return"
+                ));
+            }
+        }
+
+        client
+            .wiki_delete_attachment(page, file)
+            .await
+            .map_err(|error| fail("delete the file", error))?;
+        client
+            .wiki_delete_comment(page, comment.id)
+            .await
+            .map_err(|error| fail("delete the comment", error))?;
+        client
+            .wiki_grid_write(Method::DELETE, &grid.id, "", None)
+            .await
+            .map_err(|error| fail("delete the grid", error))?;
+        Ok::<_, String>(drift)
+    };
+    let outcome = body.await;
+
+    let token = client
+        .wiki_delete(page, false)
+        .await
+        .expect("delete the page");
+    let restored = client.wiki_restore(&token).await.expect("restore the page");
+    assert_eq!(restored.slug, slug);
+    client
+        .wiki_delete(page, false)
+        .await
+        .expect("delete the page again");
+
+    let drift = outcome.unwrap_or_else(|failure| panic!("{failure}"));
+    assert!(
+        drift.is_empty(),
+        "Wiki fixtures have drifted:\n{}",
+        drift.join("\n")
+    );
+}
+
+/// The object a Wiki payload carries: itself, or the first of its `results`.
+fn wiki_object(value: &serde_json::Value) -> Option<&serde_json::Value> {
+    match value.get("results") {
+        Some(serde_json::Value::Array(items)) => items.first(),
+        _ => first_object(value),
     }
 }
