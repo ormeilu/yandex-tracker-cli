@@ -264,6 +264,10 @@ const UNRUNNABLE: &[(&str, &str)] = &[
     ("attachment download", "writes a file"),
     ("attachment delete", "a write, and the one with no undo"),
     ("attachment upload", "a write"),
+    (
+        "wiki get",
+        "its fixture is borrowed from the API reference, and an example would pin a guess",
+    ),
 ];
 
 /// Every `ytcli <group> <verb>` in README or the cheatsheet is either exercised

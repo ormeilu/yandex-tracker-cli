@@ -1,0 +1,9 @@
+---
+source: src/render/wiki.rs
+expression: "page(&sample(), &human)"
+---
+[1musers/ilubenets/runbook[0m  Deploy runbook
+[2mid:[0m 4521   [2mtype:[0m wysiwyg   [2mmodified:[0m 2026-09-01T10:15:00Z
+[2m--- wiki:users/ilubenets/runbook (written by Tracker users)[0m
+[2m▏ [0m[1m[4mDeploy[0m
+[2m(+2 more lines: --full)[0m

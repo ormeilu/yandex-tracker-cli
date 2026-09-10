@@ -122,6 +122,7 @@ impl Harness {
             .arg("--config")
             .arg(&self.config)
             .env("YTCLI_BASE_URL", self.server.uri())
+            .env("YTCLI_WIKI_URL", self.server.uri())
             .env("YTCLI_TOKEN", "test-token")
             // A developer's own environment must not decide what a test sees.
             .env_remove("YTCLI_PROFILE")

@@ -1,7 +1,7 @@
 ytcli — Yandex Tracker from the command line. Compact output by default.
 
 ## general
-  ytcli <group> <verb> [args]           groups: auth issue worklog user dict queue field template board project portfolio goal attachment
+  ytcli <group> <verb> [args]           groups: auth issue worklog user dict queue field template board project portfolio goal attachment wiki
   -p, --profile NAME                    act as a profile (else YTCLI_PROFILE, .tracker.toml, default)
   -f, --format text|json|json-raw|toon  text is compact and default; json is our stable schema
       --full                            print the whole description, not the first lines
@@ -213,6 +213,12 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   ytcli attachment upload PROJ-1 FILE
   ytcli attachment delete PROJ-1 ID --yes   by id or filename; --yes even for one,
                                         Tracker keeps no copy
+
+## wiki
+  ytcli wiki get SLUG|URL               one Yandex Wiki page: title, id, type, last change, then
+                                        its text, fenced and cut like a description (--full).
+                                        Takes the address as copied from the browser.
+                                        Needs wiki:read on the token; `auth login` again asks for it
 
 ## format
   text      compact key/value; fixed field order so caches and scripts hold

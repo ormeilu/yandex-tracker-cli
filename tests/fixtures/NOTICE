@@ -51,6 +51,11 @@ What that run also established, none of which is in the API reference:
   * Listing endpoints lag a second or two behind the write that fed them, so a
     fixture checked immediately after a write can look like it has drifted.
 
+`wiki_page.json` is not from the Tracker client at all. Its shape follows the
+Yandex Wiki API reference (`GET /v1/pages`), with invented values, and it has not
+yet been checked against a real Wiki: the reference does not say which markup
+`content` arrives in. ADR 7 names the live check as the step before trusting it.
+
 `comments_html.json` is the exception in the other direction: it was recorded
 from a real organisation, sanitised of names and ids, and is the evidence for
 what `markupType` does (#77).

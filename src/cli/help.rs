@@ -1164,6 +1164,59 @@ command says so rather than claiming a renewal.
 Changing what a token may do — adding Wiki access, or dropping to read-only —
 is not a refresh. It is `ytcli auth login` again.";
 
+pub const WIKI_GET: &str = "\
+Show one Yandex Wiki page.
+
+```
+ytcli wiki get users/ilubenets/runbook
+ytcli wiki get https://wiki.yandex.ru/users/ilubenets/runbook/
+```
+
+Takes the slug — the path after the host — or the whole address as copied from
+the browser. Prints the title, id, type and last change, then the text, fenced
+as written by somebody else and cut like a description unless `--full`:
+Markdown on current pages, the older wiki markup on legacy ones.
+
+The Wiki reads through the same profile as Tracker, but needs `wiki:read` on
+the token. A token without it is refused with a 403; signing in again with
+`ytcli auth login` asks for it.";
+
+pub const WIKI_LIST: &str = "\
+List the pages under one Yandex Wiki page.
+
+```
+ytcli wiki list users/ilubenets
+```
+
+Not built yet (#81): it answers \"not implemented\" and exits 64.";
+
+pub const WIKI_FIND: &str = "\
+Search Yandex Wiki pages and files.
+
+```
+ytcli wiki find \"deploy runbook\"
+```
+
+Not built yet (#82): it answers \"not implemented\" and exits 64.";
+
+pub const WIKI_COMMENTS: &str = "\
+Show the comments on a Yandex Wiki page.
+
+```
+ytcli wiki comments users/ilubenets/runbook
+```
+
+Not built yet (#83): it answers \"not implemented\" and exits 64.";
+
+pub const WIKI_ATTACHMENTS: &str = "\
+List the files attached to a Yandex Wiki page.
+
+```
+ytcli wiki attachments users/ilubenets/runbook
+```
+
+Not built yet (#84): it answers \"not implemented\" and exits 64.";
+
 pub const AUTH_LOGOUT: &str = "\
 Remove a stored token.
 

@@ -24,6 +24,7 @@ pub mod project;
 pub mod queue;
 pub mod sprint;
 pub mod user;
+pub mod wiki;
 pub mod wizard;
 pub mod worklog;
 pub mod write;
@@ -156,6 +157,9 @@ pub enum Command {
     /// Issue attachments.
     #[command(subcommand)]
     Attachment(attachment::AttachmentCommand),
+    /// Yandex Wiki pages, read through the same profile.
+    #[command(subcommand)]
+    Wiki(wiki::WikiCommand),
     /// Print a compact reference of the whole CLI, for agents.
     #[command(long_about = help::md(help::CHEATSHEET))]
     Cheatsheet(cheatsheet::CheatsheetArgs),
@@ -489,6 +493,9 @@ impl Session {
         // end; nothing else should be setting this.
         if let Ok(base) = std::env::var("YTCLI_BASE_URL") {
             config.base_url = base;
+        }
+        if let Ok(wiki) = std::env::var("YTCLI_WIKI_URL") {
+            config.wiki_url = wiki;
         }
 
         crate::api::Client::new(&config).map_err(|error| {

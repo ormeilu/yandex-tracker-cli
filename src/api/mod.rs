@@ -8,6 +8,7 @@ pub mod error;
 pub mod models;
 pub mod parse;
 pub mod query;
+pub mod wiki;
 
 use std::time::Duration;
 
@@ -47,6 +48,8 @@ fn host_of(url: &str) -> Option<String> {
 #[derive(Debug, Clone)]
 pub struct ClientConfig {
     pub base_url: String,
+    /// The Wiki's root: same token, same organisation, different host.
+    pub wiki_url: String,
     pub token: String,
     pub org_id: String,
     pub org_kind: OrgKind,
@@ -60,6 +63,7 @@ impl ClientConfig {
     pub fn new(token: String, org_id: String, org_kind: OrgKind) -> Self {
         Self {
             base_url: DEFAULT_BASE_URL.to_owned(),
+            wiki_url: wiki::DEFAULT_WIKI_URL.to_owned(),
             token,
             org_id,
             org_kind,
@@ -74,6 +78,7 @@ impl ClientConfig {
 pub struct Client {
     http: reqwest::Client,
     base_url: String,
+    wiki_url: String,
     retries: usize,
     /// Which organisation this client talks to.
     ///
@@ -111,6 +116,7 @@ impl Client {
         Ok(Self {
             http,
             base_url: config.base_url.trim_end_matches('/').to_owned(),
+            wiki_url: config.wiki_url.trim_end_matches('/').to_owned(),
             retries: config.retries,
             org: config.org_id.clone(),
         })
@@ -1544,9 +1550,19 @@ impl Client {
         what: &str,
     ) -> Result<(Value, reqwest::header::HeaderMap), ApiError> {
         let url = format!("{}{path}", self.base_url);
+        self.send_url(method, &url, body, what).await
+    }
 
+    /// [`Self::send_value`] at a full address, for the Wiki's second host.
+    async fn send_url(
+        &self,
+        method: reqwest::Method,
+        url: &str,
+        body: Option<&Value>,
+        what: &str,
+    ) -> Result<(Value, reqwest::header::HeaderMap), ApiError> {
         let send = || async {
-            let mut request = self.http.request(method.clone(), &url);
+            let mut request = self.http.request(method.clone(), url);
             if let Some(body) = body {
                 request = request.json(body);
             }
