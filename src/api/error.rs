@@ -14,6 +14,14 @@ pub enum ApiError {
     Unauthorized,
     #[error("forbidden (403): the account lacks rights, or the organisation header is wrong")]
     Forbidden,
+    // The Wiki's 403 has a likelier cause than Tracker's: a token issued before
+    // the Wiki permission was added to the application. Saying so turns a
+    // rights puzzle into one command.
+    #[error(
+        "the Wiki refused this token (403): it needs the wiki:read permission — sign in again \
+         with `ytcli auth login` — or this account cannot see that page"
+    )]
+    WikiForbidden,
     #[error("{0} not found")]
     NotFound(String),
     #[error("rate limited by Tracker (429)")]
@@ -31,7 +39,7 @@ impl ApiError {
     #[must_use]
     pub fn exit_code(&self) -> ExitCode {
         match self {
-            Self::Unauthorized => ExitCode::Auth,
+            Self::Unauthorized | Self::WikiForbidden => ExitCode::Auth,
             Self::NotFound(_) => ExitCode::NotFound,
             Self::Forbidden | Self::RateLimited | Self::Rejected { .. } => ExitCode::ApiRejected,
             Self::Transport(_) | Self::Decode(_) => ExitCode::Failure,

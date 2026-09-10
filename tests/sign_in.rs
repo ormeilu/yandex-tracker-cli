@@ -103,13 +103,14 @@ async fn a_confirmed_code_becomes_a_verified_token() {
 }
 
 /// `--read-only` has to reach Yandex as a scope, or the token gets everything
-/// the application may grant.
+/// the application may grant — and it covers the Wiki too, or a read-only
+/// login would leave every `wiki` command refused.
 #[tokio::test]
 async fn read_only_asks_for_the_read_scope() {
     let harness = Harness::new().await;
     Mock::given(method("POST"))
         .and(path("/device/code"))
-        .and(body_string_contains("scope=tracker%3Aread"))
+        .and(body_string_contains("scope=tracker%3Aread%20wiki%3Aread"))
         .respond_with(ResponseTemplate::new(200).set_body_json(code()))
         .expect(1)
         .mount(&harness.server)

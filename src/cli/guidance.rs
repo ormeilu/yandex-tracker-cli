@@ -25,7 +25,8 @@ CI, or an organisation that does not allow third-party applications.
 
 1. Create an application at https://oauth.yandex.ru/client/new — pick
    **For API access or debugging**, and grant `tracker:write` for full access
-   or `tracker:read` to stay read-only.
+   or `tracker:read` to stay read-only. Add `wiki:read` (and `wiki:write`) for
+   the `ytcli wiki` commands: a token without it is refused by the Wiki.
 2. Copy the application's **ClientID** from its page.
 3. Open `https://oauth.yandex.ru/authorize?response_type=token&client_id=<ClientID>`
    and sign in. The token comes back in the address bar you land on.

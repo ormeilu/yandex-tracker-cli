@@ -40,7 +40,7 @@ and the scopes, and it can be revoked there.
 
 `auth login` offers the browser first whenever the binary has an application.
 Pasting a token stays — for CI, and for organisations that do not allow
-third-party applications. `--read-only` narrows the request to `tracker:read`
+third-party applications. `--read-only` narrows the request to `tracker:read wiki:read`
 through the `scope` parameter.
 
 The refresh token goes to the keychain next to the token, under its own service

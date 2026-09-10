@@ -115,8 +115,8 @@ pub struct LoginArgs {
     #[arg(long)]
     pub device: bool,
 
-    /// Ask for read access only (`tracker:read`) when signing in through the
-    /// browser.
+    /// Ask for read access only (`tracker:read wiki:read`) when signing in
+    /// through the browser.
     #[arg(long)]
     pub read_only: bool,
 }
@@ -482,6 +482,9 @@ async fn report_profile(
     let mut config = ClientConfig::new(token, profile.org_id.clone(), profile.org_kind);
     if let Ok(base) = std::env::var("YTCLI_BASE_URL") {
         config.base_url = base;
+    }
+    if let Ok(wiki) = std::env::var("YTCLI_WIKI_URL") {
+        config.wiki_url = wiki;
     }
     let client = match Client::new(&config) {
         Ok(client) => client,

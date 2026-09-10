@@ -82,10 +82,23 @@ impl Client {
                 None,
                 &format!("wiki page `{slug}`"),
             )
-            .await?;
+            .await
+            .map_err(refused)?;
         serde_json::from_value::<Answer>(value)
             .map(WikiPage::from)
             .map_err(ApiError::Decode)
+    }
+}
+
+/// A 403 from the Wiki, told apart from Tracker's.
+///
+/// Tracker's usual cause is the wrong organisation header; the Wiki's is a
+/// token issued before `wiki:read` was granted, and the fix for that is one
+/// command, which the error can name.
+fn refused(error: ApiError) -> ApiError {
+    match error {
+        ApiError::Forbidden => ApiError::WikiForbidden,
+        other => other,
     }
 }
 

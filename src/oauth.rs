@@ -20,8 +20,9 @@ const CLIENT_ID_ENV: &str = "YTCLI_OAUTH_CLIENT_ID";
 const CLIENT_SECRET_ENV: &str = "YTCLI_OAUTH_CLIENT_SECRET";
 const URL_ENV: &str = "YTCLI_OAUTH_URL";
 
-/// What `--read-only` asks for instead of everything the application may grant.
-pub const READ_ONLY_SCOPE: &str = "tracker:read";
+/// What `--read-only` asks for instead of everything the application may grant:
+/// reading Tracker and reading the Wiki, and nothing that writes to either.
+pub const READ_ONLY_SCOPE: &str = "tracker:read wiki:read";
 
 /// Used when Yandex does not say how long to wait between polls.
 const DEFAULT_INTERVAL: u64 = 5;

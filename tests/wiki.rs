@@ -109,6 +109,25 @@ async fn json_carries_the_page_in_our_schema() {
     assert!(page.get("attributes").is_none());
 }
 
+/// Most people meet the Wiki with a token from before `wiki:read` was granted.
+/// The 403 that follows has to name the fix, and exit as the auth problem it is.
+#[tokio::test]
+async fn a_token_without_wiki_access_is_told_how_to_get_it() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/pages"))
+        .respond_with(ResponseTemplate::new(403))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&["wiki", "get", "users/ilubenets/runbook"])
+        .assert()
+        .code(3)
+        .stderr(predicate::str::contains("wiki:read"))
+        .stderr(predicate::str::contains("ytcli auth login"));
+}
+
 /// Declared before they work, so help and completions are honest about the
 /// group — and each says so rather than pretending to succeed.
 #[tokio::test]
