@@ -219,6 +219,9 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
                                         its text, fenced and cut like a description (--full).
                                         Takes the address as copied from the browser.
                                         Needs wiki:read on the token; `auth login` again asks for it
+  ytcli wiki list SLUG|URL [--cursor C]
+                                        pages under one, any depth: slug and id. The Wiki gives no
+                                        total: `shown N of more than N — next: --cursor C`
 
 ## format
   text      compact key/value; fixed field order so caches and scripts hold

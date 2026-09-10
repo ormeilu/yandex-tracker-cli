@@ -268,6 +268,7 @@ const UNRUNNABLE: &[(&str, &str)] = &[
         "wiki get",
         "its fixture is borrowed from the API reference, and an example would pin a guess",
     ),
+    ("wiki list", "the same borrowed fixtures as wiki get"),
 ];
 
 /// Every `ytcli <group> <verb>` in README or the cheatsheet is either exercised

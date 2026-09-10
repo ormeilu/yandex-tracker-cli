@@ -1183,13 +1183,21 @@ the token. A token without it is refused with a 403; signing in again with
 `ytcli auth login` asks for it.";
 
 pub const WIKI_LIST: &str = "\
-List the pages under one Yandex Wiki page.
+List the pages under one Yandex Wiki page, at every depth.
 
 ```
 ytcli wiki list users/ilubenets
+ytcli wiki list users/ilubenets --cursor eyJpZCI6NDUyMn0=
 ```
 
-Not built yet (#81): it answers \"not implemented\" and exits 64.";
+Each page's slug — what `wiki get` takes — and its id. Titles are not listed:
+the Wiki does not send them here, and fetching each one would cost a request
+per page.
+
+The Wiki pages by cursor and never says how many pages there are, so the list
+ends with `shown N of more than N — next: --cursor …` while more follow, and
+`shown N of N` on the last page. `--format json` carries `next_cursor` for the
+same reason.";
 
 pub const WIKI_FIND: &str = "\
 Search Yandex Wiki pages and files.

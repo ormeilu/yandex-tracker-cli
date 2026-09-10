@@ -253,6 +253,28 @@ pub fn tally(shown: usize, total: Option<u64>, next_page: Option<u32>, ctx: &Con
     out
 }
 
+/// The tally for a listing that pages by cursor and never reports a total —
+/// every Wiki listing (`docs/adr/0007-yandex-wiki.md`).
+///
+/// "Of more than N" while a next page exists: the count cannot be printed
+/// honestly, but the rule the tally serves — never pass one page off as all of
+/// them — still can be kept.
+#[must_use]
+pub fn cursor_tally(shown: usize, next: Option<&str>, ctx: &Context) -> String {
+    let paint = ctx.painter();
+    let counted = match next {
+        Some(_) => format!("shown {shown} of more than {shown}"),
+        None => format!("shown {shown} of {shown}"),
+    };
+
+    let mut out = paint.paint(&counted, Palette::label());
+    if let Some(cursor) = next {
+        out.push_str(&paint.paint(&format!(" — next: --cursor {cursor}"), Palette::warn()));
+    }
+    out.push('\n');
+    out
+}
+
 pub(crate) fn truncate(value: &str, width: usize) -> String {
     if value.chars().count() <= width {
         return value.to_owned();
@@ -277,6 +299,23 @@ mod tests {
             images: false,
             inline: crate::render::image::Inline::default(),
         }
+    }
+
+    /// No total, so the only claim made is the true one: there is more.
+    #[test]
+    fn a_cursor_tally_with_more_to_come_says_so_and_names_the_cursor() {
+        assert_eq!(
+            cursor_tally(50, Some("eyJpZCI6NH0="), &ctx(Audience::Machine)),
+            "shown 50 of more than 50 — next: --cursor eyJpZCI6NH0=\n"
+        );
+    }
+
+    #[test]
+    fn a_cursor_tally_on_the_last_page_is_complete() {
+        assert_eq!(
+            cursor_tally(2, None, &ctx(Audience::Machine)),
+            "shown 2 of 2\n"
+        );
     }
 
     fn columns() -> Vec<Column> {

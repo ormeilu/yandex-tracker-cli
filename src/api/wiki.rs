@@ -32,6 +32,25 @@ pub struct WikiPage {
     pub content: Option<String>,
 }
 
+/// A page named by a listing: the Wiki sends its id and slug, and no title.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WikiPageRef {
+    pub id: u64,
+    pub slug: String,
+}
+
+/// One page of a Wiki listing.
+///
+/// The Wiki pages by cursor and never says how many there are, so the only
+/// honest tally is "this many, and there are more" (ADR 7). The cursor is kept
+/// in the JSON form too: without it a script cannot ask for the next page.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CursorPage<T> {
+    pub results: Vec<T>,
+    #[serde(default)]
+    pub next_cursor: Option<String>,
+}
+
 /// The page as the Wiki sends it.
 #[derive(Deserialize)]
 struct Answer {
@@ -91,6 +110,38 @@ impl Client {
 }
 
 impl Client {
+    /// `GET /v1/pages/descendants?slug=…` — every page under one, at any depth.
+    ///
+    /// A page of results can hold fewer than `page_size` even when more follow,
+    /// so only `next_cursor` says whether the listing is complete.
+    pub async fn wiki_descendants(
+        &self,
+        slug: &str,
+        cursor: Option<&str>,
+        page_size: u32,
+    ) -> Result<CursorPage<WikiPageRef>, ApiError> {
+        use std::fmt::Write as _;
+
+        let mut url = format!(
+            "{}/v1/pages/descendants?slug={}&page_size={page_size}",
+            self.wiki_url,
+            encode(slug)
+        );
+        if let Some(cursor) = cursor {
+            let _ = write!(url, "&cursor={}", encode(cursor));
+        }
+        let (value, _) = self
+            .send_url(
+                reqwest::Method::GET,
+                &url,
+                None,
+                &format!("wiki page `{slug}`"),
+            )
+            .await
+            .map_err(refused)?;
+        serde_json::from_value(value).map_err(ApiError::Decode)
+    }
+
     /// Whether the Wiki accepts this token in this organisation.
     ///
     /// `GET /v1/users/me`: the smallest request the Wiki answers, and one that

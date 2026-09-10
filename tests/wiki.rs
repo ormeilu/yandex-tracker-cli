@@ -128,14 +128,118 @@ async fn a_token_without_wiki_access_is_told_how_to_get_it() {
         .stderr(predicate::str::contains("ytcli auth login"));
 }
 
+/// The Wiki gives no total, so the first page of a listing must not read as
+/// all of it: the tally says there is more and names the cursor that gets it.
+#[tokio::test]
+async fn a_listing_with_more_to_come_says_so() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/pages/descendants"))
+        .and(query_param("slug", "users/ilubenets"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("wiki_descendants.json")))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness
+        .run(&["wiki", "list", "https://wiki.yandex.ru/users/ilubenets/"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).unwrap();
+
+    assert!(stdout.contains("users/ilubenets/runbook"), "{stdout}");
+    assert!(
+        stdout.contains("users/ilubenets/runbook/rollback"),
+        "{stdout}"
+    );
+    assert!(
+        stdout
+            .trim_end()
+            .ends_with("shown 2 of more than 2 — next: --cursor eyJpZCI6NDUyMn0="),
+        "{stdout}"
+    );
+}
+
+/// The cursor a tally names is the one sent back, and the last page is the
+/// one place a listing can say it is complete.
+#[tokio::test]
+async fn the_next_cursor_is_sent_back_and_the_last_page_is_complete() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/pages/descendants"))
+        .and(query_param("slug", "users/ilubenets"))
+        .and(query_param("cursor", "eyJpZCI6NDUyMn0="))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "results": [{"id": 4523, "slug": "users/ilubenets/notes"}],
+            "next_cursor": null,
+            "prev_cursor": "eyJpZCI6NDUyM30="
+        })))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness
+        .run(&[
+            "wiki",
+            "list",
+            "users/ilubenets",
+            "--cursor",
+            "eyJpZCI6NDUyMn0=",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).unwrap();
+
+    assert!(stdout.contains("users/ilubenets/notes"), "{stdout}");
+    assert!(stdout.trim_end().ends_with("shown 1 of 1"), "{stdout}");
+}
+
+/// A script needs the cursor as much as a person does, so JSON keeps it.
+#[tokio::test]
+async fn a_listing_as_json_keeps_the_cursor() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/pages/descendants"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(fixture("wiki_descendants.json")))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness
+        .run(&["wiki", "list", "users/ilubenets", "--format", "json"])
+        .assert()
+        .success();
+    let list: serde_json::Value = serde_json::from_slice(&output.get_output().stdout).unwrap();
+
+    assert_eq!(
+        list["results"][1]["slug"],
+        "users/ilubenets/runbook/rollback"
+    );
+    assert_eq!(list["next_cursor"], "eyJpZCI6NDUyMn0=");
+}
+
+#[tokio::test]
+async fn listing_under_a_missing_page_is_not_found() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/pages/descendants"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&["wiki", "list", "users/nobody"])
+        .assert()
+        .code(4)
+        .stderr(predicate::str::contains(
+            "wiki page `users/nobody` not found",
+        ));
+}
+
 /// Declared before they work, so help and completions are honest about the
 /// group — and each says so rather than pretending to succeed.
 #[tokio::test]
 async fn the_verbs_not_built_yet_say_so() {
     let harness = Harness::new().await;
     for verb in [
-        &["wiki", "list", "users/ilubenets"][..],
-        &["wiki", "find", "deploy"],
+        &["wiki", "find", "deploy"][..],
         &["wiki", "comments", "users/ilubenets/runbook"],
         &["wiki", "attachments", "users/ilubenets/runbook"],
     ] {
