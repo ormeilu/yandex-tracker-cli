@@ -255,6 +255,11 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   ytcli wiki regrant SLUG|URL ACCESS [--role R] [--inheritance inherited|not_inherited]
   ytcli wiki revoke SLUG|URL ACCESS | --all --yes
                                         self-lock refused unless --allow-selflock
+  ytcli wiki clone SLUG|URL TARGET [--title T] [--subscribe] [--no-wait]
+  ytcli wiki clone-grid GRID TARGET [--title T] [--with-data] [--no-wait]
+                                        waits with progress on stderr; prints what it made
+  ytcli wiki operation clone|clone_inline_grid ID
+                                        where a --no-wait clone has got to
                                         Writes: profile and org announced first; --dry-run sends nothing
 
 ## format

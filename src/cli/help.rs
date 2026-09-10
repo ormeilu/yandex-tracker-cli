@@ -1427,6 +1427,47 @@ One grant by its id from `wiki access`, or every personal grant with `--all`,
 which needs `--yes`. Guarded against self-lock like `wiki grant`. Announced
 first; `--dry-run` sends nothing.";
 
+pub const WIKI_CLONE: &str = "\
+Copy a Yandex Wiki page to a new address.
+
+```
+ytcli wiki clone users/ilubenets/runbook users/ilubenets/runbook-2027
+ytcli wiki clone users/ilubenets/runbook team/runbook --title \"Team runbook\" --no-wait
+```
+
+The Wiki copies in the background. The command waits, with progress on
+stderr when there is a terminal to show it on, then prints where the copy
+landed. `--no-wait` prints the operation and returns; `wiki operation` asks
+about it later.
+
+Each refusal the Wiki documents is named: a page already at the target, a
+reserved address, a cloud page, no rights there, a used-up quota. The profile
+and organisation are announced first, and `--dry-run` sends nothing.";
+
+pub const WIKI_CLONE_GRID: &str = "\
+Copy a Yandex Wiki grid onto a page.
+
+```
+ytcli wiki clone-grid 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f users/ilubenets/other
+ytcli wiki clone-grid 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f users/ilubenets/other --with-data
+```
+
+The columns, and the rows too with `--with-data`. The target page is created
+if it is not there. Waits like `wiki clone` and prints the new grid's id.
+Announced first; `--dry-run` sends nothing.";
+
+pub const WIKI_OPERATION: &str = "\
+Show where a Yandex Wiki clone has got to.
+
+```
+ytcli wiki operation clone 5f0e1d2c
+ytcli wiki operation clone_inline_grid 6a1b2c3d
+```
+
+The status (scheduled, in_progress, success or failed), the percentage while
+it runs, and what it made once it is done. Takes what `wiki clone --no-wait`
+printed.";
+
 pub const WIKI_DOWNLOAD: &str = "\
 Download one file attached to a Yandex Wiki page.
 

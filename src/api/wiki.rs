@@ -578,6 +578,45 @@ impl AccessEntry {
     }
 }
 
+/// Work the Wiki does after it has answered: a clone.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WikiOperation {
+    pub id: String,
+    /// `clone` for a page, `clone_inline_grid` for a grid.
+    #[serde(rename = "type")]
+    pub kind: String,
+}
+
+/// Where an operation has got to.
+#[derive(Debug, Clone, Serialize)]
+pub struct OperationStatus {
+    /// `scheduled`, `in_progress`, `success` or `failed`.
+    pub status: String,
+    pub percentage: Option<f64>,
+    pub details: Option<String>,
+    /// What a finished clone made: the new page, and for a grid the new grid.
+    pub result: Option<serde_json::Value>,
+}
+
+impl OperationStatus {
+    #[must_use]
+    pub fn is_done(&self) -> bool {
+        matches!(self.status.as_str(), "success" | "failed")
+    }
+
+    /// The slug of the page a finished clone made, or landed its grid on.
+    #[must_use]
+    pub fn page_slug(&self) -> Option<&str> {
+        self.result.as_ref()?.get("page")?.get("slug")?.as_str()
+    }
+
+    /// The id of the grid a finished grid clone made.
+    #[must_use]
+    pub fn grid_id(&self) -> Option<String> {
+        scalar(self.result.as_ref()?.get("grid_id"))
+    }
+}
+
 /// Which comments to list.
 #[derive(Debug, Clone, Copy)]
 pub enum CommentScope<'a> {
@@ -1104,6 +1143,80 @@ impl Client {
             )
             .await?;
         Ok(())
+    }
+
+    /// `POST /v1/pages/{id}/clone`: accepted now, done later.
+    pub async fn wiki_clone_page(
+        &self,
+        page: u64,
+        body: &serde_json::Value,
+    ) -> Result<WikiOperation, ApiError> {
+        let url = format!("{}/v1/pages/{page}/clone", self.wiki_url);
+        self.wiki_started(&url, body, &format!("wiki page {page}"))
+            .await
+    }
+
+    /// `POST /v1/grids/{id}/clone`: accepted now, done later.
+    pub async fn wiki_clone_grid(
+        &self,
+        grid: &str,
+        body: &serde_json::Value,
+    ) -> Result<WikiOperation, ApiError> {
+        let url = format!("{}/v1/grids/{}/clone", self.wiki_url, encode(grid));
+        self.wiki_started(&url, body, &format!("wiki grid `{grid}`"))
+            .await
+    }
+
+    async fn wiki_started(
+        &self,
+        url: &str,
+        body: &serde_json::Value,
+        what: &str,
+    ) -> Result<WikiOperation, ApiError> {
+        #[derive(Deserialize)]
+        struct Started {
+            operation: WikiOperation,
+        }
+
+        let started: Started = self
+            .wiki_write(reqwest::Method::POST, url, Some(body), what)
+            .await?;
+        Ok(started.operation)
+    }
+
+    /// `GET /v1/operations/{kind}/{id}`: a read, however often it is asked.
+    pub async fn wiki_operation(
+        &self,
+        operation: &WikiOperation,
+    ) -> Result<OperationStatus, ApiError> {
+        let url = format!(
+            "{}/v1/operations/{}/{}",
+            self.wiki_url,
+            encode(&operation.kind),
+            encode(&operation.id)
+        );
+        let (value, _) = self
+            .send_url(
+                reqwest::Method::GET,
+                &url,
+                None,
+                &format!("operation {}/{}", operation.kind, operation.id),
+            )
+            .await
+            .map_err(refused)?;
+        let progress = value.get("progress");
+        Ok(OperationStatus {
+            status: scalar(value.get("status")).unwrap_or_default(),
+            percentage: progress
+                .and_then(|progress| progress.get("percentage"))
+                .and_then(serde_json::Value::as_f64),
+            details: scalar(progress.and_then(|progress| progress.get("details")))
+                .filter(|details| !details.is_empty()),
+            result: value
+                .get("result")
+                .filter(|result| !result.is_null())
+                .cloned(),
+        })
     }
 
     /// `POST /v1/recovery_tokens/{token}/recover`.

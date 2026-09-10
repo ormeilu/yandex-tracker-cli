@@ -363,6 +363,32 @@ pub fn access(access: &crate::api::wiki::WikiAccess, ctx: &Context) -> String {
     out
 }
 
+/// Where an operation has got to, in one line.
+#[must_use]
+pub fn operation(
+    operation: &crate::api::wiki::WikiOperation,
+    status: &crate::api::wiki::OperationStatus,
+) -> String {
+    let mut line = format!(
+        "operation {} {}: {}",
+        operation.kind, operation.id, status.status
+    );
+    if let Some(percentage) = status.percentage.filter(|_| !status.is_done()) {
+        let _ = write!(line, " {percentage:.0}%");
+    }
+    if let Some(slug) = status.page_slug() {
+        let _ = write!(line, " — page {slug}");
+    }
+    if let Some(grid) = status.grid_id() {
+        let _ = write!(line, ", grid {grid}");
+    }
+    if let Some(details) = &status.details {
+        let _ = write!(line, " ({details})");
+    }
+    line.push('\n');
+    line
+}
+
 /// The pages under one.
 ///
 /// The slug leads, because it is what `wiki get` takes; the id follows, because
@@ -696,6 +722,33 @@ mod tests {
             ],
         };
         insta::assert_snapshot!(access(&page_access, &ctx()));
+    }
+
+    /// Running, then finished: the percentage while it means something, and
+    /// what the clone made once it is done.
+    #[test]
+    fn operation_view_is_stable() {
+        use crate::api::wiki::{OperationStatus, WikiOperation};
+        let grid = WikiOperation {
+            id: "op2".to_owned(),
+            kind: "clone_inline_grid".to_owned(),
+        };
+        let running = OperationStatus {
+            status: "in_progress".to_owned(),
+            percentage: Some(40.0),
+            details: None,
+            result: None,
+        };
+        let done = OperationStatus {
+            status: "success".to_owned(),
+            percentage: Some(100.0),
+            details: None,
+            result: Some(serde_json::json!({
+                "grid_id": "4c1d2e3f-0000-4000-8000-000000000002",
+                "page": {"id": 4700, "slug": "users/ilubenets/other"}
+            })),
+        };
+        insta::assert_snapshot!(operation(&grid, &running) + &operation(&grid, &done));
     }
 
     /// The compact view is the contract with every caller, so it is pinned.

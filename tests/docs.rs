@@ -286,6 +286,8 @@ const UNRUNNABLE: &[(&str, &str)] = &[
     ("wiki grant", "a write"),
     ("wiki regrant", "a write"),
     ("wiki revoke", "a write"),
+    ("wiki clone", "a write"),
+    ("wiki operation", "names an operation only a real clone has"),
 ];
 
 /// Every `ytcli <group> <verb>` in README or the cheatsheet is either exercised

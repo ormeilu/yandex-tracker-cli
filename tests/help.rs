@@ -126,13 +126,18 @@ fn the_examples_only_use_flags_that_exist() {
 }
 
 /// The command an example line calls: lower-case words are verbs, and anything
-/// with a capital, a digit or a dash is already an argument.
+/// with a capital, a digit or a leading dash is already an argument. A dash
+/// inside a word is part of a verb — `clone-grid`, `delete-comment` — and a
+/// dash in front starts a flag or means stdin.
 fn command_of(line: &str) -> Vec<String> {
     line.trim()
         .strip_prefix("ytcli")
         .unwrap_or_default()
         .split_whitespace()
-        .take_while(|word| word.chars().all(|c| c.is_ascii_lowercase()))
+        .take_while(|word| {
+            word.starts_with(|c: char| c.is_ascii_lowercase())
+                && word.chars().all(|c| c.is_ascii_lowercase() || c == '-')
+        })
         .take(2)
         .map(str::to_owned)
         .collect()

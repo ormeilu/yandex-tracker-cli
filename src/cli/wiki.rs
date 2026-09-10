@@ -264,6 +264,47 @@ pub enum WikiCommand {
         #[arg(long)]
         allow_selflock: bool,
     },
+    /// Copy a page to a new address, and wait for the copy.
+    #[command(name = "clone", long_about = crate::cli::help::md(crate::cli::help::WIKI_CLONE))]
+    ClonePage {
+        /// The page's slug, or its address.
+        page: String,
+        /// Where the copy goes; a page there already is a refusal.
+        target: String,
+        /// The copy's title, when it should not keep the original's.
+        #[arg(long, short = 't')]
+        title: Option<String>,
+        /// Subscribe to the copy.
+        #[arg(long)]
+        subscribe: bool,
+        /// Print the operation and return, rather than wait for the copy.
+        #[arg(long)]
+        no_wait: bool,
+    },
+    /// Copy a grid onto a page, and wait for the copy.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_CLONE_GRID))]
+    CloneGrid {
+        /// The grid's id, as `wiki grids` lists it.
+        grid: String,
+        /// The page the copy goes on; created if it is not there.
+        target: String,
+        #[arg(long, short = 't')]
+        title: Option<String>,
+        /// Copy the rows too, not only the columns.
+        #[arg(long)]
+        with_data: bool,
+        /// Print the operation and return, rather than wait for the copy.
+        #[arg(long)]
+        no_wait: bool,
+    },
+    /// Show where a clone has got to.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_OPERATION))]
+    Operation {
+        /// `clone` for a page, `clone_inline_grid` for a grid.
+        #[arg(value_parser = ["clone", "clone_inline_grid"])]
+        kind: String,
+        id: String,
+    },
     /// Download one file attached to a page.
     #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_DOWNLOAD))]
     Download {
@@ -437,6 +478,45 @@ pub async fn run(command: &WikiCommand, session: &Session) -> ExitCode {
             all: _,
             allow_selflock,
         } => revoke(page, access.as_deref(), *allow_selflock, session).await,
+        WikiCommand::ClonePage {
+            page,
+            target,
+            title,
+            subscribe,
+            no_wait,
+        } => {
+            let mut body = serde_json::json!({});
+            if let Some(title) = title {
+                body["title"] = serde_json::Value::String(title.clone());
+            }
+            if *subscribe {
+                body["subscribe_me"] = serde_json::Value::Bool(true);
+            }
+            clone_page(page, target, body, *no_wait, session).await
+        }
+        WikiCommand::CloneGrid {
+            grid,
+            target,
+            title,
+            with_data,
+            no_wait,
+        } => {
+            let mut body = serde_json::json!({});
+            if let Some(title) = title {
+                body["title"] = serde_json::Value::String(title.clone());
+            }
+            if *with_data {
+                body["with_data"] = serde_json::Value::Bool(true);
+            }
+            clone_grid(grid, target, body, *no_wait, session).await
+        }
+        WikiCommand::Operation { kind, id } => {
+            let operation = crate::api::wiki::WikiOperation {
+                id: id.clone(),
+                kind: kind.clone(),
+            };
+            show_operation(&operation, session).await
+        }
         WikiCommand::Download {
             page,
             file,
@@ -1229,6 +1309,211 @@ async fn revoke(
             });
             ExitCode::Success
         }
+        Err(error) => failed(&error),
+    }
+}
+
+/// How long a clone is waited for before the command hands back its id.
+const CLONE_WAIT: std::time::Duration = std::time::Duration::from_secs(600);
+
+/// The refusals the Wiki documents for a clone, in words a caller can act on.
+const CLONE_REFUSALS: [(&str, &str); 6] = [
+    (
+        "IS_CLOUD_PAGE",
+        "the page is a cloud page, which the Wiki cannot clone",
+    ),
+    ("SLUG_OCCUPIED", "a page already exists at the target"),
+    ("SLUG_RESERVED", "the target address is reserved"),
+    (
+        "FORBIDDEN",
+        "this account may not create a page at the target",
+    ),
+    ("QUOTA_EXCEEDED", "the organisation's Wiki quota is used up"),
+    (
+        "CLUSTER_BLOCKED",
+        "the Wiki is not taking writes here right now",
+    ),
+];
+
+/// A refused clone, told by its `error_code` when the Wiki gave one.
+fn clone_refused(error: &crate::api::error::ApiError) -> ExitCode {
+    if let crate::api::error::ApiError::Rejected { message, .. } = error
+        && let Some((code, meaning)) = CLONE_REFUSALS
+            .iter()
+            .find(|(code, _)| message.contains(code))
+    {
+        return report(
+            &format!("the Wiki would not clone it: {meaning} ({code})"),
+            ExitCode::ApiRejected,
+        );
+    }
+    failed(error)
+}
+
+/// Copy a page.
+async fn clone_page(
+    page: &str,
+    target: &str,
+    mut body: serde_json::Value,
+    no_wait: bool,
+    session: &Session,
+) -> ExitCode {
+    let slug = match named(page) {
+        Ok(slug) => slug,
+        Err(code) => return code,
+    };
+    let target = match named(target) {
+        Ok(target) => target,
+        Err(code) => return code,
+    };
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+    body["target"] = serde_json::Value::String(target.clone());
+    if let Some(code) = gated(
+        &format!("clone wiki page `{slug}` to `{target}`"),
+        &body,
+        false,
+        session,
+    ) {
+        return code;
+    }
+
+    let id = match client.wiki_page_id(&slug).await {
+        Ok(id) => id,
+        Err(error) => return failed(&error),
+    };
+    let operation = match client.wiki_clone_page(id, &body).await {
+        Ok(operation) => operation,
+        Err(error) => return clone_refused(&error),
+    };
+    followed(&client, &operation, no_wait, |done| {
+        format!("cloned {slug} to {}\n", done.page_slug().unwrap_or(&target))
+    })
+    .await
+}
+
+/// Copy a grid onto a page.
+async fn clone_grid(
+    grid: &str,
+    target: &str,
+    mut body: serde_json::Value,
+    no_wait: bool,
+    session: &Session,
+) -> ExitCode {
+    let target = match named(target) {
+        Ok(target) => target,
+        Err(code) => return code,
+    };
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+    body["target"] = serde_json::Value::String(target.clone());
+    if let Some(code) = gated(
+        &format!("clone wiki grid `{grid}` onto `{target}`"),
+        &body,
+        false,
+        session,
+    ) {
+        return code;
+    }
+
+    let operation = match client.wiki_clone_grid(grid.trim(), &body).await {
+        Ok(operation) => operation,
+        Err(error) => return clone_refused(&error),
+    };
+    followed(&client, &operation, no_wait, |done| {
+        format!(
+            "cloned grid {grid} to {}: grid {}\n",
+            done.page_slug().unwrap_or(&target),
+            done.grid_id().as_deref().unwrap_or("-")
+        )
+    })
+    .await
+}
+
+/// Wait for an operation to end and say what it made — or, with `--no-wait`
+/// or past the deadline, hand back the command that asks again.
+///
+/// Progress goes to stderr, and only to a terminal; stdout carries the one
+/// line of result.
+async fn followed(
+    client: &crate::api::Client,
+    operation: &crate::api::wiki::WikiOperation,
+    no_wait: bool,
+    describe: impl FnOnce(&crate::api::wiki::OperationStatus) -> String,
+) -> ExitCode {
+    let ask_again = format!("ytcli wiki operation {} {}", operation.kind, operation.id);
+    if no_wait {
+        emit(&format!(
+            "started operation {} {}; follow it with `{ask_again}`\n",
+            operation.kind, operation.id
+        ));
+        return ExitCode::Success;
+    }
+
+    let walk = crate::render::progress::Walk::start("cloning");
+    let deadline = std::time::Instant::now() + CLONE_WAIT;
+    let status = loop {
+        let status = match client.wiki_operation(operation).await {
+            Ok(status) => status,
+            Err(error) => {
+                walk.finish();
+                return failed(&error);
+            }
+        };
+        if status.is_done() {
+            break status;
+        }
+        walk.say(&status.percentage.map_or_else(
+            || format!("cloning: {}", status.status),
+            |percentage| format!("cloning: {percentage:.0}%"),
+        ));
+        if std::time::Instant::now() >= deadline {
+            walk.finish();
+            return report(
+                &format!("the Wiki is still working on it; ask again with `{ask_again}`"),
+                ExitCode::Failure,
+            );
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    };
+    walk.finish();
+
+    if status.status == "failed" {
+        return report(
+            &format!(
+                "the clone failed: {}",
+                status
+                    .details
+                    .as_deref()
+                    .unwrap_or("the Wiki gave no reason")
+            ),
+            ExitCode::ApiRejected,
+        );
+    }
+    emit(&describe(&status));
+    ExitCode::Success
+}
+
+/// Where an operation has got to.
+async fn show_operation(
+    operation: &crate::api::wiki::WikiOperation,
+    session: &Session,
+) -> ExitCode {
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+
+    match client.wiki_operation(operation).await {
+        Ok(status) => finish(match session.render.format {
+            Format::Text => Ok(render::operation(operation, &status)),
+            Format::JsonRaw => machine(&status, Format::Json),
+            other => machine(&status, other),
+        }),
         Err(error) => failed(&error),
     }
 }

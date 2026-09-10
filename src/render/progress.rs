@@ -49,6 +49,12 @@ impl Walk {
         bar.set_message(format!("page {page}: {collected} of {of}"));
     }
 
+    /// Report progress in words, for work that is not counted in pages.
+    pub fn say(&self, message: &str) {
+        let Some(bar) = &self.0 else { return };
+        bar.set_message(message.to_owned());
+    }
+
     /// Take the indicator down, leaving the terminal as it was found.
     pub fn finish(self) {
         if let Some(bar) = self.0 {
