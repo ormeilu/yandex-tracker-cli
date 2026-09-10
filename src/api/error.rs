@@ -14,11 +14,11 @@ pub enum ApiError {
     Unauthorized,
     #[error("forbidden (403): the account lacks rights, or the organisation header is wrong")]
     Forbidden,
-    // The Wiki's 403 has a likelier cause than Tracker's: a token issued before
-    // the Wiki permission was added to the application. Saying so turns a
-    // rights puzzle into one command.
+    // The Wiki's refusal has a likelier cause than Tracker's: a token issued
+    // before the Wiki permission was added to the application. Saying so turns
+    // a rights puzzle into one command.
     #[error(
-        "the Wiki refused this token (403): it needs the wiki:read permission — sign in again \
+        "the Wiki refused this token: it needs the wiki:read permission — sign in again \
          with `ytcli auth login` — or this account cannot see that page"
     )]
     WikiForbidden,

@@ -272,6 +272,11 @@ async fn status_reports_identity_and_what_the_profile_can_see() {
         .respond_with(ResponseTemplate::new(200).set_body_json(7))
         .mount(&harness.server)
         .await;
+    Mock::given(method("GET"))
+        .and(path("/v1/users/me"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(wiki_me()))
+        .mount(&harness.server)
+        .await;
 
     let output = harness.run_raw(&["auth", "status"]).assert().success();
     let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
@@ -284,6 +289,42 @@ async fn status_reports_identity_and_what_the_profile_can_see() {
     assert!(stdout.contains("queues: 2   projects: 3   goals: 1   my open issues: 7"));
     assert!(stdout.contains("Storage rework (12), Billing (13), +1 more"));
     assert!(stdout.contains("PROJ, INFRA"));
+    assert!(stdout.contains("wiki: ok"), "{stdout}");
+}
+
+/// `GET /v1/users/me`, as the Wiki API reference documents it.
+fn wiki_me() -> serde_json::Value {
+    serde_json::json!({
+        "username": "ilubenets",
+        "identity": {"uid": "1120000000000219"},
+        "org": {"dir_id": "12345"}
+    })
+}
+
+/// A token from before the Wiki permission was granted is the usual case, and
+/// `auth status` is where it should be found — not on the first `wiki` command.
+/// The Wiki documents 401 for it; 403 is the same story told differently.
+#[tokio::test]
+async fn status_says_when_the_token_cannot_read_the_wiki() {
+    for refusal in [401, 403] {
+        let harness = Harness::new().await;
+        status_answers(&harness).await;
+        Mock::given(method("GET"))
+            .and(path("/v1/users/me"))
+            .respond_with(ResponseTemplate::new(refusal))
+            .mount(&harness.server)
+            .await;
+
+        // Not `--active-only`: the harness config names no default profile, so
+        // nothing would be active and nothing would be checked.
+        let output = harness.run_raw(&["auth", "status"]).assert().success();
+        let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+        assert!(
+            stdout.contains("wiki: no access — the token lacks wiki:read"),
+            "{refusal}: {stdout}"
+        );
+    }
 }
 
 /// A profile that cannot see projects should still report its queues rather

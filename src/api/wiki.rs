@@ -90,14 +90,30 @@ impl Client {
     }
 }
 
-/// A 403 from the Wiki, told apart from Tracker's.
+impl Client {
+    /// Whether the Wiki accepts this token in this organisation.
+    ///
+    /// `GET /v1/users/me`: the smallest request the Wiki answers, and one that
+    /// needs both the token and the organisation header to be right. No page is
+    /// read, so the answer costs one request and exposes nothing.
+    pub async fn wiki_reachable(&self) -> Result<(), ApiError> {
+        let url = format!("{}/v1/users/me", self.wiki_url);
+        self.send_url(reqwest::Method::GET, &url, None, "the Wiki's current user")
+            .await
+            .map(|_| ())
+            .map_err(refused)
+    }
+}
+
+/// A refusal from the Wiki, told apart from Tracker's.
 ///
-/// Tracker's usual cause is the wrong organisation header; the Wiki's is a
-/// token issued before `wiki:read` was granted, and the fix for that is one
-/// command, which the error can name.
+/// The Wiki answers 401 to a token it will not serve — the documented case — and
+/// 403 to one that lacks rights, and both most often mean a token issued before
+/// `wiki:read` was granted. Tracker's 401 means the token itself is dead; the
+/// Wiki's is fixed by one command, which the error can name.
 fn refused(error: ApiError) -> ApiError {
     match error {
-        ApiError::Forbidden => ApiError::WikiForbidden,
+        ApiError::Forbidden | ApiError::Unauthorized => ApiError::WikiForbidden,
         other => other,
     }
 }

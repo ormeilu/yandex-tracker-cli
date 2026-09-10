@@ -630,6 +630,18 @@ async fn reach(
             keys.join(", ")
         );
     }
+
+    // One request, answering what people need before their first `wiki`
+    // command: whether this token was granted the Wiki at all.
+    let wiki = match client.wiki_reachable().await {
+        Ok(()) => paint.paint("ok", Palette::ok()),
+        Err(crate::api::error::ApiError::WikiForbidden) => paint.paint(
+            "no access — the token lacks wiki:read; sign in again with `ytcli auth login`",
+            Palette::warn(),
+        ),
+        Err(_) => "-".to_owned(),
+    };
+    let _ = writeln!(out, "  {} {wiki}", paint.paint("wiki:", Palette::label()));
 }
 
 fn count_of<T>(page: &crate::api::models::Page<T>) -> String {

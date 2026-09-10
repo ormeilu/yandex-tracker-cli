@@ -49,7 +49,7 @@ code it prints, and wait: it returns once they confirm. `ytcli auth refresh`
 renews a signed-in token; changing what a token may do is another `auth login`.
 
 ```bash
-ytcli auth status        # every profile: identity, org, queues, projects, your open issues
+ytcli auth status        # every profile: identity, org, queues, projects, your open issues, Wiki access
 ytcli auth status --brief --active-only
 ytcli auth list          # accounts and profiles, and whether a token is stored
 ```

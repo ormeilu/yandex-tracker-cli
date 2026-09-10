@@ -1058,8 +1058,9 @@ ytcli auth status --brief
 ytcli auth status --active-only
 ```
 
-The full form asks Tracker for queues, projects, goals and your open issues, so
-it costs several requests per profile; `--brief` verifies identity only.
+The full form asks Tracker for queues, projects, goals and your open issues, and
+the Wiki whether it accepts the token (`wiki: ok`, or what to do if not), so it
+costs several requests per profile; `--brief` verifies identity only.
 
 Exit code 3 means the active profile has no usable credentials. A profile that
 fails while the active one works is reported but does not change the exit code:

@@ -18,7 +18,7 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
 
 ## auth
   ytcli auth status                     every profile: identity, org, queues, projects,
-                                        goals, your open issues. --brief for identity only,
+                                        goals, your open issues, Wiki access. --brief for identity only,
                                         --active-only for just the profile in play
   ytcli auth list                       accounts and profiles
   ytcli auth login                      in a terminal: asks each step, token as a password
