@@ -92,18 +92,47 @@ impl Client {
 /// The slug in whatever was pasted: a slug already, or a page's full address.
 ///
 /// Query and fragment go, and so do the slashes around the path, which the
-/// browser adds and the API does not want.
+/// browser adds and the API does not want. A copied address arrives
+/// percent-encoded — every Cyrillic slug does — and is decoded here, or it
+/// would be encoded a second time on its way to the API and name no page.
 #[must_use]
 pub fn slug_of(target: &str) -> String {
     let path = match target.split_once("://") {
         Some((_, rest)) => rest.split_once('/').map_or("", |(_, path)| path),
         None => target,
     };
-    path.split(['?', '#'])
-        .next()
-        .unwrap_or_default()
-        .trim_matches('/')
-        .to_owned()
+    decode(
+        path.split(['?', '#'])
+            .next()
+            .unwrap_or_default()
+            .trim_matches('/'),
+    )
+}
+
+/// `%D0%B7` back to `з`. Text that does not decode to UTF-8 is kept as typed:
+/// a slug with a literal `%` in it is rarer than a mangled one, but not ours
+/// to guess at.
+fn decode(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut at = 0;
+    while at < bytes.len() {
+        let hex = bytes
+            .get(at + 1..at + 3)
+            .and_then(|pair| std::str::from_utf8(pair).ok())
+            .and_then(|pair| u8::from_str_radix(pair, 16).ok());
+        match (bytes[at], hex) {
+            (b'%', Some(byte)) => {
+                decoded.push(byte);
+                at += 3;
+            }
+            (byte, _) => {
+                decoded.push(byte);
+                at += 1;
+            }
+        }
+    }
+    String::from_utf8(decoded).unwrap_or_else(|_| text.to_owned())
 }
 
 /// Percent-encoding for one query value. A slug is a path, and its slashes
@@ -141,6 +170,21 @@ mod tests {
             slug_of("https://wiki.yandex.ru/users/ilubenets/runbook/?from=search#deploy"),
             "users/ilubenets/runbook"
         );
+    }
+
+    /// The browser hands over a Cyrillic slug percent-encoded; sent on as it
+    /// is, it would be encoded twice and name no page.
+    #[test]
+    fn a_copied_address_is_decoded() {
+        assert_eq!(
+            slug_of(
+                "https://wiki.yandex.ru/users/%D1%8F%D0%BD/%D0%B7%D0%B0%D0%BC%D0%B5%D1%82%D0%BA%D0%B8/"
+            ),
+            "users/ян/заметки"
+        );
+        // Not a valid escape, or not UTF-8 once decoded: kept as typed.
+        assert_eq!(slug_of("users/100%/x"), "users/100%/x");
+        assert_eq!(slug_of("users/%FF"), "users/%FF");
     }
 
     #[test]
