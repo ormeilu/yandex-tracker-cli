@@ -1,0 +1,22 @@
+{
+  "results": [
+    {
+      "url": "https://wiki.yandex.ru/users/ilubenets/runbook/",
+      "slug": "users/ilubenets/runbook",
+      "title": "Deploy runbook",
+      "content": "…tag the release, then watch the pipeline…",
+      "type": "page",
+      "modified_at": "2026-09-01T10:15:00Z"
+    },
+    {
+      "url": "https://wiki.yandex.ru/users/ilubenets/runbook/.files/rollback.pdf",
+      "slug": "users/ilubenets/runbook/.files/rollback.pdf",
+      "title": "rollback.pdf",
+      "content": "",
+      "type": "file",
+      "modified_at": "2026-08-20T08:00:00Z"
+    }
+  ],
+  "next_cursor": "2",
+  "prev_cursor": null
+}

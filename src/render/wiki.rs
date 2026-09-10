@@ -2,10 +2,45 @@
 
 use std::fmt::Write as _;
 
-use crate::api::wiki::{CursorPage, WikiPage, WikiPageRef};
+use crate::api::wiki::{CursorPage, WikiHits, WikiPage, WikiPageRef};
 use crate::render::Context;
 use crate::render::style::Palette;
-use crate::render::table::{Column, cursor_tally, render};
+use crate::render::table::{Column, cursor_tally, open_page_tally, render};
+
+/// Search hits: where each one is, what kind, when it last changed, and its
+/// title — dimmed, because somebody else wrote it.
+///
+/// The excerpt the Wiki sends with each hit is left to `--format json`: it is
+/// somebody else's words, cut mid-sentence, and `wiki get` reads the real
+/// thing for one request.
+#[must_use]
+pub fn hits(found: &WikiHits, ctx: &Context) -> String {
+    let columns = [
+        Column::whole("SLUG", 44, Palette::key()),
+        Column::new("TYPE", 5, anstyle::Style::new()),
+        Column::new("MODIFIED", 10, Palette::label()),
+        Column::new("TITLE", 50, Palette::untrusted()),
+    ];
+    let rows: Vec<Vec<String>> = found
+        .results
+        .iter()
+        .map(|hit| {
+            vec![
+                hit.slug.clone(),
+                hit.kind.clone(),
+                // The date alone: the time of a last change is noise in a list.
+                hit.modified_at
+                    .as_deref()
+                    .map_or_else(|| "-".to_owned(), |at| at.chars().take(10).collect()),
+                hit.title.clone(),
+            ]
+        })
+        .collect();
+
+    let mut out = render(&columns, &rows, ctx);
+    out.push_str(&open_page_tally(found.results.len(), found.next_page, ctx));
+    out
+}
 
 /// The pages under one.
 ///
@@ -122,6 +157,34 @@ mod tests {
             next_cursor: Some("eyJpZCI6NDUyMn0=".to_owned()),
         };
         insta::assert_snapshot!(pages(&list, &ctx()));
+    }
+
+    /// Hits with another page to come; titles are data, the tally names the
+    /// next page because search is numbered.
+    #[test]
+    fn hits_view_is_stable() {
+        let found = WikiHits {
+            results: vec![
+                crate::api::wiki::WikiHit {
+                    slug: "users/ilubenets/runbook".to_owned(),
+                    title: "Deploy runbook".to_owned(),
+                    kind: "page".to_owned(),
+                    modified_at: Some("2026-09-01T10:15:00Z".to_owned()),
+                    url: None,
+                    snippet: Some("tag the release".to_owned()),
+                },
+                crate::api::wiki::WikiHit {
+                    slug: "users/ilubenets/runbook/.files/rollback.pdf".to_owned(),
+                    title: "rollback.pdf".to_owned(),
+                    kind: "file".to_owned(),
+                    modified_at: None,
+                    url: None,
+                    snippet: None,
+                },
+            ],
+            next_page: Some(2),
+        };
+        insta::assert_snapshot!(hits(&found, &ctx()));
     }
 
     /// The compact view is the contract with every caller, so it is pinned.

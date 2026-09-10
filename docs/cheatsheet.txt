@@ -222,6 +222,9 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   ytcli wiki list SLUG|URL [--cursor C]
                                         pages under one, any depth: slug and id. The Wiki gives no
                                         total: `shown N of more than N — next: --cursor C`
+  ytcli wiki find TEXT [--type page|file] [--page N]
+                                        search pages and files: slug, type, last change, title.
+                                        No total here either; search stops at page 500
 
 ## format
   text      compact key/value; fixed field order so caches and scripts hold

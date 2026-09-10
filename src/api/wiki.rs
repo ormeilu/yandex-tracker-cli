@@ -51,6 +51,45 @@ pub struct CursorPage<T> {
     pub next_cursor: Option<String>,
 }
 
+/// The last page of hits the Wiki's search will serve.
+pub const LAST_SEARCH_PAGE: u32 = 500;
+
+/// One search hit: a page, or a file attached to one.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WikiHit {
+    pub slug: String,
+    pub title: String,
+    /// `page` or `file`.
+    #[serde(rename = "type")]
+    pub kind: String,
+    #[serde(default)]
+    pub modified_at: Option<String>,
+    #[serde(default)]
+    pub url: Option<String>,
+    /// The Wiki's excerpt of the matching text — somebody else's words. The
+    /// Wiki calls it `content`; it is not the page's content, so our schema
+    /// does not either.
+    #[serde(default, rename(deserialize = "content"))]
+    pub snippet: Option<String>,
+}
+
+/// A page of search hits.
+///
+/// Search is the one Wiki listing that pages by number, and it gives no total
+/// either, so the next page number is all a caller can be told.
+#[derive(Debug, Clone, Serialize)]
+pub struct WikiHits {
+    pub results: Vec<WikiHit>,
+    pub next_page: Option<u32>,
+}
+
+#[derive(Deserialize)]
+struct SearchAnswer {
+    results: Vec<WikiHit>,
+    #[serde(default)]
+    next_cursor: Option<String>,
+}
+
 /// The page as the Wiki sends it.
 #[derive(Deserialize)]
 struct Answer {
@@ -140,6 +179,36 @@ impl Client {
             .await
             .map_err(refused)?;
         serde_json::from_value(value).map_err(ApiError::Decode)
+    }
+
+    /// `POST /v1/search` — a read, whatever the method says.
+    ///
+    /// `page` is the Wiki's numbered `cursor` (1..=500); the string cursors it
+    /// answers with only say whether another page exists.
+    pub async fn wiki_search(
+        &self,
+        query: &str,
+        kind: Option<&str>,
+        page: u32,
+        limit: u32,
+    ) -> Result<WikiHits, ApiError> {
+        let mut body = serde_json::json!({ "query": query, "cursor": page, "limit": limit });
+        if let Some(kind) = kind {
+            body["filters"] = serde_json::json!({ "type": kind });
+        }
+        let url = format!("{}/v1/search", self.wiki_url);
+        let (value, _) = self
+            .send_url(reqwest::Method::POST, &url, Some(&body), "wiki search")
+            .await
+            .map_err(refused)?;
+        let answer: SearchAnswer = serde_json::from_value(value).map_err(ApiError::Decode)?;
+
+        let more =
+            answer.next_cursor.is_some_and(|cursor| !cursor.is_empty()) && page < LAST_SEARCH_PAGE;
+        Ok(WikiHits {
+            results: answer.results,
+            next_page: more.then_some(page + 1),
+        })
     }
 
     /// Whether the Wiki accepts this token in this organisation.

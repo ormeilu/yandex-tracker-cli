@@ -7,7 +7,7 @@
 
 use clap::Subcommand;
 
-use crate::api::wiki::slug_of;
+use crate::api::wiki::{LAST_SEARCH_PAGE, slug_of};
 use crate::cli::{Session, emit, not_implemented, report};
 use crate::exit::ExitCode;
 use crate::render::{Format, RenderError, machine, wiki as render};
@@ -34,6 +34,12 @@ pub enum WikiCommand {
     Find {
         /// Words to look for.
         text: String,
+        /// Only pages, or only attached files.
+        #[arg(long = "type", value_parser = ["page", "file"])]
+        kind: Option<String>,
+        /// Which page of hits, from 1; the Wiki's search stops at 500.
+        #[arg(long, default_value_t = 1)]
+        page: u32,
     },
     /// Show a page's comments.
     #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_COMMENTS))]
@@ -53,7 +59,7 @@ pub async fn run(command: &WikiCommand, session: &Session) -> ExitCode {
     match command {
         WikiCommand::Get { page } => get(page, session).await,
         WikiCommand::List { page, cursor } => list(page, cursor.as_deref(), session).await,
-        WikiCommand::Find { .. } => not_implemented("wiki find"),
+        WikiCommand::Find { text, kind, page } => find(text, kind.as_deref(), *page, session).await,
         WikiCommand::Comments { .. } => not_implemented("wiki comments"),
         WikiCommand::Attachments { .. } => not_implemented("wiki attachments"),
     }
@@ -100,6 +106,35 @@ async fn list(page: &str, cursor: Option<&str>, session: &Session) -> ExitCode {
     match client.wiki_descendants(&slug, cursor, page_size).await {
         Ok(found) => finish(match session.render.format {
             Format::Text => Ok(render::pages(&found, &session.render)),
+            Format::JsonRaw => machine(&found, Format::Json),
+            other => machine(&found, other),
+        }),
+        Err(error) => {
+            let code = error.exit_code();
+            report(&error, code)
+        }
+    }
+}
+
+/// Search pages and files.
+async fn find(text: &str, kind: Option<&str>, page: u32, session: &Session) -> ExitCode {
+    if !(1..=LAST_SEARCH_PAGE).contains(&page) {
+        return report(
+            &format!("--page runs from 1 to {LAST_SEARCH_PAGE}: the Wiki's search stops there"),
+            ExitCode::ConfirmationRequired,
+        );
+    }
+    let client = match session.client() {
+        Ok(client) => client,
+        Err(code) => return code,
+    };
+
+    // The profile's list length, within the 1..50 search accepts.
+    let limit = u32::try_from(session.display().limit.clamp(1, 50)).unwrap_or(50);
+
+    match client.wiki_search(text, kind, page, limit).await {
+        Ok(found) => finish(match session.render.format {
+            Format::Text => Ok(render::hits(&found, &session.render)),
             Format::JsonRaw => machine(&found, Format::Json),
             other => machine(&found, other),
         }),

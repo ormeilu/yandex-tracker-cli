@@ -261,6 +261,16 @@ pub fn tally(shown: usize, total: Option<u64>, next_page: Option<u32>, ctx: &Con
 /// them — still can be kept.
 #[must_use]
 pub fn cursor_tally(shown: usize, next: Option<&str>, ctx: &Context) -> String {
+    open_tally(shown, next.map(|cursor| format!("--cursor {cursor}")), ctx)
+}
+
+/// [`cursor_tally`] for the one Wiki listing that pages by number: search.
+#[must_use]
+pub fn open_page_tally(shown: usize, next_page: Option<u32>, ctx: &Context) -> String {
+    open_tally(shown, next_page.map(|page| format!("--page {page}")), ctx)
+}
+
+fn open_tally(shown: usize, next: Option<String>, ctx: &Context) -> String {
     let paint = ctx.painter();
     let counted = match next {
         Some(_) => format!("shown {shown} of more than {shown}"),
@@ -268,8 +278,8 @@ pub fn cursor_tally(shown: usize, next: Option<&str>, ctx: &Context) -> String {
     };
 
     let mut out = paint.paint(&counted, Palette::label());
-    if let Some(cursor) = next {
-        out.push_str(&paint.paint(&format!(" — next: --cursor {cursor}"), Palette::warn()));
+    if let Some(next) = next {
+        out.push_str(&paint.paint(&format!(" — next: {next}"), Palette::warn()));
     }
     out.push('\n');
     out

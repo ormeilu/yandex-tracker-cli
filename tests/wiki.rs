@@ -239,8 +239,7 @@ async fn listing_under_a_missing_page_is_not_found() {
 async fn the_verbs_not_built_yet_say_so() {
     let harness = Harness::new().await;
     for verb in [
-        &["wiki", "find", "deploy"][..],
-        &["wiki", "comments", "users/ilubenets/runbook"],
+        &["wiki", "comments", "users/ilubenets/runbook"][..],
         &["wiki", "attachments", "users/ilubenets/runbook"],
     ] {
         harness.run(verb).assert().code(64);

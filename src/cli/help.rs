@@ -1200,13 +1200,20 @@ ends with `shown N of more than N — next: --cursor …` while more follow, and
 same reason.";
 
 pub const WIKI_FIND: &str = "\
-Search Yandex Wiki pages and files.
+Search Yandex Wiki pages and attached files.
 
 ```
 ytcli wiki find \"deploy runbook\"
+ytcli wiki find rollback --type page --page 2
 ```
 
-Not built yet (#82): it answers \"not implemented\" and exits 64.";
+Each hit's slug — what `wiki get` takes — its type, its last change and its
+title. The excerpt the Wiki sends with each hit is in `--format json` as
+`snippet`; `wiki get` reads the page itself.
+
+Search gives no total either, and it pages by number: the list ends with
+`shown N of more than N — next: --page N` while more follow. It stops at page
+500.";
 
 pub const WIKI_COMMENTS: &str = "\
 Show the comments on a Yandex Wiki page.
