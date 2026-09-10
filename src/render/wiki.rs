@@ -39,6 +39,7 @@ pub fn page(page: &WikiPage, ctx: &Context) -> String {
         crate::render::text::quoted_block(
             &mut out,
             &format!("wiki:{}", page.slug),
+            crate::render::untrusted::Author::Wiki,
             &body,
             withheld,
             ctx,

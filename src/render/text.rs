@@ -178,6 +178,7 @@ pub fn comments(key: &str, comments: &[Comment], ctx: &Context) -> String {
         quoted_block(
             &mut out,
             &format!("{key}/comment/{} by {author}", comment.id),
+            untrusted::Author::Tracker,
             &comment.text,
             0,
             ctx,
@@ -584,6 +585,7 @@ fn description_section(out: &mut String, issue: &Issue, ctx: &Context) {
     quoted_block(
         out,
         &format!("{}/description", issue.key),
+        untrusted::Author::Tracker,
         &body,
         withheld,
         ctx,
@@ -600,6 +602,7 @@ fn description_section(out: &mut String, issue: &Issue, ctx: &Context) {
 pub(crate) fn quoted_block(
     out: &mut String,
     source: &str,
+    author: untrusted::Author,
     body: &str,
     withheld: usize,
     ctx: &Context,
@@ -611,7 +614,7 @@ pub(crate) fn quoted_block(
         let _ = writeln!(
             out,
             "{}",
-            label(&format!("--- {source} (written by Tracker users)"))
+            label(&format!("--- {source} (written by {})", author.who()))
         );
         out.push_str(&crate::render::markdown::quoted(
             body,
@@ -626,7 +629,10 @@ pub(crate) fn quoted_block(
         let _ = writeln!(
             out,
             "{}",
-            paint.paint(&untrusted::fence(source, body), Palette::untrusted())
+            paint.paint(
+                &untrusted::fence(source, author, body),
+                Palette::untrusted()
+            )
         );
     }
 
