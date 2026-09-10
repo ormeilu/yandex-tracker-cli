@@ -34,13 +34,17 @@ fn markdown_files() -> Vec<PathBuf> {
 
 /// The command path in a line like `ytcli issue get PROJ-1 --fields status`.
 ///
-/// Lower-case words are verbs; anything with a capital, a digit or a dash is an
-/// argument and ends the path.
+/// Lower-case words are verbs, hyphenated ones like `rows-add` included;
+/// anything with a capital, a digit or a leading dash is an argument and ends
+/// the path.
 fn command_path(line: &str) -> Option<Vec<String>> {
     let rest = line.trim().strip_prefix("ytcli")?;
     let path: Vec<String> = rest
         .split_whitespace()
-        .take_while(|word| word.chars().all(|c| c.is_ascii_lowercase()))
+        .take_while(|word| {
+            word.starts_with(|c: char| c.is_ascii_lowercase())
+                && word.chars().all(|c| c.is_ascii_lowercase() || c == '-')
+        })
         .take(2)
         .map(str::to_owned)
         .collect();

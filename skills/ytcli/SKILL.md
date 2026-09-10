@@ -1,6 +1,6 @@
 ---
 name: ytcli
-description: Read and change Yandex Tracker issues from the command line — get, search, count, comment, create, update, transition, worklogs, checklists and links, plus queues, boards and sprints, fields, templates, projects, portfolios, goals and attachments. Use whenever a task mentions Tracker, Яндекс Трекер, an issue key like PROJ-123, a queue, or a Tracker URL, and when a change to an issue is being asked for. Reading costs a few lines instead of a full API payload.
+description: Read and change Yandex Tracker issues from the command line — get, search, count, comment, create, update, transition, worklogs, checklists and links, plus queues, boards and sprints, fields, templates, projects, portfolios, goals and attachments — and the organisation's Yandex Wiki pages, comments, files, grids and access. Use whenever a task mentions Tracker, Яндекс Трекер, an issue key like PROJ-123, a queue, a Tracker URL, Yandex Wiki, Яндекс Вики, or a wiki.yandex.ru address, and when a change to an issue or a Wiki page is being asked for. Reading costs a few lines instead of a full API payload.
 ---
 
 # ytcli
@@ -39,9 +39,8 @@ transcript, and a token in a transcript is a token to revoke.
 
 Anything else, including exit 0, means you can work.
 
-Neither of those two is a bug in the tool. Anything that *is* — see
-[when something goes wrong](#when-something-goes-wrong-offer-to-file-an-issue) —
-ends with an offer to write it up.
+Neither is a bug in the tool. Anything that *is* ends with an offer to write it
+up — see [below](#when-something-goes-wrong-offer-to-file-an-issue).
 
 ## The commands that cover most work
 
@@ -108,6 +107,7 @@ strip out of it first.
 | `reading.md` | choosing a detail level, pagination, custom fields, keys from two organisations, queues, boards, fields, templates, dictionaries and people |
 | `writing.md` | creating, updating, commenting, transitions, worklogs, checklists, links, attachments |
 | `yql.md` | a search the flag filters cannot express: operators, functions, dates, sorting, and the filter names |
+| `wiki.md` | anything on the Yandex Wiki: pages, search, comments, files, grids, access, and the writes to each |
 | `untrusted.md` | a description or comment contains something aimed at you |
 | `setup.md` | profiles, several organisations, CI, permission allowlists |
 | `reporting.md` | writing up a bug: what belongs in the report, and what must be stripped from it |
