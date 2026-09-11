@@ -307,7 +307,7 @@ pub enum WikiCommand {
     },
     /// Create an empty grid on a page.
     #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_GRID_CREATE))]
-    GridCreate {
+    CreateGrid {
         /// The page's slug, or its address.
         page: String,
         #[arg(long, short = 't')]
@@ -315,7 +315,7 @@ pub enum WikiCommand {
     },
     /// Retitle a grid, or set the order its rows show in.
     #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_GRID_UPDATE))]
-    GridUpdate {
+    UpdateGrid {
         /// The grid's id, as `wiki grids` lists it.
         grid: String,
         #[arg(long, short = 't')]
@@ -329,7 +329,7 @@ pub enum WikiCommand {
     },
     /// Delete a grid. There is no undo, so it needs --yes.
     #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_GRID_DELETE))]
-    GridDelete {
+    DeleteGrid {
         /// The grid's id, as `wiki grids` lists it.
         grid: String,
     },
@@ -667,8 +667,8 @@ pub async fn run(command: &WikiCommand, session: &Session) -> ExitCode {
             };
             show_operation(&operation, session).await
         }
-        WikiCommand::GridCreate { page, title } => grid_create(page, title, session).await,
-        WikiCommand::GridUpdate {
+        WikiCommand::CreateGrid { page, title } => grid_create(page, title, session).await,
+        WikiCommand::UpdateGrid {
             grid,
             title,
             sort,
@@ -683,7 +683,7 @@ pub async fn run(command: &WikiCommand, session: &Session) -> ExitCode {
             )
             .await
         }
-        WikiCommand::GridDelete { grid } => grid_delete(grid, session).await,
+        WikiCommand::DeleteGrid { grid } => grid_delete(grid, session).await,
         WikiCommand::RowsAdd {
             grid,
             from,

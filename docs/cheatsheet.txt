@@ -260,9 +260,9 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
                                         waits with progress on stderr; prints what it made
   ytcli wiki operation clone|clone_inline_grid ID
                                         where a --no-wait clone has got to
-  ytcli wiki grid-create SLUG --title T
-  ytcli wiki grid-update GRID [--title T] [--sort slug:asc,other:desc]
-  ytcli wiki grid-delete GRID --yes
+  ytcli wiki create-grid SLUG --title T
+  ytcli wiki update-grid GRID [--title T] [--sort slug:asc,other:desc]
+  ytcli wiki delete-grid GRID --yes
   ytcli wiki rows-add GRID --from rows.json|- [--after ROW | --position N]
   ytcli wiki rows-delete GRID ROW... --yes
   ytcli wiki rows-move GRID ROW (--after ROW | --position N) [--count N]

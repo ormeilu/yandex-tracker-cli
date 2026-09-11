@@ -1474,7 +1474,7 @@ pub const WIKI_GRID_CREATE: &str = "\
 Create an empty grid on a Yandex Wiki page.
 
 ```
-ytcli wiki grid-create users/ilubenets/runbook --title \"Releases\"
+ytcli wiki create-grid users/ilubenets/runbook --title \"Releases\"
 ```
 
 The grid starts with no columns: `wiki columns-add` gives it some. The Wiki
@@ -1486,8 +1486,8 @@ pub const WIKI_GRID_UPDATE: &str = "\
 Retitle a Yandex Wiki grid, or set the order its rows show in.
 
 ```
-ytcli wiki grid-update 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f --title \"Releases 2027\"
-ytcli wiki grid-update 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f --sort version:desc
+ytcli wiki update-grid 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f --title \"Releases 2027\"
+ytcli wiki update-grid 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f --sort version:desc
 ```
 
 Every grid write is made against a revision. The Wiki refuses one that is no
@@ -1500,7 +1500,7 @@ pub const WIKI_GRID_DELETE: &str = "\
 Delete a Yandex Wiki grid.
 
 ```
-ytcli wiki grid-delete 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f --yes
+ytcli wiki delete-grid 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f --yes
 ```
 
 There is no undo, so it needs `--yes`. Announced first; `--dry-run` sends

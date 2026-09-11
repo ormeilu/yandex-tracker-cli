@@ -172,7 +172,7 @@ async fn deletes_need_yes() {
     for args in [
         &["wiki", "rows-delete", GRID, "3"][..],
         &["wiki", "columns-delete", GRID, "notes"],
-        &["wiki", "grid-delete", GRID],
+        &["wiki", "delete-grid", GRID],
     ] {
         harness
             .run(args)
@@ -214,7 +214,7 @@ async fn a_grid_is_created_on_a_page() {
     harness
         .run(&[
             "wiki",
-            "grid-create",
+            "create-grid",
             "users/ilubenets/runbook",
             "--title",
             "Releases",
@@ -241,7 +241,7 @@ async fn a_grid_order_is_sent_as_a_map() {
         .await;
 
     harness
-        .run(&["wiki", "grid-update", GRID, "--sort", "version:desc"])
+        .run(&["wiki", "update-grid", GRID, "--sort", "version:desc"])
         .assert()
         .success()
         .stdout(format!("changed grid {GRID}; revision 13\n"));

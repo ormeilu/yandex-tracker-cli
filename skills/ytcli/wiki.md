@@ -122,6 +122,7 @@ it.
   `wiki grid-create`, which otherwise exists only as a page resource.
 
 Not rendered: footnotes (`[^1]`, `[[*]]`) and `[TOC]` come out as literal
-text.
+text. `wiki-markup.md` is the source of a page that uses every construct
+above and was checked in a browser — copy from it rather than guessing.
 
 `ytcli cheatsheet wiki` has every flag.
