@@ -46,6 +46,14 @@ pub enum ApiError {
         status: reqwest::StatusCode,
         message: String,
     },
+    // The Wiki and Tracker share a client, and a refusal that names the wrong
+    // one sends the reader to look at identities in the system that did not
+    // answer.
+    #[error("the Wiki rejected the request ({status}): {message}")]
+    WikiRejected {
+        status: reqwest::StatusCode,
+        message: String,
+    },
     #[error("could not decode the Tracker response")]
     Decode(#[source] serde_json::Error),
 }
@@ -56,9 +64,11 @@ impl ApiError {
         match self {
             Self::Unauthorized | Self::WikiForbidden | Self::WikiWriteForbidden => ExitCode::Auth,
             Self::NotFound(_) => ExitCode::NotFound,
-            Self::Forbidden | Self::WikiNotEnabled | Self::RateLimited | Self::Rejected { .. } => {
-                ExitCode::ApiRejected
-            }
+            Self::Forbidden
+            | Self::WikiNotEnabled
+            | Self::RateLimited
+            | Self::Rejected { .. }
+            | Self::WikiRejected { .. } => ExitCode::ApiRejected,
             Self::Transport(_) | Self::Decode(_) => ExitCode::Failure,
         }
     }

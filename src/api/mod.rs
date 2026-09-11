@@ -2688,7 +2688,9 @@ fn is_retryable(error: &ApiError) -> bool {
     match error {
         ApiError::RateLimited => true,
         ApiError::Transport(err) => err.is_timeout() || err.is_connect(),
-        ApiError::Rejected { status, .. } => status.is_server_error(),
+        ApiError::Rejected { status, .. } | ApiError::WikiRejected { status, .. } => {
+            status.is_server_error()
+        }
         _ => false,
     }
 }
