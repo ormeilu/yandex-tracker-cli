@@ -26,6 +26,7 @@ pub mod table;
 pub mod text;
 pub mod untrusted;
 pub mod user;
+pub mod wiki;
 
 use std::str::FromStr;
 

@@ -69,6 +69,10 @@ jobs:
       APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
       APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
       APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      # The shared sign-in application (ADR 8), compiled in by `option_env!`.
+      # A fork without them builds a binary that falls back to pasting a token.
+      YTCLI_OAUTH_CLIENT_ID: ${{ secrets.YTCLI_OAUTH_CLIENT_ID }}
+      YTCLI_OAUTH_CLIENT_SECRET: ${{ secrets.YTCLI_OAUTH_CLIENT_SECRET }}
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable

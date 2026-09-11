@@ -42,8 +42,14 @@ profile gets its token. So the two are also removed separately:
 
 Undoing a login completely takes both.
 
+Signing in needs nothing registered. In a terminal, `ytcli auth login` offers a
+browser sign-in with a short code. Without one — as an agent — run
+`ytcli auth login --device --account NAME --org-id ID`, show the user the URL and
+code it prints, and wait: it returns once they confirm. `ytcli auth refresh`
+renews a signed-in token; changing what a token may do is another `auth login`.
+
 ```bash
-ytcli auth status        # every profile: identity, org, queues, projects, your open issues
+ytcli auth status        # every profile: identity, org, queues, projects, your open issues, Wiki access
 ytcli auth status --brief --active-only
 ytcli auth list          # accounts and profiles, and whether a token is stored
 ```
@@ -96,13 +102,23 @@ setup.
 
 ## Logging in
 
-`ytcli auth login` is interactive: it asks for each value in turn and takes the
-token the way a password prompt does, so it never lands in shell history.
+`ytcli auth login` is interactive: it offers a sign-in in the browser first,
+and pasting a token second, taken the way a password prompt takes one.
 
-**Do not attempt this on the user's behalf, and never ask for a token in the
-conversation.** If credentials are missing, say so and let the user run it.
-Outside a terminal the command takes flags only and reads the token from stdin,
-which is what CI uses.
+**The one sign-in you may start is `--device`.** Ask the user which account
+name and organisation id to use, run
+`ytcli auth login --device --account NAME --org-id ID`, and show them the URL
+and code it prints. They confirm it in a browser; the command returns when
+they have, and the token goes to the keychain without passing through you.
+Add `--read-only` if they only want reading.
+
+**Never ask for a token in the conversation, and never paste one.** Outside a
+terminal, without `--device`, the command reads a token from stdin, which is
+what CI uses — that is for them, not for you.
+
+A token that stops working may only need `ytcli auth refresh`, which renews a
+signed-in token from the keychain with nothing asked of anyone. A token that
+lacks a permission — the Wiki's, say — needs a new sign-in instead.
 
 ## CI and containers
 
@@ -183,6 +199,16 @@ allowlist is worth having. For Claude Code, in `.claude/settings.json`:
       "Bash(ytcli issue timers:*)",
       "Bash(ytcli attachment list:*)",
       "Bash(ytcli attachment show:*)",
+      "Bash(ytcli wiki get:*)",
+      "Bash(ytcli wiki list:*)",
+      "Bash(ytcli wiki find:*)",
+      "Bash(ytcli wiki comments:*)",
+      "Bash(ytcli wiki attachments:*)",
+      "Bash(ytcli wiki grids:*)",
+      "Bash(ytcli wiki grid:*)",
+      "Bash(ytcli wiki resources:*)",
+      "Bash(ytcli wiki access:*)",
+      "Bash(ytcli wiki operation:*)",
       "Bash(ytcli auth status:*)",
       "Bash(ytcli auth list:*)",
       "Bash(ytcli cheatsheet:*)"
@@ -205,6 +231,31 @@ allowlist is worth having. For Claude Code, in `.claude/settings.json`:
       "Bash(ytcli issue comment:*)",
       "Bash(ytcli issue transition:*)",
       "Bash(ytcli issue move:*)",
+      "Bash(ytcli wiki create:*)",
+      "Bash(ytcli wiki update:*)",
+      "Bash(ytcli wiki append:*)",
+      "Bash(ytcli wiki delete:*)",
+      "Bash(ytcli wiki restore:*)",
+      "Bash(ytcli wiki comment:*)",
+      "Bash(ytcli wiki delete-comment:*)",
+      "Bash(ytcli wiki upload:*)",
+      "Bash(ytcli wiki download:*)",
+      "Bash(ytcli wiki delete-attachment:*)",
+      "Bash(ytcli wiki clone:*)",
+      "Bash(ytcli wiki clone-grid:*)",
+      "Bash(ytcli wiki grant:*)",
+      "Bash(ytcli wiki regrant:*)",
+      "Bash(ytcli wiki revoke:*)",
+      "Bash(ytcli wiki create-grid:*)",
+      "Bash(ytcli wiki update-grid:*)",
+      "Bash(ytcli wiki delete-grid:*)",
+      "Bash(ytcli wiki rows-add:*)",
+      "Bash(ytcli wiki rows-delete:*)",
+      "Bash(ytcli wiki rows-move:*)",
+      "Bash(ytcli wiki columns-add:*)",
+      "Bash(ytcli wiki columns-delete:*)",
+      "Bash(ytcli wiki columns-move:*)",
+      "Bash(ytcli wiki cells-set:*)",
       "Bash(ytcli issue worklog:*)",
       "Bash(ytcli issue check:*)",
       "Bash(ytcli issue timer:*)",

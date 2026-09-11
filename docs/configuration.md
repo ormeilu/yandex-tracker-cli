@@ -33,21 +33,40 @@ one profile leaves the other untouched.
 ytcli auth login
 ```
 
-In a terminal it walks you through each step and takes the token as a password,
-so it never lands in your scrollback or shell history. Pass what you already
-know and only the rest is asked for:
+In a terminal it walks you through each step. The first offer is a sign-in in
+the browser: it shows a short code, you confirm it at `oauth.yandex.ru/device`
+— in any browser, on any machine — and the token arrives on its own, with no
+application to register and nothing to copy. Pass what you already know and
+only the rest is asked for:
 
 ```bash
 ytcli auth login --account work --org-id 12345 --queue PROJ
+ytcli auth login --device --account work --org-id 12345      # no terminal: print the code, wait
+ytcli auth login --read-only                                 # tracker:read wiki:read only
 ```
 
-You need an OAuth token
+`--device` is the same sign-in without prompts, which is what an agent runs on
+somebody's behalf: it prints the URL and the code, and returns once they are
+confirmed. The token covers Tracker and the Wiki (`wiki:read`, `wiki:write`)
+unless `--read-only` narrows it.
+
+A signed-in token comes with a refresh token, kept in the keychain beside it.
+`ytcli auth refresh` exchanges it for a new token; Yandex answers with the same
+one while it has long enough left, and the command says so. Changing what a
+token may do — adding the Wiki, dropping to read-only — is another
+`auth login`, not a refresh.
+
+Pasting a token stays, for CI and for organisations that do not allow
+third-party applications: it is taken as a password, so it never lands in your
+scrollback or shell history. You need the token
 ([how to get one](https://yandex.ru/support/tracker/en/api-ref/access)) and an
 organisation id
 ([tracker.yandex.ru/admin/orgs](https://tracker.yandex.ru/admin/orgs) lists
-yours). `ytcli` prints both sets of steps itself when you need them.
+yours); `ytcli auth login --help` has both sets of steps. A build from source
+has no shared application unless `YTCLI_OAUTH_CLIENT_ID` and
+`YTCLI_OAUTH_CLIENT_SECRET` name one, and then only pasting is offered (ADR 8).
 
-It checks the token against the API, stores it in the OS keychain — macOS
+Either way it checks the token against the API, stores it in the OS keychain — macOS
 Keychain, Windows Credential Manager, Secret Service on Linux — and writes the
 profile for you. The token is never written to a config file, never passed as an
 argument, and no command prints it back.

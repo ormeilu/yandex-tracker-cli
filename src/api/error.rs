@@ -14,6 +14,29 @@ pub enum ApiError {
     Unauthorized,
     #[error("forbidden (403): the account lacks rights, or the organisation header is wrong")]
     Forbidden,
+    // The Wiki's refusal has a likelier cause than Tracker's: a token issued
+    // before the Wiki permission was added to the application. Saying so turns
+    // a rights puzzle into one command.
+    #[error(
+        "the Wiki refused this token: it needs the wiki:read permission — sign in again \
+         with `ytcli auth login` — or this account cannot see that page"
+    )]
+    WikiForbidden,
+    // The Wiki answers 403 with `FORCED_SYNC_REQUIRED` when it has never heard of
+    // the organisation: the Wiki was not opened there yet. No sign-in fixes
+    // that, so blaming the token would send people round in circles.
+    #[error(
+        "the Wiki is not set up in this organisation yet — open https://wiki.yandex.ru once, \
+         signed in to it, and try again"
+    )]
+    WikiNotEnabled,
+    // Reading and writing are separate permissions, and a token signed in for
+    // reading only is refused every write: naming the one it lacks is the fix.
+    #[error(
+        "the Wiki refused this write: the token needs the wiki:write permission — sign in \
+         again with `ytcli auth login` — or this account may not edit that page"
+    )]
+    WikiWriteForbidden,
     #[error("{0} not found")]
     NotFound(String),
     #[error("rate limited by Tracker (429)")]
@@ -31,9 +54,11 @@ impl ApiError {
     #[must_use]
     pub fn exit_code(&self) -> ExitCode {
         match self {
-            Self::Unauthorized => ExitCode::Auth,
+            Self::Unauthorized | Self::WikiForbidden | Self::WikiWriteForbidden => ExitCode::Auth,
             Self::NotFound(_) => ExitCode::NotFound,
-            Self::Forbidden | Self::RateLimited | Self::Rejected { .. } => ExitCode::ApiRejected,
+            Self::Forbidden | Self::WikiNotEnabled | Self::RateLimited | Self::Rejected { .. } => {
+                ExitCode::ApiRejected
+            }
             Self::Transport(_) | Self::Decode(_) => ExitCode::Failure,
         }
     }

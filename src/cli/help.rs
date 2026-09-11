@@ -1058,8 +1058,9 @@ ytcli auth status --brief
 ytcli auth status --active-only
 ```
 
-The full form asks Tracker for queues, projects, goals and your open issues, so
-it costs several requests per profile; `--brief` verifies identity only.
+The full form asks Tracker for queues, projects, goals and your open issues, and
+the Wiki whether it accepts the token (`wiki: ok`, or what to do if not), so it
+costs several requests per profile; `--brief` verifies identity only.
 
 Exit code 3 means the active profile has no usable credentials. A profile that
 fails while the active one works is reported but does not change the exit code:
@@ -1147,6 +1148,487 @@ If it was the default, `default_profile` is dropped rather than pointed at
 another organisation: which one a bare command touches is your decision, and
 `ytcli auth use NAME` is where you make it. A committed `.tracker.toml` naming
 it is reported rather than rewritten.";
+
+pub const AUTH_REFRESH: &str = "\
+Renew a token that `auth login` got by signing in through the browser.
+
+```
+ytcli auth refresh
+ytcli auth refresh --account work
+```
+
+Exchanges the refresh token kept next to the token in the OS keychain for a new
+token. Only a signed-in token has one; a pasted token is renewed by logging in
+again. Yandex hands back the same token when it has long enough left, and the
+command says so rather than claiming a renewal.
+
+Changing what a token may do — adding Wiki access, or dropping to read-only —
+is not a refresh. It is `ytcli auth login` again.";
+
+pub const WIKI_GET: &str = "\
+Show one Yandex Wiki page.
+
+```
+ytcli wiki get users/ilubenets/runbook
+ytcli wiki get https://wiki.yandex.ru/users/ilubenets/runbook/
+```
+
+Takes the slug — the path after the host — or the whole address as copied from
+the browser. Prints the title, id, type and last change, then the text, fenced
+as written by somebody else and cut like a description unless `--full`:
+Markdown on current pages, the older wiki markup on legacy ones. A picture
+stored inline — a draw.io diagram, a pasted image — is shown as its size
+instead of its base64 unless `--full`, which prints the text byte for byte.
+
+The Wiki reads through the same profile as Tracker, but needs `wiki:read` on
+the token. A token without it is refused with a 403; signing in again with
+`ytcli auth login` asks for it.";
+
+pub const WIKI_LIST: &str = "\
+List the pages under one Yandex Wiki page, at every depth.
+
+```
+ytcli wiki list users/ilubenets
+ytcli wiki list users/ilubenets --cursor eyJpZCI6NDUyMn0=
+```
+
+Each page's slug — what `wiki get` takes — and its id. Titles are not listed:
+the Wiki does not send them here, and fetching each one would cost a request
+per page.
+
+The Wiki pages by cursor and never says how many pages there are, so the list
+ends with `shown N of more than N — next: --cursor …` while more follow, and
+`shown N of N` on the last page. `--format json` carries `next_cursor` for the
+same reason.";
+
+pub const WIKI_FIND: &str = "\
+Search Yandex Wiki pages and attached files.
+
+```
+ytcli wiki find \"deploy runbook\"
+ytcli wiki find rollback --type page --page 2
+```
+
+Each hit's slug — what `wiki get` takes — its type, its last change and its
+title. The excerpt the Wiki sends with each hit is in `--format json` as
+`snippet`; `wiki get` reads the page itself.
+
+Search gives no total either, and it pages by number: the list ends with
+`shown N of more than N — next: --page N` while more follow. It stops at page
+500.";
+
+pub const WIKI_COMMENTS: &str = "\
+Show the comments on a Yandex Wiki page.
+
+```
+ytcli wiki comments users/ilubenets/runbook
+ytcli wiki comments users/ilubenets/runbook --status unresolved
+ytcli wiki comments users/ilubenets/runbook --thread 7001
+```
+
+Each comment's header is ours — id, author, time, and whether it is resolved or
+deleted — and its text is fenced as written by Wiki users. A comment that
+starts a longer thread says so and names the `--thread` that reads it.
+
+The Wiki gives no total: the list ends with `shown N of more than N — next:
+--cursor C` while more follow. Costs two requests, since comments are listed
+by the page's id and the slug has to be looked up first.";
+
+pub const WIKI_ATTACHMENTS: &str = "\
+List the files attached to a Yandex Wiki page.
+
+```
+ytcli wiki attachments users/ilubenets/runbook
+```
+
+Each file's id, size, type, upload date and name. The size is printed as the
+Wiki sends it, which is a string in units it does not state. `--format json`
+adds the uploader and the download address.
+
+The Wiki gives no total: the list ends with `shown N of more than N — next:
+--cursor C` while more follow. Costs two requests: the slug is looked up first.";
+
+pub const WIKI_GRIDS: &str = "\
+List the grids (dynamic tables) on a Yandex Wiki page.
+
+```
+ytcli wiki grids users/ilubenets/runbook
+```
+
+Each grid's id — what `wiki grid` takes — its creation date and its title. The
+Wiki gives no total: the list ends with `shown N of more than N — next:
+--cursor C` while more follow.";
+
+pub const WIKI_GRID: &str = "\
+Show one Yandex Wiki grid: its columns, then its rows.
+
+```
+ytcli wiki grid 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f
+ytcli wiki grid 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f --filter \"[owner] ~ ilubenets\" --sort \"-version\"
+ytcli wiki grid 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f --columns version,owner --full
+```
+
+A header of ours — id, title, page, revision, and each column as `slug:type` —
+then the rows, fenced as written by Wiki users: one line per row, cells
+tab-separated under a line of column titles. A tab, newline or backslash inside
+a cell is written `\\t`, `\\n`, `\\\\`. Users show as logins, tickets as keys,
+Tracker fields as what they display; `--format json` keeps the typed values.
+
+The Wiki returns every matching row, so narrow the question with `--filter`,
+`--columns` and `--rows` rather than reading the lot. Rows are cut like a
+description; `--full` shows them all. The tally counts the rows shown.";
+
+pub const WIKI_RESOURCES: &str = "\
+List what a Yandex Wiki page holds: files and grids in one list.
+
+```
+ytcli wiki resources users/ilubenets/runbook
+ytcli wiki resources users/ilubenets/runbook --type grid --query release
+```
+
+Each item's type, id, creation date and name. `wiki download` takes a file's
+id, and `wiki grid` takes a grid's id. The Wiki gives no total: the list ends
+with `shown N of more than N — next: --cursor C` while more follow.";
+
+pub const WIKI_CREATE: &str = "\
+Create a Yandex Wiki page.
+
+```
+ytcli wiki create users/ilubenets/notes --title \"Notes\" --from notes.md
+cat notes.md | ytcli wiki create users/ilubenets/notes --title \"Notes\" --from -
+```
+
+The slug's path decides the parent. The text comes from a file, or from stdin
+with `-`, and never from an argument. `--silent` spares the subscribers a
+notification. The profile and organisation are announced first, and
+`--dry-run` prints the request without sending it. Prints the new page's slug
+and id.";
+
+pub const WIKI_UPDATE: &str = "\
+Replace a Yandex Wiki page's text, or retitle it.
+
+```
+ytcli wiki update users/ilubenets/notes --from notes.md
+ytcli wiki update users/ilubenets/notes --title \"Old notes\"
+ytcli wiki update users/ilubenets/notes --from - --merge < notes.md
+```
+
+`--from` replaces the whole text; `wiki append` adds to it instead. If someone
+else edited the page since, the Wiki refuses, unless `--merge` asks it to fold
+their edits in. Announced first; `--dry-run` sends nothing, not even the
+lookup of the page.";
+
+pub const WIKI_APPEND: &str = "\
+Add text to a Yandex Wiki page.
+
+```
+ytcli wiki append users/ilubenets/notes --from entry.md
+ytcli wiki append users/ilubenets/notes --from - --top
+ytcli wiki append users/ilubenets/notes --from entry.md --anchor \"#deploy\"
+```
+
+At the bottom by default, the top with `--top`, or at an anchor in the page.
+The rest of the page is left as it is. Text comes from a file or stdin.
+Announced first; `--dry-run` sends nothing.";
+
+pub const WIKI_DELETE: &str = "\
+Delete a Yandex Wiki page.
+
+```
+ytcli wiki delete users/ilubenets/notes
+ytcli wiki delete users/ilubenets/old --recursive --yes
+```
+
+Prints the recovery token and the exact `wiki restore` command. Nothing else
+ever shows that token again, so keep the output. Taking the subpages too needs
+`--recursive` and `--yes`. Announced first; `--dry-run` sends nothing.";
+
+pub const WIKI_RESTORE: &str = "\
+Restore a deleted Yandex Wiki page.
+
+```
+ytcli wiki restore 0b6c2a4e-1f3d-4e5a-9b7c-8d9e0f1a2b3c
+```
+
+Takes the token that `wiki delete` printed. Prints the restored page and how
+many pages came back with it.";
+
+pub const WIKI_COMMENT: &str = "\
+Comment on a Yandex Wiki page, or reply to a comment.
+
+```
+ytcli wiki comment users/ilubenets/runbook \"Step 2 needs the canary first.\"
+ytcli wiki comment users/ilubenets/runbook - --reply-to 7001 < reply.md
+ytcli wiki comment users/ilubenets/runbook \"Out of date\" --quote \"Watch the pipeline.\"
+```
+
+The text is the argument, or stdin with `-`. `--reply-to` answers a comment by
+its id, as `wiki comments` shows it. `--quote` anchors the comment to a passage
+of the page. The Wiki has no way to edit, resolve or react to a comment, so
+none is offered. The profile and organisation are announced first, and
+`--dry-run` sends nothing.";
+
+pub const WIKI_DELETE_COMMENT: &str = "\
+Delete a comment on a Yandex Wiki page.
+
+```
+ytcli wiki delete-comment users/ilubenets/runbook 7001 --yes
+```
+
+There is no undo, so it needs `--yes`. Prints how many comments the page has
+left. Announced first; `--dry-run` sends nothing.";
+
+pub const WIKI_ACCESS: &str = "\
+Show who can read and edit a Yandex Wiki page.
+
+```
+ytcli wiki access users/ilubenets/runbook
+```
+
+The policy (inherited, all_staff or custom), then every grant: its id (what
+`wiki regrant` and `wiki revoke` take), role, whether it is for a user or a
+group, which list it came from (direct, by_link or inherited), and who holds
+it. A read: the Wiki carries access on the page itself.";
+
+pub const WIKI_GRANT: &str = "\
+Give a user or a group a role on a Yandex Wiki page.
+
+```
+ytcli wiki grant users/ilubenets/runbook --role editor --user anna
+ytcli wiki grant users/ilubenets/runbook --role reader --group dir:42 --no-inherit
+```
+
+Roles are reader, editor, extra_editor (editor plus managing access) and
+author. The Wiki takes a uid, so a `--user` login is looked up in Tracker.
+`--uid`, `--cloud-uid` and `--group SOURCE:ID` name someone directly.
+
+The Wiki refuses a change that would lock you out of the page yourself,
+unless `--allow-selflock` says otherwise. The profile and organisation are
+announced first, and `--dry-run` sends nothing, the Tracker lookup included.";
+
+pub const WIKI_REGRANT: &str = "\
+Change a grant on a Yandex Wiki page.
+
+```
+ytcli wiki regrant users/ilubenets/runbook a1 --role reader
+ytcli wiki regrant users/ilubenets/runbook a1 --inheritance not_inherited
+```
+
+Takes the grant's id from `wiki access`. Guarded against self-lock like
+`wiki grant`. Announced first; `--dry-run` sends nothing.";
+
+pub const WIKI_REVOKE: &str = "\
+Remove access to a Yandex Wiki page.
+
+```
+ytcli wiki revoke users/ilubenets/runbook a1
+ytcli wiki revoke users/ilubenets/runbook --all --yes
+```
+
+One grant by its id from `wiki access`, or every personal grant with `--all`,
+which needs `--yes`. Guarded against self-lock like `wiki grant`. Announced
+first; `--dry-run` sends nothing.";
+
+pub const WIKI_CLONE: &str = "\
+Copy a Yandex Wiki page to a new address.
+
+```
+ytcli wiki clone users/ilubenets/runbook users/ilubenets/runbook-2027
+ytcli wiki clone users/ilubenets/runbook team/runbook --title \"Team runbook\" --no-wait
+```
+
+The Wiki copies in the background. The command waits, with progress on
+stderr when there is a terminal to show it on, then prints where the copy
+landed. `--no-wait` prints the operation and returns; `wiki operation` asks
+about it later.
+
+Each refusal the Wiki documents is named: a page already at the target, a
+reserved address, a cloud page, no rights there, a used-up quota. The profile
+and organisation are announced first, and `--dry-run` sends nothing.";
+
+pub const WIKI_CLONE_GRID: &str = "\
+Copy a Yandex Wiki grid onto a page.
+
+```
+ytcli wiki clone-grid 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f users/ilubenets/other
+ytcli wiki clone-grid 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f users/ilubenets/other --with-data
+```
+
+The columns, and the rows too with `--with-data`. The target page is created
+if it is not there. Waits like `wiki clone` and prints the new grid's id.
+Announced first; `--dry-run` sends nothing.";
+
+pub const WIKI_OPERATION: &str = "\
+Show where a Yandex Wiki clone has got to.
+
+```
+ytcli wiki operation clone 5f0e1d2c
+ytcli wiki operation clone_inline_grid 6a1b2c3d
+```
+
+The status (scheduled, in_progress, success or failed), the percentage while
+it runs, and what it made once it is done. Takes what `wiki clone --no-wait`
+printed.";
+
+pub const WIKI_GRID_CREATE: &str = "\
+Create an empty grid on a Yandex Wiki page.
+
+```
+ytcli wiki create-grid users/ilubenets/runbook --title \"Releases\"
+```
+
+The grid starts with no columns: `wiki columns-add` gives it some. The Wiki
+makes a grid a resource of the page, and showing it inside the page's text is
+done in the Wiki's editor. Prints the new grid's id and revision. The profile
+and organisation are announced first, and `--dry-run` sends nothing.";
+
+pub const WIKI_GRID_UPDATE: &str = "\
+Retitle a Yandex Wiki grid, or set the order its rows show in.
+
+```
+ytcli wiki update-grid 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f --title \"Releases 2027\"
+ytcli wiki update-grid 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f --sort version:desc
+```
+
+Every grid write is made against a revision. The Wiki refuses one that is no
+longer current, which stops a write from overwriting someone else's edit made
+in between. Without `--revision`, the grid is read first for its current
+revision; with it, the change is made against the one you read. Prints the new
+revision. Announced first; `--dry-run` sends nothing.";
+
+pub const WIKI_GRID_DELETE: &str = "\
+Delete a Yandex Wiki grid.
+
+```
+ytcli wiki delete-grid 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f --yes
+```
+
+There is no undo, so it needs `--yes`. Announced first; `--dry-run` sends
+nothing.";
+
+pub const WIKI_ROWS_ADD: &str = "\
+Add rows to a Yandex Wiki grid.
+
+```
+ytcli wiki rows-add 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f --from rows.json
+echo '[{\"version\": \"1.4.0\"}]' | ytcli wiki rows-add 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f --from - --after 2
+```
+
+The rows are a JSON array of objects keyed by column slug. Add them at the
+end, after a row with `--after`, or at a position with `--position`. Made
+against a revision like every grid write (`--revision`). Prints the new rows'
+ids and the new revision.";
+
+pub const WIKI_ROWS_DELETE: &str = "\
+Delete rows from a Yandex Wiki grid.
+
+```
+ytcli wiki rows-delete 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f 3 4 --yes
+```
+
+Rows are named by the ids `wiki grid --format json` shows. There is no undo, so
+it needs `--yes`. Made against a revision like every grid write.";
+
+pub const WIKI_ROWS_MOVE: &str = "\
+Move rows in a Yandex Wiki grid.
+
+```
+ytcli wiki rows-move 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f 4 --after 1
+ytcli wiki rows-move 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f 4 --position 0 --count 2
+```
+
+Moves one row, or this row and the ones after it with `--count`. The
+destination is either after another row or a position. Made against a revision
+like every grid write.";
+
+pub const WIKI_COLUMNS_ADD: &str = "\
+Add columns to a Yandex Wiki grid.
+
+```
+ytcli wiki columns-add 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f --from columns.json
+```
+
+The columns are a JSON array of definitions, each with at least `slug`,
+`title`, `type` and `required`. The type is one of string, number, date,
+select, staff, checkbox, ticket or ticket_field. `--position` places them.
+Made against a revision like every grid write.";
+
+pub const WIKI_COLUMNS_DELETE: &str = "\
+Delete columns from a Yandex Wiki grid.
+
+```
+ytcli wiki columns-delete 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f notes --yes
+```
+
+Named by slug, as `wiki grid` lists them. The values in them go too, and there
+is no undo, so it needs `--yes`. Made against a revision like every grid
+write.";
+
+pub const WIKI_COLUMNS_MOVE: &str = "\
+Move a column in a Yandex Wiki grid.
+
+```
+ytcli wiki columns-move 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f owner --position 0
+```
+
+To a position, with the columns after it too when given `--count`. Made
+against a revision like every grid write.";
+
+pub const WIKI_CELLS_SET: &str = "\
+Set cells in a Yandex Wiki grid.
+
+```
+ytcli wiki cells-set 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f --set 1:done=true --set 2:version=1.3.1
+ytcli wiki cells-set 8f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f --set '2:version:=\"2\"'
+```
+
+Each cell is given as `ROW:SLUG=VALUE`: the row's id, the column's slug, and
+the value. The value is read as `issue update --set` reads one: JSON when it
+parses as JSON, text otherwise, and `:=` to insist on JSON. Every cell goes in
+one request, against one revision.";
+
+pub const WIKI_UPLOAD: &str = "\
+Attach files to a Yandex Wiki page.
+
+```
+ytcli wiki upload users/ilubenets/runbook rollback.pdf
+ytcli wiki upload users/ilubenets/runbook diagram.png notes.txt
+```
+
+Each file goes through the Wiki's upload session: opened, sent in 8 MB parts,
+finished, then attached. Progress shows on stderr when there is a terminal. If
+anything fails part way, the session is aborted so it does not keep holding
+the account's upload quota. Files already attached stay attached, and each
+gets its own line with the new attachment's id.
+
+Every file is read before anything is sent, so a missing one stops the
+command at the start. The profile and organisation are announced first, and
+`--dry-run` sends nothing.";
+
+pub const WIKI_DELETE_ATTACHMENT: &str = "\
+Delete a file attached to a Yandex Wiki page.
+
+```
+ytcli wiki delete-attachment users/ilubenets/runbook rollback.pdf --yes
+```
+
+By id or by name, as `wiki attachments` lists them. There is no undo, so it
+needs `--yes`. Announced first; `--dry-run` sends nothing.";
+
+pub const WIKI_DOWNLOAD: &str = "\
+Download one file attached to a Yandex Wiki page.
+
+```
+ytcli wiki download users/ilubenets/runbook rollback.pdf -o ./tmp
+ytcli wiki download users/ilubenets/runbook 901 -o ./tmp --force
+ytcli wiki download users/ilubenets/runbook/.files/rollback.pdf -o ./tmp
+```
+
+Name the file by its id or its name, as `wiki attachments` lists them, or pass
+the file's own address instead of the page's. The destination directory is
+required. The file keeps its name, with anything that could steer it out of
+that directory removed. An existing file is kept unless `--force` says
+otherwise. Prints the path it wrote.";
 
 pub const AUTH_LOGOUT: &str = "\
 Remove a stored token.

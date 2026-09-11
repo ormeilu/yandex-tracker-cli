@@ -34,13 +34,17 @@ fn markdown_files() -> Vec<PathBuf> {
 
 /// The command path in a line like `ytcli issue get PROJ-1 --fields status`.
 ///
-/// Lower-case words are verbs; anything with a capital, a digit or a dash is an
-/// argument and ends the path.
+/// Lower-case words are verbs, hyphenated ones like `rows-add` included;
+/// anything with a capital, a digit or a leading dash is an argument and ends
+/// the path.
 fn command_path(line: &str) -> Option<Vec<String>> {
     let rest = line.trim().strip_prefix("ytcli")?;
     let path: Vec<String> = rest
         .split_whitespace()
-        .take_while(|word| word.chars().all(|c| c.is_ascii_lowercase()))
+        .take_while(|word| {
+            word.starts_with(|c: char| c.is_ascii_lowercase())
+                && word.chars().all(|c| c.is_ascii_lowercase() || c == '-')
+        })
         .take(2)
         .map(str::to_owned)
         .collect();
@@ -179,4 +183,46 @@ async fn every_documented_query_survives_the_trip_to_the_request_body() {
         .collect();
 
     assert_eq!(sent, documented_queries());
+}
+
+/// No verb the allowlist lets through is the start of one it asks about.
+///
+/// Hosts match these patterns by prefix, so allowing `ytcli wiki grid:*` also
+/// allows anything spelled `ytcli wiki grid…` — which is how a read verb and a
+/// write verb sharing a prefix would turn an allowed read into an allowed
+/// write (ADR 1). Checked on the published list rather than on a list of our
+/// own, because that list is what people install.
+#[test]
+fn no_allowed_read_is_the_prefix_of_a_write() {
+    let text = std::fs::read_to_string(skill_dir().join("setup.md")).expect("setup.md");
+    let json = text
+        .split("```json")
+        .nth(1)
+        .and_then(|rest| rest.split("```").next())
+        .expect("setup.md has a JSON allowlist");
+    let settings: serde_json::Value = serde_json::from_str(json).expect("the allowlist is JSON");
+    let verbs = |list: &str| -> Vec<String> {
+        settings["permissions"][list]
+            .as_array()
+            .expect("a list of patterns")
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .filter_map(|pattern| pattern.strip_prefix("Bash(")?.strip_suffix(":*)"))
+            .map(ToOwned::to_owned)
+            .collect()
+    };
+
+    let (allowed, asked) = (verbs("allow"), verbs("ask"));
+    assert!(
+        allowed.len() > 10 && asked.len() > 10,
+        "the extraction is broken"
+    );
+    for read in &allowed {
+        for write in &asked {
+            assert!(
+                !write.starts_with(read.as_str()),
+                "allowing `{read}:*` also allows `{write}`"
+            );
+        }
+    }
 }

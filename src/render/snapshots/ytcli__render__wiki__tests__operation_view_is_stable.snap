@@ -1,0 +1,6 @@
+---
+source: src/render/wiki.rs
+expression: "operation(&grid, &running) + &operation(&grid, &done)"
+---
+operation clone_inline_grid op2: in_progress 40%
+operation clone_inline_grid op2: success — page users/ilubenets/other, grid 4c1d2e3f-0000-4000-8000-000000000002

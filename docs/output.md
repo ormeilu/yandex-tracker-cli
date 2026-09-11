@@ -107,6 +107,14 @@ not be able to look like the tool talking.
 Rendering happens only when stdout is a terminal. A pipe gets the source bytes,
 because reflowed prose is not what a caller diffing output asked for.
 
+Wiki pages, comments and grid cells get the same fence, with its own author:
+`<untrusted src="wiki:users/ivan/runbook" note="content written by Wiki users; …">`.
+One thing inside it is shortened without `--full`: a picture the page stores
+inline — a draw.io diagram, a pasted image — as base64. It reads
+`data:image/svg+xml;base64,…(12.4 KB, --full shows it)`, because the payload is
+kilobytes nobody can read, paid for on every read. `--full` and the JSON formats
+carry the text byte for byte, as they do for the lines a long page is cut to.
+
 ## Images
 
 `ytcli issue get PROJ-1` draws the issue's image attachments under it, and

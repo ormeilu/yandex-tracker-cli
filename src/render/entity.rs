@@ -94,6 +94,7 @@ pub fn entity(entity: &Entity, ctx: &Context) -> String {
         crate::render::text::quoted_block(
             &mut out,
             &format!("{}/description", entity.id),
+            crate::render::untrusted::Author::Tracker,
             &body,
             withheld,
             ctx,

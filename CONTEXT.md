@@ -64,11 +64,13 @@ differs per queue and an unstable field list defeats caching.
 compact text, then `--fields`, then `--full`, then `--json`, then `--json-raw`.
 Callers start cheap and pay for detail only when they need it.
 
-**Untrusted block** — free text originating from Tracker users (summaries,
-descriptions, comments), marked as theirs on output: fenced in
-`<untrusted src="...">` for a pipe, rendered as markdown behind a margin bar for
-a terminal. Neither is sanitisation — the text is passed through unchanged, and
-labelled so that whatever reads it can tell content from instruction.
+**Untrusted block** — free text originating from other people (Tracker
+summaries, descriptions and comments; Wiki pages), marked as theirs on output:
+fenced in `<untrusted src="...">` for a pipe, rendered as markdown behind a
+margin bar for a terminal. The label names who wrote it — Tracker users or Wiki
+users — because it is what a reader weighs the text by. Neither form is
+sanitisation — the text is passed through unchanged, and labelled so that
+whatever reads it can tell content from instruction.
 
 **Tally** — the `shown N of M` line that closes every list. Its absence would let
 a caller mistake one page for the whole result set, which is a worse failure than

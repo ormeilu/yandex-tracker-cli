@@ -1,7 +1,7 @@
 ytcli — Yandex Tracker from the command line. Compact output by default.
 
 ## general
-  ytcli <group> <verb> [args]           groups: auth issue worklog user dict queue field template board project portfolio goal attachment
+  ytcli <group> <verb> [args]           groups: auth issue worklog user dict queue field template board project portfolio goal attachment wiki
   -p, --profile NAME                    act as a profile (else YTCLI_PROFILE, .tracker.toml, default)
   -f, --format text|json|json-raw|toon  text is compact and default; json is our stable schema
       --full                            print the whole description, not the first lines
@@ -18,7 +18,7 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
 
 ## auth
   ytcli auth status                     every profile: identity, org, queues, projects,
-                                        goals, your open issues. --brief for identity only,
+                                        goals, your open issues, Wiki access. --brief for identity only,
                                         --active-only for just the profile in play
   ytcli auth list                       accounts and profiles
   ytcli auth login                      in a terminal: asks each step, token as a password
@@ -27,6 +27,11 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
                                         Outside a terminal: flags only, token from stdin.
                                         --org-kind is detected if omitted; --dry-run checks only
                                         `ytcli auth login --help` says where to get both values
+  ytcli auth login --device [--read-only]
+                                        sign in through the browser with a code, no terminal
+                                        needed; in a terminal, login offers this first
+  ytcli auth refresh [--account NAME]   renew a signed-in token; a pasted one has nothing
+                                        to renew with. New scopes mean logging in again
   ytcli auth use NAME                   make a profile the default; a local edit,
                                         no token read and no request made
   ytcli auth edit NAME --description "TEXT"
@@ -208,6 +213,69 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   ytcli attachment upload PROJ-1 FILE
   ytcli attachment delete PROJ-1 ID --yes   by id or filename; --yes even for one,
                                         Tracker keeps no copy
+
+## wiki
+  ytcli wiki get SLUG|URL               one Yandex Wiki page: title, id, type, last change, then
+                                        its text, fenced and cut like a description (--full).
+                                        Takes the address as copied from the browser.
+                                        Needs wiki:read on the token; `auth login` again asks for it
+  ytcli wiki list SLUG|URL [--cursor C]
+                                        pages under one, any depth: slug and id. The Wiki gives no
+                                        total: `shown N of more than N — next: --cursor C`
+  ytcli wiki find TEXT [--type page|file] [--page N]
+                                        search pages and files: slug, type, last change, title.
+                                        No total here either; search stops at page 500
+  ytcli wiki comments SLUG|URL [--status resolved|unresolved] [--thread ID] [--cursor C]
+                                        comments, fenced, each headed by id, author, time;
+                                        a longer thread names the --thread that reads it
+  ytcli wiki attachments SLUG|URL [--cursor C]
+                                        files on a page: id, size (as the Wiki sends it), type,
+                                        upload date, name
+  ytcli wiki download SLUG|URL ID|NAME -o DIR [--force]
+  ytcli wiki download SLUG/.files/NAME -o DIR
+                                        one file into DIR, under its own cleaned name; prints the path
+  ytcli wiki grids SLUG|URL [--cursor C] grids (dynamic tables) on a page: id, created, title
+  ytcli wiki grid ID [--filter "[slug] ~ x"] [--sort "-slug"] [--columns a,b] [--rows 1,2] [--revision N]
+                                        columns as slug:type, then rows fenced, tab-separated;
+                                        cut like a description (--full). The Wiki filters; no paging
+  ytcli wiki resources SLUG|URL [--type attachment|grid] [--query Q] [--cursor C]
+                                        files and grids in one list: type, id, created, name
+  ytcli wiki create SLUG --title T [--from PATH|-] [--silent]
+  ytcli wiki update SLUG|URL [--title T] [--from PATH|-] [--merge] [--silent]
+                                        --from replaces the whole text; --merge folds in others' edits
+  ytcli wiki append SLUG|URL --from PATH|- [--top | --anchor "#name"] [--silent]
+  ytcli wiki delete SLUG|URL [--recursive --yes]
+                                        prints the recovery token once, and the command that uses it
+  ytcli wiki restore TOKEN              undo a delete
+  ytcli wiki comment SLUG|URL "text"|- [--reply-to ID] [--quote "passage"]
+  ytcli wiki delete-comment SLUG|URL ID --yes
+                                        no undo, hence --yes; the Wiki has no edit or resolve
+  ytcli wiki access SLUG|URL            policy, then grants: id, role, user|group, via, who
+  ytcli wiki grant SLUG|URL --role reader|editor|extra_editor|author --user LOGIN|--uid U|--group dir:ID
+  ytcli wiki regrant SLUG|URL ACCESS [--role R] [--inheritance inherited|not_inherited]
+  ytcli wiki revoke SLUG|URL ACCESS | --all --yes
+                                        self-lock refused unless --allow-selflock
+  ytcli wiki clone SLUG|URL TARGET [--title T] [--subscribe] [--no-wait]
+  ytcli wiki clone-grid GRID TARGET [--title T] [--with-data] [--no-wait]
+                                        waits with progress on stderr; prints what it made
+  ytcli wiki operation clone|clone_inline_grid ID
+                                        where a --no-wait clone has got to
+  ytcli wiki create-grid SLUG --title T
+  ytcli wiki update-grid GRID [--title T] [--sort slug:asc,other:desc]
+  ytcli wiki delete-grid GRID --yes
+  ytcli wiki rows-add GRID --from rows.json|- [--after ROW | --position N]
+  ytcli wiki rows-delete GRID ROW... --yes
+  ytcli wiki rows-move GRID ROW (--after ROW | --position N) [--count N]
+  ytcli wiki columns-add GRID --from columns.json|- [--position N]
+  ytcli wiki columns-delete GRID SLUG... --yes
+  ytcli wiki columns-move GRID SLUG --position N [--count N]
+  ytcli wiki cells-set GRID --set ROW:SLUG=VALUE ...
+                                        every grid write carries a revision: yours with
+                                        --revision, else the current one read first; a grid
+                                        changed in between is refused, not overwritten
+  ytcli wiki upload SLUG|URL FILE...    upload session per file, 8 MB parts, aborted on failure
+  ytcli wiki delete-attachment SLUG|URL ID|NAME --yes
+                                        Writes: profile and org announced first; --dry-run sends nothing
 
 ## format
   text      compact key/value; fixed field order so caches and scripts hold

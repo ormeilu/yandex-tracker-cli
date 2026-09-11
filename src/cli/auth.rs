@@ -14,6 +14,7 @@ use crate::api::{Client, ClientConfig};
 use crate::cli::{Session, emit, guidance, report, wizard};
 use crate::config::{OrgKind, Profile, store};
 use crate::exit::ExitCode;
+use crate::oauth;
 use crate::render::style::{Painter, Palette};
 use crate::secrets;
 
@@ -22,6 +23,13 @@ pub enum AuthCommand {
     /// Store a token for an account, and set up a profile to use it with.
     #[command(long_about = crate::cli::guidance::login_help())]
     Login(LoginArgs),
+    /// Renew a token that `auth login` got by signing in through the browser.
+    #[command(long_about = crate::cli::help::md(crate::cli::help::AUTH_REFRESH))]
+    Refresh {
+        /// Account whose token to renew; the active profile's when omitted.
+        #[arg(long, short = 'a')]
+        account: Option<String>,
+    },
     /// Remove a stored token.
     #[command(long_about = crate::cli::help::md(crate::cli::help::AUTH_LOGOUT))]
     Logout {
@@ -63,6 +71,9 @@ pub enum AuthCommand {
 /// The token is deliberately absent: it is read from a prompt or from stdin,
 /// never from an argument, because arguments are visible in `ps` and land in
 /// shell history.
+// Each bool is an independent command-line switch; folding them into an enum
+// would only make clap's flags harder to read.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Args)]
 pub struct LoginArgs {
     /// Account name to store the token under. Asked for when omitted.
@@ -98,6 +109,16 @@ pub struct LoginArgs {
     /// Skip the check that the token and organisation actually work.
     #[arg(long)]
     pub no_verify: bool,
+
+    /// Sign in through the browser even without a terminal: print a code and
+    /// wait until it is confirmed. What an agent runs on someone's behalf.
+    #[arg(long)]
+    pub device: bool,
+
+    /// Ask for read access only (`tracker:read wiki:read`) when signing in
+    /// through the browser.
+    #[arg(long)]
+    pub read_only: bool,
 }
 
 /// Arguments for `auth edit`.
@@ -148,6 +169,7 @@ pub async fn run(command: &AuthCommand, session: &Session) -> ExitCode {
     match command {
         AuthCommand::Status { brief, active_only } => status(session, *brief, *active_only).await,
         AuthCommand::Login(args) => login(args, session).await,
+        AuthCommand::Refresh { account } => refresh(session, account.as_deref()).await,
         AuthCommand::Logout { account } => logout(account),
         AuthCommand::List => list(session),
         AuthCommand::Use { profile } => use_profile(session, profile),
@@ -461,6 +483,9 @@ async fn report_profile(
     if let Ok(base) = std::env::var("YTCLI_BASE_URL") {
         config.base_url = base;
     }
+    if let Ok(wiki) = std::env::var("YTCLI_WIKI_URL") {
+        config.wiki_url = wiki;
+    }
     let client = match Client::new(&config) {
         Ok(client) => client,
         Err(error) => {
@@ -605,6 +630,22 @@ async fn reach(
             keys.join(", ")
         );
     }
+
+    // One request, answering what people need before their first `wiki`
+    // command: whether this token was granted the Wiki at all.
+    let wiki = match client.wiki_reachable().await {
+        Ok(()) => paint.paint("ok", Palette::ok()),
+        Err(crate::api::error::ApiError::WikiForbidden) => paint.paint(
+            "no access — the token lacks wiki:read; sign in again with `ytcli auth login`",
+            Palette::warn(),
+        ),
+        Err(crate::api::error::ApiError::WikiNotEnabled) => paint.paint(
+            "not set up in this organisation — open https://wiki.yandex.ru once to start it",
+            Palette::warn(),
+        ),
+        Err(_) => "-".to_owned(),
+    };
+    let _ = writeln!(out, "  {} {wiki}", paint.paint("wiki:", Palette::label()));
 }
 
 fn count_of<T>(page: &crate::api::models::Page<T>) -> String {
@@ -622,15 +663,17 @@ async fn login(args: &LoginArgs, session: &Session) -> ExitCode {
     let interactive = wizard::is_interactive();
     let mut err = anstream::stderr();
 
-    // Interactive login always asks for the token — there is no flag to pass one
-    // in, on purpose — so there is always something the procedure is needed for.
-    if interactive {
+    // Without a way to sign in, interactive login always asks for a pasted
+    // token — there is no flag to pass one in, on purpose — so the procedure is
+    // needed up front. With one, it is shown only if pasting is chosen.
+    if interactive && !oauth::App::is_configured() {
         wizard::introduce();
     }
 
     let Identity {
         account,
         token,
+        refresh,
         org_id,
         org_kind: verified,
     } = match identity(args, session, interactive).await {
@@ -647,7 +690,20 @@ async fn login(args: &LoginArgs, session: &Session) -> ExitCode {
         if let Err(error) = secrets::store(&account, &token) {
             return report(&error, ExitCode::Auth);
         }
-        let _ = writeln!(err, "stored a token for `{account}` in the OS keychain");
+        // A pasted token replaces the grant before it, so that grant's refresh
+        // token goes too: spending it later would bring the old token back.
+        if let Err(error) = secrets::store_refresh(&account, refresh.as_deref()) {
+            return report(&error, ExitCode::Auth);
+        }
+        let _ = writeln!(
+            err,
+            "stored a token for `{account}` in the OS keychain{}",
+            if refresh.is_some() {
+                ", with what renews it"
+            } else {
+                ""
+            }
+        );
     }
 
     let Some(org_id) = org_id else {
@@ -721,6 +777,8 @@ async fn login(args: &LoginArgs, session: &Session) -> ExitCode {
 struct Identity {
     account: String,
     token: String,
+    /// What renews the token; only a signed-in token has one.
+    refresh: Option<String>,
     org_id: Option<String>,
     /// The organisation flavour that answered, once verified.
     org_kind: Option<OrgKind>,
@@ -751,7 +809,7 @@ async fn identity(
         }
     };
 
-    let token = read_token(&account, interactive)?;
+    let (token, refresh) = obtain_token(args, &account, interactive).await?;
 
     // The organisation decides whether a profile can be written at all, so it is
     // asked for rather than skipped when someone is there to answer.
@@ -776,9 +834,229 @@ async fn identity(
     Ok(Identity {
         account,
         token,
+        refresh,
         org_id,
         org_kind: verified,
     })
+}
+
+/// Get a token: by signing in through the browser, or as pasted text.
+///
+/// Signing in is offered first whenever this build can do it, because it is the
+/// path with nothing to register and nothing to copy. Pasting stays for CI and
+/// for organisations that do not allow third-party applications.
+async fn obtain_token(
+    args: &LoginArgs,
+    account: &str,
+    interactive: bool,
+) -> Result<(String, Option<String>), ExitCode> {
+    let configured = oauth::App::is_configured();
+    let browser = args.device
+        || (interactive
+            && configured
+            && wizard::sign_in_in_browser().map_err(|error| report(&error, error.exit_code()))?);
+
+    if browser {
+        let grant = sign_in(args.read_only, interactive).await?;
+        if interactive && args.org_id.is_none() {
+            let mut err = anstream::stderr();
+            let _ = writeln!(err, "\n{}", guidance::block(guidance::ORG));
+        }
+        return Ok((grant.access_token, grant.refresh_token));
+    }
+
+    if interactive && configured {
+        wizard::introduce();
+    }
+    read_token(account, interactive).map(|token| (token, None))
+}
+
+/// The device-code sign-in: show a code, wait for it to be confirmed.
+async fn sign_in(read_only: bool, interactive: bool) -> Result<oauth::Grant, ExitCode> {
+    let fail = |error: oauth::OAuthError| report(&error, error.exit_code());
+    let mut err = anstream::stderr();
+
+    let app = oauth::App::from_environment().map_err(fail)?;
+    let code = app
+        .request_code(read_only.then_some(oauth::READ_ONLY_SCOPE))
+        .await
+        .map_err(fail)?;
+
+    // Three steps someone new to this can follow without knowing what a device
+    // code is: the code on a line of its own, where it can be found and
+    // double-clicked, and the page as a link a terminal will actually open.
+    let paint = Painter::for_stream(std::io::IsTerminal::is_terminal(&std::io::stderr()));
+    let expires = code.expires_in.map_or_else(String::new, |seconds| {
+        format!("   (expires in {} min)", seconds.div_ceil(60))
+    });
+    let _ = writeln!(
+        err,
+        "\n{}\n\n  1. Copy the code   {}\n  2. Open the page   {}{}\n  3. Paste the code there and allow access for ytcli\n\n  {}\n",
+        paint.paint("Sign in with Yandex", Palette::heading()),
+        paint.paint(&code.user_code, Palette::key()),
+        paint.link(&code.verification_url),
+        paint.paint(&expires, Palette::label()),
+        // The one way this flow is abused: someone else's code, sent with a
+        // plausible reason, grants them the token.
+        paint.paint(
+            "Only confirm a code you started here yourself.",
+            Palette::label()
+        ),
+    );
+
+    let early = if interactive {
+        wizard::press_enter("Press Enter to open the page in your browser… ")
+            .map_err(|error| report(&error, error.exit_code()))?;
+        // Someone who followed the steps first and pressed Enter afterwards has
+        // confirmed already, and a second tab asking again would only confuse.
+        let early = app.try_grant(&code).await.map_err(fail)?;
+        if early.is_none() {
+            open_browser(&code.verification_url);
+        }
+        early
+    } else {
+        None
+    };
+
+    let grant = if let Some(grant) = early {
+        grant
+    } else {
+        let _ = writeln!(err, "waiting for the code to be confirmed…");
+        app.await_grant(&code).await.map_err(fail)?
+    };
+    let _ = writeln!(
+        err,
+        "signed in{}",
+        if grant.refresh_token.is_some() {
+            "; renew later with `ytcli auth refresh`"
+        } else {
+            ""
+        }
+    );
+    Ok(grant)
+}
+
+/// Open the confirmation page, when it is the page it should be.
+///
+/// The address comes from the network, and on Windows it goes through `cmd`,
+/// where `&` starts a second command. Anything but a plain Yandex address is
+/// left printed for the person to open themselves. Yandex answers with
+/// `https://ya.ru/device` today, and documents `oauth.yandex.*`.
+fn open_browser(url: &str) {
+    let plain = ["https://ya.ru/", "https://oauth.yandex."]
+        .iter()
+        .any(|prefix| url.starts_with(prefix))
+        && url
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b":/.-_".contains(&byte));
+    if !plain {
+        return;
+    }
+
+    let mut command = if cfg!(target_os = "macos") {
+        std::process::Command::new("open")
+    } else if cfg!(windows) {
+        let mut command = std::process::Command::new("cmd");
+        command.args(["/C", "start", ""]);
+        command
+    } else {
+        std::process::Command::new("xdg-open")
+    };
+    let _ = command
+        .arg(url)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
+}
+
+/// Renew a token through its refresh token.
+///
+/// Only a token that came from signing in has one. A pasted token is renewed by
+/// pasting again, and saying so beats a bare "not found".
+async fn refresh(session: &Session, account: Option<&str>) -> ExitCode {
+    let mut err = anstream::stderr();
+
+    let Some(account) = account.map(ToOwned::to_owned).or_else(|| {
+        session
+            .resolved
+            .as_ref()
+            .map(|resolved| resolved.profile.account.clone())
+    }) else {
+        return report(
+            &"no --account given, and no active profile to take one from",
+            ExitCode::Auth,
+        );
+    };
+
+    // Renewing touches no organisation, but every profile on this account
+    // changes identity with it, so they are named before anything happens.
+    let using: Vec<String> = session
+        .config
+        .profiles
+        .iter()
+        .filter(|(_, profile)| profile.account == account)
+        .map(|(name, profile)| format!("{name} (org {})", profile.org_id))
+        .collect();
+    let _ = writeln!(
+        err,
+        "renewing the token of account `{account}`, used by: {}",
+        if using.is_empty() {
+            "no profile".to_owned()
+        } else {
+            using.join(", ")
+        }
+    );
+
+    let refresh_token = match secrets::refresh_token(&account) {
+        Ok(Some(token)) => token,
+        Ok(None) => {
+            return report(
+                &format!(
+                    "`{account}` has nothing to renew it with: its token was pasted, not signed in for. \
+                     Run `ytcli auth login --account {account}`"
+                ),
+                ExitCode::Auth,
+            );
+        }
+        Err(error) => return report(&error, ExitCode::Auth),
+    };
+
+    if session.global.dry_run {
+        let _ = writeln!(
+            err,
+            "dry run: would exchange the refresh token of `{account}` for a new token"
+        );
+        return ExitCode::Success;
+    }
+
+    let grant = match oauth::App::from_environment() {
+        Ok(app) => app.refresh(&refresh_token).await,
+        Err(error) => Err(error),
+    };
+    let grant = match grant {
+        Ok(grant) => grant,
+        Err(error) => return report(&error, error.exit_code()),
+    };
+
+    let unchanged = secrets::token(&account).is_ok_and(|current| current == grant.access_token);
+    if let Err(error) = secrets::store(&account, &grant.access_token) {
+        return report(&error, ExitCode::Auth);
+    }
+    let renews = grant.refresh_token.as_deref().unwrap_or(&refresh_token);
+    if let Err(error) = secrets::store_refresh(&account, Some(renews)) {
+        return report(&error, ExitCode::Auth);
+    }
+
+    if unchanged {
+        let _ = writeln!(
+            err,
+            "Yandex kept the same token for `{account}`: it has long enough left to run"
+        );
+    } else {
+        let _ = writeln!(err, "stored a renewed token for `{account}`");
+    }
+    ExitCode::Success
 }
 
 /// What the profile is being built from, once identity is settled.

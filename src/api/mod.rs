@@ -8,6 +8,7 @@ pub mod error;
 pub mod models;
 pub mod parse;
 pub mod query;
+pub mod wiki;
 
 use std::time::Duration;
 
@@ -47,6 +48,8 @@ fn host_of(url: &str) -> Option<String> {
 #[derive(Debug, Clone)]
 pub struct ClientConfig {
     pub base_url: String,
+    /// The Wiki's root: same token, same organisation, different host.
+    pub wiki_url: String,
     pub token: String,
     pub org_id: String,
     pub org_kind: OrgKind,
@@ -60,6 +63,7 @@ impl ClientConfig {
     pub fn new(token: String, org_id: String, org_kind: OrgKind) -> Self {
         Self {
             base_url: DEFAULT_BASE_URL.to_owned(),
+            wiki_url: wiki::DEFAULT_WIKI_URL.to_owned(),
             token,
             org_id,
             org_kind,
@@ -74,6 +78,7 @@ impl ClientConfig {
 pub struct Client {
     http: reqwest::Client,
     base_url: String,
+    wiki_url: String,
     retries: usize,
     /// Which organisation this client talks to.
     ///
@@ -111,6 +116,7 @@ impl Client {
         Ok(Self {
             http,
             base_url: config.base_url.trim_end_matches('/').to_owned(),
+            wiki_url: config.wiki_url.trim_end_matches('/').to_owned(),
             retries: config.retries,
             org: config.org_id.clone(),
         })
@@ -1544,9 +1550,19 @@ impl Client {
         what: &str,
     ) -> Result<(Value, reqwest::header::HeaderMap), ApiError> {
         let url = format!("{}{path}", self.base_url);
+        self.send_url(method, &url, body, what).await
+    }
 
+    /// [`Self::send_value`] at a full address, for the Wiki's second host.
+    async fn send_url(
+        &self,
+        method: reqwest::Method,
+        url: &str,
+        body: Option<&Value>,
+        what: &str,
+    ) -> Result<(Value, reqwest::header::HeaderMap), ApiError> {
         let send = || async {
-            let mut request = self.http.request(method.clone(), &url);
+            let mut request = self.http.request(method.clone(), url);
             if let Some(body) = body {
                 request = request.json(body);
             }
@@ -2603,6 +2619,8 @@ async fn classify(response: reqwest::Response, what: &str) -> Result<String, Api
     let message = response.text().await.unwrap_or_default();
     Err(match status.as_u16() {
         401 => ApiError::Unauthorized,
+        // Only the Wiki says this, and it means the organisation, not the token.
+        403 if message.contains("FORCED_SYNC_REQUIRED") => ApiError::WikiNotEnabled,
         403 => ApiError::Forbidden,
         404 => ApiError::NotFound(what.to_owned()),
         429 => ApiError::RateLimited,
@@ -2643,6 +2661,20 @@ fn complaint(body: &str) -> String {
                         .filter_map(|(field, text)| Some(format!("{field}: {}", text.as_str()?))),
                 );
             }
+            // The Wiki's envelope is `{"error_code", "debug_message", "message"}`:
+            // the code is what a caller can match on, the debug message the only
+            // sentence that says what went wrong — `message` is often null.
+            if said.is_empty()
+                && let Some(code) = value.get("error_code").and_then(Value::as_str)
+            {
+                let detail = value
+                    .get("debug_message")
+                    .and_then(Value::as_str)
+                    .or_else(|| value.get("message").and_then(Value::as_str));
+                said.push(
+                    detail.map_or_else(|| code.to_owned(), |detail| format!("{code}: {detail}")),
+                );
+            }
             (!said.is_empty()).then(|| said.join("; "))
         })
         .unwrap_or_else(|| body.to_owned());
@@ -2664,6 +2696,17 @@ fn is_retryable(error: &ApiError) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A Wiki refusal comes out as its code and its one useful sentence, not
+    /// as the JSON it arrived in.
+    #[test]
+    fn a_wiki_refusal_is_its_code_and_its_reason() {
+        let body = r#"{"error_code": "NO_PARENT_PAGE", "debug_message": "Immediate parent page does not exist", "message": null, "details": {"slug": "a/b"}}"#;
+        assert_eq!(
+            complaint(body),
+            "NO_PARENT_PAGE: Immediate parent page does not exist"
+        );
+    }
 
     /// The sentence a caller can act on, not the envelope it arrived in.
     #[test]

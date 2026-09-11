@@ -222,6 +222,7 @@ async fn the_documented_examples_still_produce_the_documented_output() {
 const UNRUNNABLE: &[(&str, &str)] = &[
     ("auth login", "interactive; asks for a token"),
     ("auth logout", "would touch the keychain"),
+    ("auth refresh", "reads the keychain before anything else"),
     (
         "auth status",
         "several requests per profile, and prints identity",
@@ -263,6 +264,31 @@ const UNRUNNABLE: &[(&str, &str)] = &[
     ("attachment download", "writes a file"),
     ("attachment delete", "a write, and the one with no undo"),
     ("attachment upload", "a write"),
+    (
+        "wiki get",
+        "its fixture is borrowed from the API reference, and an example would pin a guess",
+    ),
+    ("wiki list", "the same borrowed fixtures as wiki get"),
+    ("wiki find", "the same borrowed fixtures as wiki get"),
+    ("wiki comments", "the same borrowed fixtures as wiki get"),
+    ("wiki attachments", "the same borrowed fixtures as wiki get"),
+    ("wiki download", "writes a file"),
+    ("wiki grids", "the same borrowed fixtures as wiki get"),
+    ("wiki grid", "the same borrowed fixtures as wiki get"),
+    ("wiki resources", "the same borrowed fixtures as wiki get"),
+    ("wiki create", "a write"),
+    ("wiki update", "a write"),
+    ("wiki append", "a write"),
+    ("wiki delete", "a write"),
+    ("wiki restore", "a write"),
+    ("wiki comment", "a write"),
+    ("wiki access", "the same borrowed fixtures as wiki get"),
+    ("wiki grant", "a write"),
+    ("wiki regrant", "a write"),
+    ("wiki revoke", "a write"),
+    ("wiki clone", "a write"),
+    ("wiki upload", "a write"),
+    ("wiki operation", "names an operation only a real clone has"),
 ];
 
 /// Every `ytcli <group> <verb>` in README or the cheatsheet is either exercised

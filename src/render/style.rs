@@ -108,6 +108,22 @@ impl Painter {
         format!("{style}{text}{style:#}")
     }
 
+    /// A URL a terminal can open with a click.
+    ///
+    /// Terminals guess at bare URLs, and guess wrong once anything is painted
+    /// next to them; an OSC 8 hyperlink says where the link is. The visible text
+    /// is the URL itself either way, so nothing is hidden behind a label.
+    #[must_use]
+    pub fn link(self, url: &str) -> String {
+        if !self.enabled {
+            return url.to_owned();
+        }
+        format!(
+            "\u{1b}]8;;{url}\u{1b}\\{}\u{1b}]8;;\u{1b}\\",
+            self.paint(url, Palette::url())
+        )
+    }
+
     /// Pad to `width` **before** styling.
     ///
     /// Escape codes have no width but plenty of bytes, so padding a styled
@@ -151,6 +167,18 @@ mod tests {
             plain.matches(' ').count(),
             "same visible width in both modes"
         );
+    }
+
+    /// A link in a pipe is the bare URL, and in a terminal still shows the URL.
+    #[test]
+    fn a_link_is_the_url_whether_or_not_it_is_clickable() {
+        let url = "https://ya.ru/device";
+        assert_eq!(Painter::plain().link(url), url);
+
+        let linked = Painter::colour().link(url);
+        assert!(linked.starts_with("\u{1b}]8;;https://ya.ru/device\u{1b}\\"));
+        assert!(linked.ends_with("\u{1b}]8;;\u{1b}\\"));
+        assert_eq!(linked.matches(url).count(), 2, "target and visible text");
     }
 
     #[test]
