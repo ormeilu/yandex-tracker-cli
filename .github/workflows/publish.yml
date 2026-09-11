@@ -163,6 +163,12 @@ jobs:
           - {os: macos-latest, target: x86_64}
           - {os: windows-latest, target: x64}
     runs-on: ${{ matrix.os }}
+    # The same sign-in application as the binaries: without it a wheel is a
+    # build from source as far as ADR 8 is concerned, and `uvx`/`pip` users
+    # cannot sign in through the browser.
+    env:
+      YTCLI_OAUTH_CLIENT_ID: ${{ secrets.YTCLI_OAUTH_CLIENT_ID }}
+      YTCLI_OAUTH_CLIENT_SECRET: ${{ secrets.YTCLI_OAUTH_CLIENT_SECRET }}
     steps:
       - uses: actions/checkout@v6
       - uses: PyO3/maturin-action@v1
@@ -170,6 +176,9 @@ jobs:
           target: ${{ matrix.target }}
           args: --release --locked --out dist
           manylinux: auto
+          # Linux wheels build inside a manylinux container, which does not
+          # inherit the job environment.
+          docker-options: -e YTCLI_OAUTH_CLIENT_ID -e YTCLI_OAUTH_CLIENT_SECRET
       - uses: actions/upload-artifact@v7
         with:
           name: wheel-${{ matrix.os }}-${{ matrix.target }}
