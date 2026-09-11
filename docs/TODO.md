@@ -64,7 +64,10 @@ meet is how the drift started.
   dynamic tables, access, clones, and the writes to each. ADR 7 records why it
   belongs behind this binary. Checked against a real Wiki: the live suite makes
   one of everything and deletes it, and `skills/ytcli/wiki-markup.md` is the
-  source of a page whose rendering was checked in a browser.
+  source of a page whose rendering was checked in a browser. 2.0.1 puts the
+  sign-in application into the Python wheels as well: 2.0.0 compiled it into
+  the release binaries only, so `pip` and `uvx` users could not sign in
+  through the browser.
 - [`kind:question`](https://github.com/ormeilu/yandex-tracker-cli/labels/kind%3Aquestion)
   — open design questions, filed so they are not re-litigated from scratch.
 
