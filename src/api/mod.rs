@@ -2704,13 +2704,11 @@ fn wiki_detail<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
 /// A bare 403 is a rights puzzle the message has to help solve; one that
 /// arrives with a reason is not, and the reason is what to repeat.
 fn wiki_explains(body: &str) -> bool {
-    serde_json::from_str::<Value>(body)
-        .ok()
-        .is_some_and(|value| {
-            value.get("error_code").and_then(Value::as_str).is_some()
-                && (wiki_detail(&value, "debug_message").is_some()
-                    || wiki_detail(&value, "message").is_some())
-        })
+    serde_json::from_str::<Value>(body).is_ok_and(|value| {
+        value.get("error_code").and_then(Value::as_str).is_some()
+            && (wiki_detail(&value, "debug_message").is_some()
+                || wiki_detail(&value, "message").is_some())
+    })
 }
 
 /// Retry transport hiccups and server-side backpressure; never retry a request
