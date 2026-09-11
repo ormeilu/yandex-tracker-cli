@@ -116,6 +116,11 @@ A tag starting `v` builds the binaries and wheels, publishes to crates.io and
 PyPI through Trusted Publishing, attaches the archives to a GitHub release, and
 regenerates the Homebrew formula in `ormeilu/homebrew-tap`.
 
+Bump the version in both `Cargo.toml` and `.claude-plugin/plugin.json`.
+`claude plugin update` compares only the latter, so a stale one tells users
+their skill is current when it is not; `tests/plugin.rs` fails while the two
+differ.
+
 Every credential-dependent step is skipped when its secret is absent rather than
 failing the release: a fork can build the whole thing, and one optional channel
 must not take the rest down with it.
