@@ -11,7 +11,7 @@ That single goal explains most of what follows: why the default view is terse an
 its field order fixed, why lists always say how much they did not show, and why
 `--json` is a schema of our own rather than whatever the API happened to return.
 
-> **Status: 2.0.1.** Everything in the command tree is built: issues, worklogs,
+> **Status: 2.1.0.** Everything in the command tree is built: issues, worklogs,
 > checklists, links, queues, boards and sprints, organisation-wide fields and
 > templates, projects, portfolios, goals and attachments, and the Wiki's pages,
 > comments, files, dynamic tables and access — reads and writes.

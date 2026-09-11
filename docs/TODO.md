@@ -68,6 +68,12 @@ meet is how the drift started.
   sign-in application into the Python wheels as well: 2.0.0 compiled it into
   the release binaries only, so `pip` and `uvx` users could not sign in
   through the browser.
+- 2.1.0 — `auth status` says what each token may do (`access: read`, `write`
+  or `unknown`), recorded at sign-in because Yandex cannot be asked a token's
+  scopes. Wiki refusals name the Wiki rather than Tracker, and a grant the Wiki
+  answers with `USER_NOT_FOUND` says what usually causes it. The plugin moved
+  to `plugin/`, so a local install no longer copies the build directory, and a
+  test keeps both plugin manifests at the crate's version.
 - [`kind:question`](https://github.com/ormeilu/yandex-tracker-cli/labels/kind%3Aquestion)
   — open design questions, filed so they are not re-litigated from scratch.
 
