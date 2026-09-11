@@ -71,6 +71,8 @@ ytcli wiki rows-add <uuid> --from rows.json
 ytcli wiki cells-set <uuid> --set 1:done=true
 ```
 
+- **`-f json` answers with an object** — the new id, the grid's revision, the
+  recovery token — so nothing has to be read out of the sentence.
 - **`update --from` replaces the page.** To add to it, use `append`. If someone
   else edited the page since, the update is refused unless you pass `--merge`.
 - **`delete` prints a recovery token once.** Nothing ever shows it again.

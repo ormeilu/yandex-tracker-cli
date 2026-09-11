@@ -248,3 +248,36 @@ async fn a_refused_write_names_wiki_write() {
         .code(3)
         .stderr(predicate::str::contains("wiki:write"));
 }
+
+/// Under `-f json` a write answers with an object, so a script takes the id
+/// without parsing the sentence a person gets.
+#[tokio::test]
+async fn a_write_answers_json_when_asked() {
+    let harness = Harness::new().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/pages"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "id": 4600, "slug": "users/ilubenets/notes", "title": "Notes", "page_type": "wysiwyg"
+        })))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness
+        .run(&[
+            "wiki",
+            "create",
+            "users/ilubenets/notes",
+            "--title",
+            "Notes",
+            "-f",
+            "json",
+        ])
+        .assert()
+        .success();
+    let answer: serde_json::Value =
+        serde_json::from_slice(&output.get_output().stdout).expect("stdout is JSON");
+    assert_eq!(
+        answer,
+        serde_json::json!({ "action": "created", "slug": "users/ilubenets/notes", "id": 4600 })
+    );
+}

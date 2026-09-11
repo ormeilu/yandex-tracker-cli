@@ -1102,10 +1102,11 @@ async fn create(
     }
 
     match client.wiki_create(&body, silent).await {
-        Ok(made) => {
-            emit(&format!("created {} (id {})\n", made.slug, made.id));
-            ExitCode::Success
-        }
+        Ok(made) => done(
+            session,
+            format!("created {} (id {})\n", made.slug, made.id),
+            &serde_json::json!({ "action": "created", "slug": made.slug, "id": made.id }),
+        ),
         Err(error) => failed(&error),
     }
 }
@@ -1156,10 +1157,11 @@ async fn update(page: &str, change: Change<'_>, session: &Session) -> ExitCode {
         .wiki_update(id, &body, change.merge, change.silent)
         .await
     {
-        Ok(page) => {
-            emit(&format!("updated {} (id {})\n", page.slug, page.id));
-            ExitCode::Success
-        }
+        Ok(page) => done(
+            session,
+            format!("updated {} (id {})\n", page.slug, page.id),
+            &serde_json::json!({ "action": "updated", "slug": page.slug, "id": page.id }),
+        ),
         Err(error) => failed(&error),
     }
 }
@@ -1216,10 +1218,11 @@ async fn append(
         Err(error) => return failed(&error),
     };
     match client.wiki_append(id, &body, silent).await {
-        Ok(page) => {
-            emit(&format!("appended to {} (id {})\n", page.slug, page.id));
-            ExitCode::Success
-        }
+        Ok(page) => done(
+            session,
+            format!("appended to {} (id {})\n", page.slug, page.id),
+            &serde_json::json!({ "action": "appended", "slug": page.slug, "id": page.id }),
+        ),
         Err(error) => failed(&error),
     }
 }
@@ -1253,14 +1256,17 @@ async fn delete(page: &str, recursive: bool, session: &Session) -> ExitCode {
         Err(error) => return failed(&error),
     };
     match client.wiki_delete(id, recursive).await {
-        Ok(token) => {
-            emit(&format!(
+        Ok(token) => done(
+            session,
+            format!(
                 "deleted {slug} (id {id})\n\
-                 recovery token {token} — shown only now; to restore:\n  \
-                 ytcli wiki restore {token}\n"
-            ));
-            ExitCode::Success
-        }
+                     recovery token {token} — shown only now; to restore:\n  \
+                     ytcli wiki restore {token}\n"
+            ),
+            &serde_json::json!({
+                "action": "deleted", "slug": slug, "id": id, "recovery_token": token
+            }),
+        ),
         Err(error) => failed(&error),
     }
 }
@@ -1286,11 +1292,14 @@ async fn restore(token: &str, session: &Session) -> ExitCode {
             let pages = restored
                 .pages_count
                 .map_or_else(String::new, |count| format!(", {count} pages"));
-            emit(&format!(
-                "restored {} (id {}{pages})\n",
-                restored.slug, restored.id
-            ));
-            ExitCode::Success
+            done(
+                session,
+                format!("restored {} (id {}{pages})\n", restored.slug, restored.id),
+                &serde_json::json!({
+                    "action": "restored", "slug": restored.slug, "id": restored.id,
+                    "pages": restored.pages_count
+                }),
+            )
         }
         Err(error) => failed(&error),
     }
@@ -1349,10 +1358,11 @@ async fn comment(
         Err(error) => return failed(&error),
     };
     match client.wiki_comment(id, &body).await {
-        Ok(made) => {
-            emit(&format!("commented on {slug}: comment {}\n", made.id));
-            ExitCode::Success
-        }
+        Ok(made) => done(
+            session,
+            format!("commented on {slug}: comment {}\n", made.id),
+            &serde_json::json!({ "action": "commented", "slug": slug, "comment": made.id }),
+        ),
         Err(error) => failed(&error),
     }
 }
@@ -1384,8 +1394,11 @@ async fn delete_comment(page: &str, comment: u64, session: &Session) -> ExitCode
     match client.wiki_delete_comment(id, comment).await {
         Ok(left) => {
             let left = left.map_or_else(String::new, |count| format!("; {count} left"));
-            emit(&format!("deleted comment {comment} on {slug}{left}\n"));
-            ExitCode::Success
+            done(
+                session,
+                format!("deleted comment {comment} on {slug}{left}\n"),
+                &serde_json::json!({ "action": "deleted comment", "slug": slug, "comment": comment }),
+            )
         }
         Err(error) => failed(&error),
     }
@@ -1505,13 +1518,17 @@ async fn grant(
         Err(error) => return failed(&error),
     };
     match client.wiki_grant(id, &body, allow_selflock).await {
-        Ok(entry) => {
-            emit(&format!(
+        Ok(entry) => done(
+            session,
+            format!(
                 "granted {role} on {slug} to {named_as} (access {})\n",
                 entry.id
-            ));
-            ExitCode::Success
-        }
+            ),
+            &serde_json::json!({
+                "action": "granted", "slug": slug, "role": role, "who": named_as,
+                "access": entry.id
+            }),
+        ),
         Err(error) => failed(&error),
     }
 }
@@ -1547,15 +1564,18 @@ async fn regrant(
     };
     match client.wiki_regrant(id, access, body, allow_selflock).await {
         Ok(entry) => {
-            emit(&format!(
-                "changed access {access} on {slug}: {}\n",
-                if entry.role.is_empty() {
-                    "-"
-                } else {
-                    &entry.role
-                }
-            ));
-            ExitCode::Success
+            let role = if entry.role.is_empty() {
+                "-"
+            } else {
+                &entry.role
+            };
+            done(
+                session,
+                format!("changed access {access} on {slug}: {role}\n"),
+                &serde_json::json!({
+                    "action": "changed access", "slug": slug, "access": access, "role": entry.role
+                }),
+            )
         }
         Err(error) => failed(&error),
     }
@@ -1596,13 +1616,14 @@ async fn revoke(
         Err(error) => return failed(&error),
     };
     match client.wiki_revoke(id, access, allow_selflock).await {
-        Ok(()) => {
-            emit(&match access {
+        Ok(()) => done(
+            session,
+            match access {
                 Some(access) => format!("revoked access {access} on {slug}\n"),
                 None => format!("revoked every personal access on {slug}\n"),
-            });
-            ExitCode::Success
-        }
+            },
+            &serde_json::json!({ "action": "revoked", "slug": slug, "access": access }),
+        ),
         Err(error) => failed(&error),
     }
 }
@@ -1682,7 +1703,7 @@ async fn clone_page(
         Ok(operation) => operation,
         Err(error) => return clone_refused(&error),
     };
-    followed(&client, &operation, no_wait, |done| {
+    followed(&client, &operation, no_wait, session, |done| {
         format!("cloned {slug} to {}\n", done.page_slug().unwrap_or(&target))
     })
     .await
@@ -1718,7 +1739,7 @@ async fn clone_grid(
         Ok(operation) => operation,
         Err(error) => return clone_refused(&error),
     };
-    followed(&client, &operation, no_wait, |done| {
+    followed(&client, &operation, no_wait, session, |done| {
         format!(
             "cloned grid {grid} to {}: grid {}\n",
             done.page_slug().unwrap_or(&target),
@@ -1737,15 +1758,21 @@ async fn followed(
     client: &crate::api::Client,
     operation: &crate::api::wiki::WikiOperation,
     no_wait: bool,
+    session: &Session,
     describe: impl FnOnce(&crate::api::wiki::OperationStatus) -> String,
 ) -> ExitCode {
     let ask_again = format!("ytcli wiki operation {} {}", operation.kind, operation.id);
     if no_wait {
-        emit(&format!(
-            "started operation {} {}; follow it with `{ask_again}`\n",
-            operation.kind, operation.id
-        ));
-        return ExitCode::Success;
+        return done(
+            session,
+            format!(
+                "started operation {} {}; follow it with `{ask_again}`\n",
+                operation.kind, operation.id
+            ),
+            &serde_json::json!({
+                "action": "started", "operation": { "type": operation.kind, "id": operation.id }
+            }),
+        );
     }
 
     let walk = crate::render::progress::Walk::start("cloning");
@@ -1788,8 +1815,11 @@ async fn followed(
             ExitCode::ApiRejected,
         );
     }
-    emit(&describe(&status));
-    ExitCode::Success
+    done(
+        session,
+        describe(&status),
+        &serde_json::to_value(&status).unwrap_or_default(),
+    )
 }
 
 /// Where an operation has got to.
@@ -1866,10 +1896,11 @@ async fn change_grid(change: GridChange<'_>, session: &Session) -> ExitCode {
         .wiki_grid_write(change.method, grid, change.tail, Some(&body))
         .await
     {
-        Ok(answer) => {
-            emit(&changed(&change.done, &answer));
-            ExitCode::Success
-        }
+        Ok(answer) => done(
+            session,
+            changed(&change.done, &answer),
+            &serde_json::json!({ "action": change.done, "grid": grid, "result": answer }),
+        ),
         Err(error) => failed(&error),
     }
 }
@@ -1933,13 +1964,17 @@ async fn grid_create(page: &str, title: &str, session: &Session) -> ExitCode {
     }
 
     match client.wiki_grid_create(&body).await {
-        Ok(grid) => {
-            emit(&format!(
+        Ok(grid) => done(
+            session,
+            format!(
                 "created grid {} on {slug}; revision {}\n",
                 grid.id, grid.revision
-            ));
-            ExitCode::Success
-        }
+            ),
+            &serde_json::json!({
+                "action": "created grid", "slug": slug, "grid": grid.id,
+                "revision": grid.revision
+            }),
+        ),
         Err(error) => failed(&error),
     }
 }
@@ -2016,10 +2051,11 @@ async fn grid_delete(grid: &str, session: &Session) -> ExitCode {
         .wiki_grid_write(reqwest::Method::DELETE, grid, "", None)
         .await
     {
-        Ok(_) => {
-            emit(&format!("deleted grid {grid}\n"));
-            ExitCode::Success
-        }
+        Ok(_) => done(
+            session,
+            format!("deleted grid {grid}\n"),
+            &serde_json::json!({ "action": "deleted grid", "grid": grid }),
+        ),
         Err(error) => failed(&error),
     }
 }
@@ -2181,6 +2217,9 @@ async fn upload(page: &str, files: &[PathBuf], session: &Session) -> ExitCode {
         Ok(id) => id,
         Err(error) => return failed(&error),
     };
+    // A person sees each file as it lands; a script gets one object at the
+    // end, since a stream of separate JSON documents is not one it can parse.
+    let mut uploaded = Vec::new();
     for (name, bytes) in &loaded {
         let upload = match sent(&client, name, bytes).await {
             Ok(upload) => upload,
@@ -2189,10 +2228,13 @@ async fn upload(page: &str, files: &[PathBuf], session: &Session) -> ExitCode {
         match client.wiki_attach(id, std::slice::from_ref(&upload)).await {
             Ok(attached) => {
                 for file in attached {
-                    emit(&format!(
-                        "uploaded {} to {slug}: attachment {}\n",
-                        file.name, file.id
-                    ));
+                    if session.render.format == Format::Text {
+                        emit(&format!(
+                            "uploaded {} to {slug}: attachment {}\n",
+                            file.name, file.id
+                        ));
+                    }
+                    uploaded.push(serde_json::json!({ "name": file.name, "id": file.id }));
                 }
             }
             Err(error) => {
@@ -2201,7 +2243,14 @@ async fn upload(page: &str, files: &[PathBuf], session: &Session) -> ExitCode {
             }
         }
     }
-    ExitCode::Success
+    if session.render.format == Format::Text {
+        return ExitCode::Success;
+    }
+    done(
+        session,
+        String::new(),
+        &serde_json::json!({ "action": "uploaded", "slug": slug, "attachments": uploaded }),
+    )
 }
 
 /// One file through an upload session: opened, sent in parts, finished.
@@ -2269,13 +2318,17 @@ async fn delete_attachment(page: &str, file: &str, session: &Session) -> ExitCod
         Err(error) => return failed(&error),
     };
     match client.wiki_delete_attachment(id, found.id).await {
-        Ok(()) => {
-            emit(&format!(
+        Ok(()) => done(
+            session,
+            format!(
                 "deleted attachment {} ({}) from {slug}\n",
                 found.name, found.id
-            ));
-            ExitCode::Success
-        }
+            ),
+            &serde_json::json!({
+                "action": "deleted attachment", "slug": slug, "attachment": found.id,
+                "name": found.name
+            }),
+        ),
         Err(error) => failed(&error),
     }
 }
@@ -2367,8 +2420,11 @@ async fn download(
         return report(&error, ExitCode::Failure);
     }
 
-    emit(&format!("{}\n", destination.display()));
-    ExitCode::Success
+    done(
+        session,
+        format!("{}\n", destination.display()),
+        &serde_json::json!({ "action": "downloaded", "path": destination }),
+    )
 }
 
 /// The profile's list length, within the 1..100 the Wiki's listings accept.
@@ -2388,6 +2444,17 @@ fn named(page: &str) -> Result<String, ExitCode> {
         ));
     }
     Ok(slug)
+}
+
+/// What a write did: a line for a person, or under `-f json` or `toon` the same
+/// facts as one object, so a script takes an id or a recovery token without
+/// parsing a sentence.
+fn done(session: &Session, text: String, facts: &serde_json::Value) -> ExitCode {
+    finish(match session.render.format {
+        Format::Text => Ok(text),
+        Format::JsonRaw => machine(facts, Format::Json),
+        other => machine(facts, other),
+    })
 }
 
 fn finish(rendered: Result<String, RenderError>) -> ExitCode {

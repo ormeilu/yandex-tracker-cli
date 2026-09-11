@@ -95,12 +95,24 @@ pub fn comments(slug: &str, list: &CursorPage<WikiComment>, ctx: &Context) -> St
     out
 }
 
+/// The Wiki's size string with its unit: `0.29` is `0.29 MB`, `0.00` is
+/// `<0.01 MB`, and anything that is not a number is left as it came.
+fn megabytes(size: &str) -> String {
+    match size.parse::<f64>() {
+        Ok(mb) if mb > 0.0 => format!("{size} MB"),
+        Ok(_) => "<0.01 MB".to_owned(),
+        Err(_) => size.to_owned(),
+    }
+}
+
 /// A page's attachments.
 ///
 /// The name was chosen by whoever uploaded it, so it gets the styling of
-/// somebody else's text, as Tracker's attachment names do. The size is shown as
-/// the Wiki sends it: it is a string in units the Wiki does not name, and
-/// guessing them would print a wrong number with confidence.
+/// somebody else's text, as Tracker's attachment names do. The Wiki sends the
+/// size as a string of megabytes to two places, which a live upload settled
+/// (300 KB came back as `0.29`); the unit is written out, and a file under
+/// five kilobytes, which the Wiki rounds to `0.00`, is said to be small rather
+/// than empty.
 #[must_use]
 pub fn attachments(list: &CursorPage<WikiAttachment>, ctx: &Context) -> String {
     let columns = [
@@ -116,7 +128,7 @@ pub fn attachments(list: &CursorPage<WikiAttachment>, ctx: &Context) -> String {
         .map(|file| {
             vec![
                 file.id.to_string(),
-                file.size.clone(),
+                megabytes(&file.size),
                 file.mimetype.as_deref().unwrap_or("-").to_owned(),
                 file.created_at
                     .as_deref()
