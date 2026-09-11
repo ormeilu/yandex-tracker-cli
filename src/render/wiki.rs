@@ -444,6 +444,17 @@ pub fn page(page: &WikiPage, ctx: &Context) -> String {
     );
 
     if let Some(content) = page.content.as_deref().filter(|text| !text.is_empty()) {
+        // A draw.io diagram or a pasted image carries its picture inline as
+        // base64: kilobytes nobody can read, in every read of the page. Outside
+        // `--full` the payload is folded to its size; `--full` stays
+        // byte-for-byte, so nothing of the text is ever lost for good.
+        let folded;
+        let content = if ctx.description_lines.is_some() {
+            folded = fold_data_uris(content);
+            folded.as_str()
+        } else {
+            content
+        };
         let (body, withheld) = crate::render::untrusted::head(content, ctx.description_lines);
         crate::render::text::quoted_block(
             &mut out,
@@ -458,10 +469,84 @@ pub fn page(page: &WikiPage, ctx: &Context) -> String {
     out
 }
 
+/// Payloads shorter than this are left alone: folding a tiny icon would cost
+/// more words than it saves.
+const FOLD_OVER: usize = 256;
+
+/// `data:<type>;base64,<payload>` with every long payload replaced by
+/// `…(N KB, --full shows it)`. Everything else is left exactly as written.
+fn fold_data_uris(text: &str) -> String {
+    const MARKER: &str = ";base64,";
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find("data:") {
+        let after = &rest[at..];
+        let Some(marker) = after.find(MARKER).filter(|&end| {
+            after[5..end]
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || "+-./".contains(c))
+        }) else {
+            out.push_str(&rest[..at + 5]);
+            rest = &rest[at + 5..];
+            continue;
+        };
+        let start = at + marker + MARKER.len();
+        let length = rest[start..]
+            .find(|c: char| !(c.is_ascii_alphanumeric() || "+/=".contains(c)))
+            .unwrap_or(rest.len() - start);
+        out.push_str(&rest[..start]);
+        if length > FOLD_OVER {
+            // Bytes the payload decodes to, which is what a person means by a
+            // picture's size, in tenths of a kilobyte, rounded.
+            let tenths = (length * 3 / 4 * 10 + 512) / 1024;
+            let _ = write!(
+                out,
+                "…({}.{} KB, --full shows it)",
+                tenths / 10,
+                tenths % 10
+            );
+        } else {
+            out.push_str(&rest[start..start + length]);
+        }
+        rest = &rest[start + length..];
+    }
+    out.push_str(rest);
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::render::{Audience, Format};
+
+    #[test]
+    fn a_long_inline_picture_is_folded_to_its_size() {
+        let payload = "A".repeat(4096);
+        let text = format!(
+            "before {{% drawio data=\"data:image/svg+xml;base64,{payload}\" width=\"600\" %}} after"
+        );
+        assert_eq!(
+            fold_data_uris(&text),
+            "before {% drawio data=\"data:image/svg+xml;base64,…(3.0 KB, --full shows it)\" width=\"600\" %} after"
+        );
+    }
+
+    #[test]
+    fn a_short_payload_and_plain_text_are_left_alone() {
+        let text = "icon ![x](data:image/png;base64,iVBORw0KGgo=) and the word data: here";
+        assert_eq!(fold_data_uris(text), text);
+    }
+
+    #[test]
+    fn full_shows_an_inline_picture_byte_for_byte() {
+        let content = format!("x data:image/png;base64,{}", "B".repeat(1000));
+        let mut shown = sample();
+        shown.content = Some(content.clone());
+        let mut full = ctx();
+        full.description_lines = None;
+        assert!(page(&shown, &full).contains(&content));
+        assert!(page(&shown, &ctx()).contains("…(0.7 KB, --full shows it)"));
+    }
 
     fn ctx() -> Context {
         Context {

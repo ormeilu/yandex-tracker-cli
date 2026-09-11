@@ -1176,7 +1176,9 @@ ytcli wiki get https://wiki.yandex.ru/users/ilubenets/runbook/
 Takes the slug — the path after the host — or the whole address as copied from
 the browser. Prints the title, id, type and last change, then the text, fenced
 as written by somebody else and cut like a description unless `--full`:
-Markdown on current pages, the older wiki markup on legacy ones.
+Markdown on current pages, the older wiki markup on legacy ones. A picture
+stored inline — a draw.io diagram, a pasted image — is shown as its size
+instead of its base64 unless `--full`, which prints the text byte for byte.
 
 The Wiki reads through the same profile as Tracker, but needs `wiki:read` on
 the token. A token without it is refused with a 403; signing in again with

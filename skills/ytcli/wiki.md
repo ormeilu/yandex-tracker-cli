@@ -109,7 +109,8 @@ it.
 - **Code and maths:** fenced code with a language, `$inline$`, `$$ block $$`.
 - **Diagrams:** a ```` ```mermaid ```` fence, PlantUML inside
   `{% diagram %}…{% enddiagram %}`. Draw.io diagrams are made in the editor
-  and saved as `{% drawio data="data:image/svg+xml;base64,…" %}`.
+  and saved as `{% drawio data="data:image/svg+xml;base64,…" %}`; `wiki get`
+  shows such a payload as its size, and `--full` prints it whole.
 - **Embeds:** `/iframe/(src="…" width="600" height="300")` for allowed hosts
   (Yandex Maps and YouTube work; yandex.ru refuses to be framed and shows a
   blank box), `![alt](url =154x)` for a sized image,
