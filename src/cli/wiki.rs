@@ -1459,6 +1459,7 @@ async fn grant(
     };
 
     let mut body = serde_json::json!({ "role": role });
+    let by_cloud_uid = matches!(who, Grantee::CloudUid(_));
     let named_as = match who {
         Grantee::Login(login) => {
             body["user"] = serde_json::json!({ "uid": format!("<uid of {login}, from Tracker>") });
@@ -1529,8 +1530,35 @@ async fn grant(
                 "access": entry.id
             }),
         ),
+        Err(error) if is_user_not_found(&error) => {
+            report(&user_not_found(&slug, by_cloud_uid), ExitCode::ApiRejected)
+        }
         Err(error) => failed(&error),
     }
+}
+
+/// The Wiki answers a grant with `USER_NOT_FOUND` for a user who plainly
+/// exists: when the caller may not manage access on the page, and when the
+/// organisation keys its users by cloud uid. Read literally, the code sends
+/// people to check an identity that is fine.
+fn is_user_not_found(error: &crate::api::error::ApiError) -> bool {
+    matches!(
+        error,
+        crate::api::error::ApiError::WikiRejected { status, message }
+            if status.as_u16() == 400 && message.contains("USER_NOT_FOUND")
+    )
+}
+
+fn user_not_found(slug: &str, by_cloud_uid: bool) -> String {
+    let mut advice = format!(
+        "the Wiki did not accept this identity for a grant on `{slug}` (USER_NOT_FOUND). \
+         If the user exists in Tracker, you may not be an author of the page: only authors \
+         grant, so ask one of those `ytcli wiki access {slug}` lists"
+    );
+    if !by_cloud_uid {
+        advice.push_str("; or the organisation keys users by cloud uid: try --cloud-uid");
+    }
+    advice
 }
 
 /// Change one grant.
@@ -1652,7 +1680,7 @@ const CLONE_REFUSALS: [(&str, &str); 6] = [
 
 /// A refused clone, told by its `error_code` when the Wiki gave one.
 fn clone_refused(error: &crate::api::error::ApiError) -> ExitCode {
-    if let crate::api::error::ApiError::Rejected { message, .. } = error
+    if let crate::api::error::ApiError::WikiRejected { message, .. } = error
         && let Some((code, meaning)) = CLONE_REFUSALS
             .iter()
             .find(|(code, _)| message.contains(code))

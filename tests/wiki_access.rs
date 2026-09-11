@@ -271,3 +271,89 @@ async fn revoking_all_needs_yes_and_one_does_not() {
         .success()
         .stdout("revoked every personal access on users/ilubenets/runbook\n");
 }
+
+/// `USER_NOT_FOUND` on a grant is about the caller's rights or the kind of
+/// uid, not about the user: the message says so, and names the Wiki.
+#[tokio::test]
+async fn a_grant_the_wiki_calls_user_not_found_gets_advice() {
+    let harness = Harness::new().await;
+    page_is_4521(&harness).await;
+    Mock::given(method("POST"))
+        .and(path("/v1/pages/4521/access"))
+        .respond_with(ResponseTemplate::new(400).set_body_json(serde_json::json!({
+            "error_code": "USER_NOT_FOUND",
+            "debug_message": "User with such identity does not exist"
+        })))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&[
+            "wiki",
+            "grant",
+            "users/ilubenets/runbook",
+            "--role",
+            "editor",
+            "--uid",
+            "8000000000000000",
+        ])
+        .assert()
+        .code(5)
+        .stderr(
+            predicate::str::contains("the Wiki did not accept this identity")
+                .and(predicate::str::contains(
+                    "ytcli wiki access users/ilubenets/runbook",
+                ))
+                .and(predicate::str::contains("--cloud-uid"))
+                .and(predicate::str::contains("Tracker rejected").not()),
+        );
+
+    harness
+        .run(&[
+            "wiki",
+            "grant",
+            "users/ilubenets/runbook",
+            "--role",
+            "editor",
+            "--cloud-uid",
+            "ajeabc",
+        ])
+        .assert()
+        .code(5)
+        .stderr(
+            predicate::str::contains("USER_NOT_FOUND")
+                .and(predicate::str::contains("--cloud-uid").not()),
+        );
+}
+
+/// Any other refusal from the Wiki is named as the Wiki's, not Tracker's.
+#[tokio::test]
+async fn a_wiki_refusal_names_the_wiki() {
+    let harness = Harness::new().await;
+    page_is_4521(&harness).await;
+    Mock::given(method("POST"))
+        .and(path("/v1/pages/4521/access"))
+        .respond_with(ResponseTemplate::new(400).set_body_json(serde_json::json!({
+            "error_code": "VALIDATION_ERROR",
+            "debug_message": "role is not valid"
+        })))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&[
+            "wiki",
+            "grant",
+            "users/ilubenets/runbook",
+            "--role",
+            "editor",
+            "--uid",
+            "1",
+        ])
+        .assert()
+        .code(5)
+        .stderr(
+            predicate::str::contains("the Wiki rejected the request (400 Bad Request)")
+                .and(predicate::str::contains("VALIDATION_ERROR")),
+        );
+}

@@ -238,7 +238,10 @@ impl Client {
         body: Option<&serde_json::Value>,
     ) -> Result<serde_json::Value, ApiError> {
         let url = format!("{}{path}", self.wiki_url);
-        let (value, _) = self.send_url(method, &url, body, path).await?;
+        let (value, _) = self
+            .send_url(method, &url, body, path)
+            .await
+            .map_err(answered_by_wiki)?;
         Ok(value)
     }
 }
@@ -919,7 +922,7 @@ impl Client {
             return Err(match status.as_u16() {
                 401 | 403 => ApiError::WikiForbidden,
                 404 => ApiError::NotFound(what.to_owned()),
-                _ => ApiError::Rejected {
+                _ => ApiError::WikiRejected {
                     status,
                     message: String::new(),
                 },
@@ -1449,7 +1452,7 @@ impl Client {
                 .await
                 .map_err(|error| match error {
                     ApiError::Forbidden | ApiError::Unauthorized => ApiError::WikiWriteForbidden,
-                    other => other,
+                    other => answered_by_wiki(other),
                 })?;
         serde_json::from_value(value).map_err(ApiError::Decode)
     }
@@ -1474,6 +1477,14 @@ fn query(parts: &[Option<&str>]) -> String {
 fn refused(error: ApiError) -> ApiError {
     match error {
         ApiError::Forbidden | ApiError::Unauthorized => ApiError::WikiForbidden,
+        other => answered_by_wiki(other),
+    }
+}
+
+/// A rejection that came from the Wiki, named as the Wiki's.
+fn answered_by_wiki(error: ApiError) -> ApiError {
+    match error {
+        ApiError::Rejected { status, message } => ApiError::WikiRejected { status, message },
         other => other,
     }
 }
