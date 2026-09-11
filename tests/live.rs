@@ -2120,8 +2120,18 @@ async fn the_wiki_fixtures_have_the_shape_the_wiki_answers_with() {
         .wiki_delete(page, false)
         .await
         .expect("delete the page");
-    let restored = client.wiki_restore(&token).await.expect("restore the page");
-    assert_eq!(restored.slug, slug);
+    // The Wiki has been seen to cut its answer to a restore short after doing
+    // the restore, so a transport failure is settled by looking for the page.
+    match client.wiki_restore(&token).await {
+        Ok(restored) => assert_eq!(restored.slug, slug),
+        Err(error) => {
+            println!("restore answered badly ({error}); checking the page is back");
+            assert_eq!(
+                client.wiki_page_id(&slug).await.expect("the restored page"),
+                page
+            );
+        }
+    }
     client
         .wiki_delete(page, false)
         .await

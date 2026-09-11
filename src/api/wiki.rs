@@ -19,7 +19,7 @@ pub const DEFAULT_WIKI_URL: &str = "https://api.wiki.yandex.net";
 /// the JSON would think to look for it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WikiPage {
-    pub id: u64,
+    pub id: i64,
     pub slug: String,
     pub title: String,
     /// `wysiwyg` pages are Markdown, `page` ones the legacy wiki markup; `grid`
@@ -35,7 +35,7 @@ pub struct WikiPage {
 /// A page named by a listing: the Wiki sends its id and slug, and no title.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WikiPageRef {
-    pub id: u64,
+    pub id: i64,
     pub slug: String,
 }
 
@@ -93,7 +93,7 @@ struct SearchAnswer {
 /// The page as the Wiki sends it.
 #[derive(Deserialize)]
 struct Answer {
-    id: u64,
+    id: i64,
     slug: String,
     title: String,
     #[serde(default)]
@@ -686,10 +686,10 @@ impl Client {
     ///
     /// Only the page read and the descendants listing take a slug; everything
     /// else under a page wants its id, so this costs one request first.
-    pub async fn wiki_page_id(&self, slug: &str) -> Result<u64, ApiError> {
+    pub async fn wiki_page_id(&self, slug: &str) -> Result<i64, ApiError> {
         #[derive(Deserialize)]
         struct Identity {
-            id: u64,
+            id: i64,
         }
 
         let url = format!("{}/v1/pages?slug={}", self.wiki_url, encode(slug));
@@ -857,7 +857,7 @@ impl Client {
         &self,
         slug: &str,
         wanted: &str,
-    ) -> Result<(u64, WikiAttachment), ApiError> {
+    ) -> Result<(i64, WikiAttachment), ApiError> {
         // Enough for any page a person picks a file from by name; past it the
         // search stops instead of reading an unbounded listing.
         const PAGES: usize = 20;
@@ -888,7 +888,7 @@ impl Client {
     }
 
     /// A file's bytes, by page id and file id.
-    pub async fn wiki_attachment_bytes(&self, page: u64, file: u64) -> Result<Vec<u8>, ApiError> {
+    pub async fn wiki_attachment_bytes(&self, page: i64, file: u64) -> Result<Vec<u8>, ApiError> {
         let url = format!(
             "{}/v1/pages/{page}/attachments/{file}/download",
             self.wiki_url
@@ -932,7 +932,7 @@ impl Client {
     /// under a page. `tail` ends in `?` or `&`, ready for the paging.
     async fn wiki_listing<T: serde::de::DeserializeOwned>(
         &self,
-        id: u64,
+        id: i64,
         tail: &str,
         cursor: Option<&str>,
         page_size: u32,
@@ -964,7 +964,7 @@ impl Client {
 /// A page brought back from deletion.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WikiRestored {
-    pub id: u64,
+    pub id: i64,
     pub slug: String,
     /// The page and the subpages restored with it.
     #[serde(default)]
@@ -992,7 +992,7 @@ impl Client {
     /// made since, where it would otherwise refuse.
     pub async fn wiki_update(
         &self,
-        id: u64,
+        id: i64,
         body: &serde_json::Value,
         merge: bool,
         silent: bool,
@@ -1017,7 +1017,7 @@ impl Client {
     /// `POST /v1/pages/{id}/append-content`.
     pub async fn wiki_append(
         &self,
-        id: u64,
+        id: i64,
         body: &serde_json::Value,
         silent: bool,
     ) -> Result<WikiPageRef, ApiError> {
@@ -1036,7 +1036,7 @@ impl Client {
     }
 
     /// `DELETE /v1/pages/{id}`, answering with the one token that restores it.
-    pub async fn wiki_delete(&self, id: u64, recursive: bool) -> Result<String, ApiError> {
+    pub async fn wiki_delete(&self, id: i64, recursive: bool) -> Result<String, ApiError> {
         #[derive(Deserialize)]
         struct Deleted {
             recovery_token: String,
@@ -1067,7 +1067,7 @@ impl Client {
     /// names a `parent_id`.
     pub async fn wiki_comment(
         &self,
-        page: u64,
+        page: i64,
         body: &serde_json::Value,
     ) -> Result<WikiComment, ApiError> {
         let url = format!("{}/v1/pages/{page}/comments", self.wiki_url);
@@ -1086,7 +1086,7 @@ impl Client {
     /// comments the page has left.
     pub async fn wiki_delete_comment(
         &self,
-        page: u64,
+        page: i64,
         comment: u64,
     ) -> Result<Option<u64>, ApiError> {
         #[derive(Deserialize)]
@@ -1130,7 +1130,7 @@ impl Client {
     /// asked to refuse a change that would lock the caller out.
     pub async fn wiki_grant(
         &self,
-        page: u64,
+        page: i64,
         body: &serde_json::Value,
         allow_selflock: bool,
     ) -> Result<AccessEntry, ApiError> {
@@ -1153,7 +1153,7 @@ impl Client {
     /// `POST /v1/pages/{id}/access/{access}`: another role, or inheritance.
     pub async fn wiki_regrant(
         &self,
-        page: u64,
+        page: i64,
         access: &str,
         body: &serde_json::Value,
         allow_selflock: bool,
@@ -1179,7 +1179,7 @@ impl Client {
     /// the page when no access is named.
     pub async fn wiki_revoke(
         &self,
-        page: u64,
+        page: i64,
         access: Option<&str>,
         allow_selflock: bool,
     ) -> Result<(), ApiError> {
@@ -1203,7 +1203,7 @@ impl Client {
     /// `POST /v1/pages/{id}/clone`: accepted now, done later.
     pub async fn wiki_clone_page(
         &self,
-        page: u64,
+        page: i64,
         body: &serde_json::Value,
     ) -> Result<WikiOperation, ApiError> {
         let url = format!("{}/v1/pages/{page}/clone", self.wiki_url);
@@ -1381,7 +1381,7 @@ impl Client {
     /// files.
     pub async fn wiki_attach(
         &self,
-        page: u64,
+        page: i64,
         sessions: &[String],
     ) -> Result<Vec<WikiAttachment>, ApiError> {
         #[derive(Deserialize)]
@@ -1408,7 +1408,7 @@ impl Client {
     }
 
     /// `DELETE /v1/pages/{id}/attachments/{file}`.
-    pub async fn wiki_delete_attachment(&self, page: u64, file: u64) -> Result<(), ApiError> {
+    pub async fn wiki_delete_attachment(&self, page: i64, file: u64) -> Result<(), ApiError> {
         let url = format!("{}/v1/pages/{page}/attachments/{file}", self.wiki_url);
         let _: serde_json::Value = self
             .wiki_write(

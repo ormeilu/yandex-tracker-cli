@@ -256,3 +256,30 @@ async fn a_wiki_never_set_up_in_the_organisation_says_so() {
         .stderr(predicate::str::contains("not set up in this organisation"))
         .stderr(predicate::str::contains("wiki:read").not());
 }
+
+/// The Wiki's own pages — a person's home page, the organisation's main page —
+/// carry negative ids. Found on the first live run: an unsigned id refused to
+/// decode them, and `wiki get` failed on the first page anybody would try.
+#[tokio::test]
+async fn a_page_with_a_negative_id_is_still_a_page() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/pages"))
+        .and(query_param("slug", "users/lii291001"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "id": -102,
+            "slug": "users/lii291001",
+            "title": "Home",
+            "page_type": "wysiwyg",
+            "attributes": { "modified_at": "2026-09-11T00:03:19.553Z" },
+            "content": "Welcome.\n"
+        })))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&["wiki", "get", "users/lii291001"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Welcome."));
+}

@@ -56,6 +56,18 @@ Yandex Wiki API reference (`GET /v1/pages`), with invented values, and it has no
 yet been checked against a real Wiki: the reference does not say which markup
 `content` arrives in. ADR 7 names the live check as the step before trusting it.
 
+The first live run against a real Wiki (a Cloud organisation, 2026-09-11)
+found:
+
+  * Page ids can be negative. The pages the Wiki makes for itself — a
+    person's home page `users/<login>`, the organisation's `homepage` — come
+    back as `-102` and `-100`. Ids are signed for that reason.
+  * An organisation the Wiki was never opened in answers every request 403
+    with `"error_code": "FORCED_SYNC_REQUIRED"`, whatever the token can do.
+    Opening wiki.yandex.ru there once is the fix; it has its own error.
+  * `attributes` carries more than the fixture shows (`entity_links_count`,
+    `is_collaborative`, `is_draft`), and `lang` may be empty.
+
 `comments_html.json` is the exception in the other direction: it was recorded
 from a real organisation, sanitised of names and ids, and is the evidence for
 what `markupType` does (#77).

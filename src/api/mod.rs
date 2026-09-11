@@ -2661,6 +2661,20 @@ fn complaint(body: &str) -> String {
                         .filter_map(|(field, text)| Some(format!("{field}: {}", text.as_str()?))),
                 );
             }
+            // The Wiki's envelope is `{"error_code", "debug_message", "message"}`:
+            // the code is what a caller can match on, the debug message the only
+            // sentence that says what went wrong — `message` is often null.
+            if said.is_empty()
+                && let Some(code) = value.get("error_code").and_then(Value::as_str)
+            {
+                let detail = value
+                    .get("debug_message")
+                    .and_then(Value::as_str)
+                    .or_else(|| value.get("message").and_then(Value::as_str));
+                said.push(
+                    detail.map_or_else(|| code.to_owned(), |detail| format!("{code}: {detail}")),
+                );
+            }
             (!said.is_empty()).then(|| said.join("; "))
         })
         .unwrap_or_else(|| body.to_owned());
@@ -2682,6 +2696,17 @@ fn is_retryable(error: &ApiError) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A Wiki refusal comes out as its code and its one useful sentence, not
+    /// as the JSON it arrived in.
+    #[test]
+    fn a_wiki_refusal_is_its_code_and_its_reason() {
+        let body = r#"{"error_code": "NO_PARENT_PAGE", "debug_message": "Immediate parent page does not exist", "message": null, "details": {"slug": "a/b"}}"#;
+        assert_eq!(
+            complaint(body),
+            "NO_PARENT_PAGE: Immediate parent page does not exist"
+        );
+    }
 
     /// The sentence a caller can act on, not the envelope it arrived in.
     #[test]

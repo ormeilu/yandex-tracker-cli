@@ -2282,7 +2282,7 @@ async fn delete_attachment(page: &str, file: &str, session: &Session) -> ExitCod
 
 /// Where a download's bytes come from.
 enum Source {
-    Attachment { page: u64, file: u64 },
+    Attachment { page: i64, file: u64 },
     Address(String),
 }
 
