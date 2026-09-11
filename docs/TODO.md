@@ -57,8 +57,9 @@ meet is how the drift started.
   shape has been stable for several releases, and what was deliberately left out
   is written down below rather than pending. The number is a promise about
   breakage from here, not a claim that there is nothing left to build.
-- [Yandex Wiki](https://github.com/ormeilu/yandex-tracker-cli/milestone/5) —
-  the other half of an organisation's writing, as a `ytcli wiki` group that
+- [2.0.0](https://github.com/ormeilu/yandex-tracker-cli/milestone/5) — the
+  Yandex Wiki, and signing in without registering anything. The Wiki is the
+  other half of an organisation's writing, as a `ytcli wiki` group that
   covers the whole Wiki API: pages, descendants, search, comments, files,
   dynamic tables, access, clones, and the writes to each. ADR 7 records why it
   belongs behind this binary. Checked against a real Wiki: the live suite makes
