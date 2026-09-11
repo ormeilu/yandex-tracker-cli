@@ -164,10 +164,10 @@ The file attached to this page: [notes.txt](/users/login/showcase/.files/notes.t
 
 ## Dynamic table
 
-{% wgrid id="<the uuid wiki grid-create printed>" %}
+{% wgrid id="<the uuid wiki create-grid printed>" %}
 ````
 
-A grid made with `wiki grid-create` is only a resource of the page until a
+A grid made with `wiki create-grid` is only a resource of the page until a
 `wgrid` line puts it in the text. The one on the showcase page had a column of
 every type — text, number, date, checkbox, list, person, Tracker issue and
 issue status — filled with `wiki columns-add` and `wiki rows-add`; the issue

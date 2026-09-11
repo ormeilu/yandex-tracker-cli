@@ -1,6 +1,6 @@
 # ytcli
 
-Yandex Tracker from the command line, for people and for agents.
+Yandex Tracker and Yandex Wiki from the command line, for people and for agents.
 
 The tool exists because of a cost. An MCP server for Tracker loads its whole tool
 surface into an agent's context before a single question is asked, and then
@@ -13,7 +13,8 @@ its field order fixed, why lists always say how much they did not show, and why
 
 > **Status: 0.3.0.** Everything in the command tree is built: issues, worklogs,
 > checklists, links, queues, boards and sprints, organisation-wide fields and
-> templates, projects, portfolios, goals and attachments — reads and writes.
+> templates, projects, portfolios, goals and attachments, and the Wiki's pages,
+> comments, files, dynamic tables and access — reads and writes.
 > Published on crates.io, PyPI, Homebrew and GitHub Releases. What was
 > deliberately ruled out is in [TODO](TODO.md).
 

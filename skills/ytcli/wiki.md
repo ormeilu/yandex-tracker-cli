@@ -76,7 +76,7 @@ ytcli wiki cells-set <uuid> --set 1:done=true
 - **`delete` prints a recovery token once.** Nothing ever shows it again.
   `wiki restore <token>` undoes the delete. Keep the output.
 - **No undo, so `--yes`:** `delete-comment`, `delete-attachment`,
-  `grid-delete`, `rows-delete`, `columns-delete`, `revoke --all`,
+  `delete-grid`, `rows-delete`, `columns-delete`, `revoke --all`,
   `delete --recursive`.
 - **Grid writes carry a revision.** Pass the one you read with `--revision`, or
   let the command read the current one first. The Wiki refuses a write against
@@ -119,7 +119,7 @@ it.
   `{% tasks url="QUEUE" %}` lists a queue's issues (a filter address works
   too, 50 at most).
 - **Grids:** `{% wgrid id="<uuid>" %}` shows a grid made with
-  `wiki grid-create`, which otherwise exists only as a page resource.
+  `wiki create-grid`, which otherwise exists only as a page resource.
 
 Not rendered: footnotes (`[^1]`, `[[*]]`) and `[TOC]` come out as literal
 text. `wiki-markup.md` is the source of a page that uses every construct

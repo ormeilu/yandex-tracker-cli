@@ -58,9 +58,12 @@ meet is how the drift started.
   is written down below rather than pending. The number is a promise about
   breakage from here, not a claim that there is nothing left to build.
 - [Yandex Wiki](https://github.com/ormeilu/yandex-tracker-cli/milestone/5) —
-  the other half of an organisation's writing, as a read-only `ytcli wiki`
-  group. ADR 7 records why it belongs behind this binary; the commands are
-  filed as issues in the milestone.
+  the other half of an organisation's writing, as a `ytcli wiki` group that
+  covers the whole Wiki API: pages, descendants, search, comments, files,
+  dynamic tables, access, clones, and the writes to each. ADR 7 records why it
+  belongs behind this binary. Checked against a real Wiki: the live suite makes
+  one of everything and deletes it, and `skills/ytcli/wiki-markup.md` is the
+  source of a page whose rendering was checked in a browser.
 - [`kind:question`](https://github.com/ormeilu/yandex-tracker-cli/labels/kind%3Aquestion)
   — open design questions, filed so they are not re-litigated from scratch.
 
