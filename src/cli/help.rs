@@ -1062,6 +1062,10 @@ The full form asks Tracker for queues, projects, goals and your open issues, and
 the Wiki whether it accepts the token (`wiki: ok`, or what to do if not), so it
 costs several requests per profile; `--brief` verifies identity only.
 
+`access:` is what the token was signed in for: `read` after `auth login
+--read-only`, `write` otherwise. Yandex cannot be asked a token's scopes, so a
+pasted token, or any token while `YTCLI_TOKEN` is set, shows `unknown`.
+
 Exit code 3 means the active profile has no usable credentials. A profile that
 fails while the active one works is reported but does not change the exit code:
 the answer to \"can I work right now\" is about the profile in play.

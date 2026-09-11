@@ -54,6 +54,29 @@ pub struct Account {
     /// Human note about who this is; shown by `auth list`.
     #[serde(default)]
     pub description: Option<String>,
+    /// What the stored token was signed in for. Yandex offers no way to ask a
+    /// token its scopes, so this is the only record there is; a pasted token
+    /// has none.
+    #[serde(default)]
+    pub access: Option<Access>,
+}
+
+/// What a signed-in token may do: `read` from `--read-only`, `write` otherwise.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Access {
+    Read,
+    Write,
+}
+
+impl Access {
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Read => "read",
+            Self::Write => "write",
+        }
+    }
 }
 
 /// Display defaults. Every one of these is overridable per profile and per

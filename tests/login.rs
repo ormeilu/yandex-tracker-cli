@@ -283,6 +283,9 @@ async fn status_reports_identity_and_what_the_profile_can_see() {
 
     assert!(stdout.contains("profile test"));
     assert!(stdout.contains("org: 12345 (Cloud)"));
+    // Every test reads through `YTCLI_TOKEN`, which is no account's recorded
+    // token, so what the token may do is not known.
+    assert!(stdout.contains("queue: -   access: unknown"), "{stdout}");
     // The suffix is here because every test authenticates through
     // `YTCLI_TOKEN`; a keychain-backed profile prints `token: ok` alone.
     assert!(stdout.contains("token: ok (from YTCLI_TOKEN)   user: ilubenets (Ilya Lubenets)"));

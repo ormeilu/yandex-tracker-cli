@@ -242,7 +242,12 @@ async fn status(session: &Session, brief: bool, active_only: bool) -> ExitCode {
             paint.paint(&source, Palette::label()),
             paint.paint(marks, Palette::ok()),
         );
-        describe_profile(profile, paint, &mut out);
+        let access = session
+            .config
+            .accounts
+            .get(&profile.account)
+            .and_then(|account| account.access);
+        describe_profile(profile, access, paint, &mut out);
 
         let code = report_profile(
             profile,
@@ -303,6 +308,7 @@ async fn status(session: &Session, brief: bool, active_only: bool) -> ExitCode {
 /// The two lines under a profile heading: its note, then what it points at.
 fn describe_profile(
     profile: &crate::config::Profile,
+    access: Option<crate::config::Access>,
     paint: Painter,
     out: &mut impl std::io::Write,
 ) {
@@ -316,7 +322,7 @@ fn describe_profile(
 
     let _ = writeln!(
         out,
-        "  {} {}   {} {} ({:?})   {} {}",
+        "  {} {}   {} {} ({:?})   {} {}   {} {}",
         paint.paint("account:", Palette::label()),
         profile.account,
         paint.paint("org:", Palette::label()),
@@ -324,7 +330,20 @@ fn describe_profile(
         profile.org_kind,
         paint.paint("queue:", Palette::label()),
         profile.default_queue.as_deref().unwrap_or("-"),
+        paint.paint("access:", Palette::label()),
+        access_of(access, secrets::overridden()),
     );
+}
+
+/// What the token may do, as recorded at sign-in.
+///
+/// `YTCLI_TOKEN` stands in for every account's stored token, so what was
+/// recorded for that token says nothing about the one actually in use.
+fn access_of(access: Option<crate::config::Access>, overridden: bool) -> &'static str {
+    match access {
+        Some(access) if !overridden => access.name(),
+        _ => "unknown",
+    }
 }
 
 /// Persist the queue map, so a later bare key can be judged without a request.
@@ -674,6 +693,7 @@ async fn login(args: &LoginArgs, session: &Session) -> ExitCode {
         account,
         token,
         refresh,
+        access,
         org_id,
         org_kind: verified,
     } = match identity(args, session, interactive).await {
@@ -734,19 +754,7 @@ async fn login(args: &LoginArgs, session: &Session) -> ExitCode {
     };
 
     if session.global.dry_run {
-        let _ = writeln!(
-            err,
-            "dry run: would write profile `{profile_name}` (account={}, org={}, {:?}{}{}) to {}",
-            profile.account,
-            profile.org_id,
-            profile.org_kind,
-            profile
-                .description
-                .as_deref()
-                .map_or_else(String::new, |note| format!(", {note}")),
-            if make_default { ", default" } else { "" },
-            session.config_file.display(),
-        );
+        would_write(&profile_name, &profile, access, make_default, session);
         return ExitCode::Success;
     }
 
@@ -754,6 +762,7 @@ async fn login(args: &LoginArgs, session: &Session) -> ExitCode {
         &session.config_file,
         &account,
         None,
+        access,
         Some((&profile_name, &profile)),
         make_default,
     ) {
@@ -772,6 +781,30 @@ async fn login(args: &LoginArgs, session: &Session) -> ExitCode {
     }
 }
 
+/// What a dry-run login would have written.
+fn would_write(
+    name: &str,
+    profile: &Profile,
+    access: Option<crate::config::Access>,
+    make_default: bool,
+    session: &Session,
+) {
+    let _ = writeln!(
+        anstream::stderr(),
+        "dry run: would write profile `{name}` (account={}, org={}, {:?}{}{}{}) to {}",
+        profile.account,
+        profile.org_id,
+        profile.org_kind,
+        access.map_or_else(String::new, |access| format!(", access={}", access.name())),
+        profile
+            .description
+            .as_deref()
+            .map_or_else(String::new, |note| format!(", {note}")),
+        if make_default { ", default" } else { "" },
+        session.config_file.display(),
+    );
+}
+
 /// Who is logging in, where, and with what — everything settled before anything
 /// is written.
 struct Identity {
@@ -779,6 +812,8 @@ struct Identity {
     token: String,
     /// What renews the token; only a signed-in token has one.
     refresh: Option<String>,
+    /// What the token was signed in for; unknown for a pasted one.
+    access: Option<crate::config::Access>,
     org_id: Option<String>,
     /// The organisation flavour that answered, once verified.
     org_kind: Option<OrgKind>,
@@ -809,7 +844,7 @@ async fn identity(
         }
     };
 
-    let (token, refresh) = obtain_token(args, &account, interactive).await?;
+    let (token, refresh, access) = obtain_token(args, &account, interactive).await?;
 
     // The organisation decides whether a profile can be written at all, so it is
     // asked for rather than skipped when someone is there to answer.
@@ -835,6 +870,7 @@ async fn identity(
         account,
         token,
         refresh,
+        access,
         org_id,
         org_kind: verified,
     })
@@ -849,7 +885,7 @@ async fn obtain_token(
     args: &LoginArgs,
     account: &str,
     interactive: bool,
-) -> Result<(String, Option<String>), ExitCode> {
+) -> Result<(String, Option<String>, Option<crate::config::Access>), ExitCode> {
     let configured = oauth::App::is_configured();
     let browser = args.device
         || (interactive
@@ -862,13 +898,18 @@ async fn obtain_token(
             let mut err = anstream::stderr();
             let _ = writeln!(err, "\n{}", guidance::block(guidance::ORG));
         }
-        return Ok((grant.access_token, grant.refresh_token));
+        let access = if args.read_only {
+            crate::config::Access::Read
+        } else {
+            crate::config::Access::Write
+        };
+        return Ok((grant.access_token, grant.refresh_token, Some(access)));
     }
 
     if interactive && configured {
         wizard::introduce();
     }
-    read_token(account, interactive).map(|token| (token, None))
+    read_token(account, interactive).map(|token| (token, None, None))
 }
 
 /// The device-code sign-in: show a code, wait for it to be confirmed.
@@ -1695,4 +1736,19 @@ fn list(session: &Session) -> ExitCode {
 
     emit(&out);
     ExitCode::Success
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Recorded access is shown only for the token it was recorded for.
+    #[test]
+    fn access_is_unknown_unless_recorded_for_the_token_in_use() {
+        use crate::config::Access;
+        assert_eq!(access_of(Some(Access::Read), false), "read");
+        assert_eq!(access_of(Some(Access::Write), false), "write");
+        assert_eq!(access_of(None, false), "unknown");
+        assert_eq!(access_of(Some(Access::Read), true), "unknown");
+    }
 }

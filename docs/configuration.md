@@ -87,6 +87,7 @@ default_profile = "work"
 
 [accounts.work]
 description = "admin identity"
+access = "write"        # written by sign-in: read (--read-only) or write; absent for a pasted token
 
 [profiles.work]
 account = "work"

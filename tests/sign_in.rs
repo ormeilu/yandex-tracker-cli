@@ -99,7 +99,8 @@ async fn a_confirmed_code_becomes_a_verified_token() {
         .stderr(predicate::str::contains(
             "verified as ilubenets in org 12345",
         ))
-        .stderr(predicate::str::contains("dry run: would store a token"));
+        .stderr(predicate::str::contains("dry run: would store a token"))
+        .stderr(predicate::str::contains("access=write"));
 }
 
 /// `--read-only` has to reach Yandex as a scope, or the token gets everything
