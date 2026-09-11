@@ -102,13 +102,23 @@ setup.
 
 ## Logging in
 
-`ytcli auth login` is interactive: it asks for each value in turn and takes the
-token the way a password prompt does, so it never lands in shell history.
+`ytcli auth login` is interactive: it offers a sign-in in the browser first,
+and pasting a token second, taken the way a password prompt takes one.
 
-**Do not attempt this on the user's behalf, and never ask for a token in the
-conversation.** If credentials are missing, say so and let the user run it.
-Outside a terminal the command takes flags only and reads the token from stdin,
-which is what CI uses.
+**The one sign-in you may start is `--device`.** Ask the user which account
+name and organisation id to use, run
+`ytcli auth login --device --account NAME --org-id ID`, and show them the URL
+and code it prints. They confirm it in a browser; the command returns when
+they have, and the token goes to the keychain without passing through you.
+Add `--read-only` if they only want reading.
+
+**Never ask for a token in the conversation, and never paste one.** Outside a
+terminal, without `--device`, the command reads a token from stdin, which is
+what CI uses — that is for them, not for you.
+
+A token that stops working may only need `ytcli auth refresh`, which renews a
+signed-in token from the keychain with nothing asked of anyone. A token that
+lacks a permission — the Wiki's, say — needs a new sign-in instead.
 
 ## CI and containers
 

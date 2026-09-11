@@ -32,10 +32,10 @@ Or a binary from https://github.com/ormeilu/yandex-tracker-cli/releases, or
 Say which and let the user choose. Putting a program on someone's machine is
 not a step to take on their behalf.
 
-**Exit code 3** means there are no usable credentials. Say so and stop:
-`ytcli auth login` is an interactive prompt the user runs themselves, and a
-token must never be requested in the conversation — it would end up in a
-transcript, and a token in a transcript is a token to revoke.
+**Exit code 3** means there are no usable credentials. Try `ytcli auth refresh`
+once; if that fails, offer the browser sign-in — `auth login --device`, see
+`setup.md` — which the user confirms themselves. Never ask for a token in the
+conversation: a token in a transcript is a token to revoke.
 
 Anything else, including exit 0, means you can work.
 
