@@ -10,11 +10,46 @@ use ytcli::cli::{Cli, Command, GlobalArgs, Session, render_context};
 use ytcli::config::{Config, paths};
 use ytcli::exit::ExitCode;
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> std::process::ExitCode {
-    let cli = Cli::parse();
-    init_tracing(cli.global.verbose);
-    run(cli).await.into()
+/// The stack the whole program runs on: what macOS and Linux give a main thread.
+const STACK: usize = 8 * 1024 * 1024;
+
+/// Run everything on a thread with an 8 MB stack rather than on the main thread.
+///
+/// Windows gives the main thread 1 MB, and clap's derive builds the whole
+/// command tree in a few very large functions: in a debug build the frame that
+/// adds the `wiki` subcommands is most of that megabyte on its own, and
+/// `ytcli board list` overflowed before parsing its arguments. A thread with
+/// the stack every other platform already has costs one spawn and makes the
+/// limit the same everywhere.
+fn main() -> std::process::ExitCode {
+    let started = std::thread::Builder::new()
+        .name("ytcli".to_owned())
+        .stack_size(STACK)
+        .spawn(|| {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build();
+            match runtime {
+                Ok(runtime) => runtime.block_on(async {
+                    let cli = Cli::parse();
+                    init_tracing(cli.global.verbose);
+                    run(cli).await
+                }),
+                Err(error) => {
+                    let _ = writeln!(std::io::stderr(), "error: could not start: {error}");
+                    ExitCode::Failure
+                }
+            }
+        });
+    match started.map(std::thread::JoinHandle::join) {
+        Ok(Ok(code)) => code.into(),
+        // A panic already printed its message; carry it on as the panic it was.
+        Ok(Err(panic)) => std::panic::resume_unwind(panic),
+        Err(error) => {
+            let _ = writeln!(std::io::stderr(), "error: could not start: {error}");
+            ExitCode::Failure.into()
+        }
+    }
 }
 
 async fn run(cli: Cli) -> ExitCode {
@@ -52,11 +87,7 @@ async fn run(cli: Cli) -> ExitCode {
         Command::Portfolio(ref command) => ytcli::cli::portfolio::run(command, &session).await,
         Command::Goal(ref command) => ytcli::cli::goal::run(command, &session).await,
         Command::Attachment(ref command) => ytcli::cli::attachment::run(command, &session).await,
-        // Boxed so its state lives on the heap. The Wiki's dispatch is the
-        // largest future in the tree, and inline it made every command's future
-        // that large: Windows gives the main thread 1 MB of stack, and commands
-        // that never touch the Wiki overflowed it.
-        Command::Wiki(ref command) => Box::pin(ytcli::cli::wiki::run(command, &session)).await,
+        Command::Wiki(ref command) => ytcli::cli::wiki::run(command, &session).await,
         Command::Cheatsheet(_) | Command::Completions { .. } => ExitCode::Success,
     }
 }
