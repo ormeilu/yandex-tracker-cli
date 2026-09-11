@@ -37,7 +37,7 @@ ask:   ytcli issue create:*, ytcli issue update:*, ytcli issue comment:*,
        ytcli attachment upload:*, ytcli attachment delete:*,
        ytcli wiki create:*, ytcli wiki update:*, ytcli wiki append:*, ytcli wiki delete:*,
        ytcli wiki comment:*, ytcli wiki upload:*, ytcli wiki download:*, ytcli wiki grant:*,
-       … every other `wiki` verb — the full list is in skills/ytcli/setup.md,
+       … every other `wiki` verb — the full list is in plugin/skills/ytcli/setup.md,
        ytcli auth login:*, ytcli auth use:*, ytcli auth edit:*,
        ytcli auth logout:*, ytcli auth remove:*
 ```
@@ -56,7 +56,7 @@ someone else's Tracker still asks. The `auth` writes are in the second list for 
 different reason: they change nobody's Tracker, only the user's own config file
 and keychain — and which organisation the next command reaches is not a decision
 an agent should take on its own. The installable copy of this list is in
-[`skills/ytcli/setup.md`](https://github.com/ormeilu/yandex-tracker-cli/blob/main/skills/ytcli/setup.md).
+[`plugin/skills/ytcli/setup.md`](https://github.com/ormeilu/yandex-tracker-cli/blob/main/plugin/skills/ytcli/setup.md).
 
 Writes that fan out across a filter additionally require `--yes`. Single-issue
 writes do not: this is a tool for changing issues, and confirming every one of
@@ -110,8 +110,10 @@ the output text, never in the exit code.
 
 ## Installing the skill
 
-The skill lives in `skills/ytcli/` and is shipped as a plugin for both hosts from
-the same directory — there is one copy of it, not one per vendor.
+The skill lives in `plugin/skills/ytcli/` and is shipped as a plugin for both hosts from
+the same directory — there is one copy of it, not one per vendor. The plugin is
+`plugin/`, not the repository root, so installing it from a local checkout copies
+the skill and its manifests rather than the build directory.
 
 The layout is the conventional one, so the [skills
 CLI](https://github.com/vercel-labs/skills) finds it without any packaging on
@@ -132,12 +134,12 @@ Codex reads `~/.codex/skills/`, and Claude Code also loads `~/.claude/skills/`
 directly, so a checkout can be linked into either without a plugin at all:
 
 ```bash
-ln -s "$PWD/skills/ytcli" ~/.codex/skills/ytcli
-ln -s "$PWD/skills/ytcli" ~/.claude/skills/ytcli
+ln -s "$PWD/plugin/skills/ytcli" ~/.codex/plugin/skills/ytcli
+ln -s "$PWD/plugin/skills/ytcli" ~/.claude/plugin/skills/ytcli
 ```
 
 Neither host lets a plugin grant itself permissions, which is correct. The
-allowlist is a block of JSON in `skills/ytcli/setup.md` that you install
+allowlist is a block of JSON in `plugin/skills/ytcli/setup.md` that you install
 yourself.
 
 ## Learning the surface

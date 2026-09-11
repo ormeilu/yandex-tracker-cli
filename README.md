@@ -77,9 +77,9 @@ claude plugin marketplace add ormeilu/yandex-tracker-cli
 claude plugin install ytcli@ytcli
 ```
 
-Either one copies `skills/ytcli/` into place; doing that by hand works too. The
+Either one copies `plugin/skills/ytcli/` into place; doing that by hand works too. The
 permission allowlist that goes with it is a block of JSON in
-[`skills/ytcli/setup.md`](skills/ytcli/setup.md) — no plugin can install that
+[`plugin/skills/ytcli/setup.md`](plugin/skills/ytcli/setup.md) — no plugin can install that
 for you, and one that could should not.
 
 ## Use it: a person
@@ -187,7 +187,7 @@ ask:   ytcli issue update:*, ytcli issue comment:*, ytcli issue transition:*,
        ytcli wiki update:*, ytcli wiki comment:*
 ```
 
-The full list is in [`skills/ytcli/setup.md`](skills/ytcli/setup.md). Reads and
+The full list is in [`plugin/skills/ytcli/setup.md`](plugin/skills/ytcli/setup.md). Reads and
 writes never share a command prefix either — `worklogs` reads and `worklog`
 writes, `checklist` reads and `check` writes, `links` reads and `link` writes —
 which is what makes allowing `ytcli issue worklogs:*` safe.
@@ -245,7 +245,7 @@ do, and none of them can be done for them:
   instead is for CI, and `ytcli auth login --help` has those steps.
 - **The permission allowlist.** Read verbs can be allowed permanently, writes
   should prompt. The JSON is in
-  [`skills/ytcli/setup.md`](skills/ytcli/setup.md). Changing what you are allowed
+  [`plugin/skills/ytcli/setup.md`](plugin/skills/ytcli/setup.md). Changing what you are allowed
   to run is the user's decision, and a tool that could grant itself permissions
   would be worth less than one that cannot.
 - **The check that it works.** After they have logged in, `ytcli auth status`

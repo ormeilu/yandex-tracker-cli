@@ -18,7 +18,7 @@ keywords = ["yandex", "tracker", "cli", "llm", "agent"]
 categories = ["command-line-utilities"]
 # `docs/cheatsheet.txt` is compiled into the binary, so it is not excluded with
 # the rest of the documentation: without it the published crate does not build.
-exclude = ["/.github", "/docs/adr", "/docs/book", "/docs/*.md", "/skills"]
+exclude = ["/.github", "/docs/adr", "/docs/book", "/docs/*.md", "/plugin"]
 
 [lib]
 name = "ytcli"
