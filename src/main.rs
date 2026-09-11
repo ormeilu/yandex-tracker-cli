@@ -52,7 +52,11 @@ async fn run(cli: Cli) -> ExitCode {
         Command::Portfolio(ref command) => ytcli::cli::portfolio::run(command, &session).await,
         Command::Goal(ref command) => ytcli::cli::goal::run(command, &session).await,
         Command::Attachment(ref command) => ytcli::cli::attachment::run(command, &session).await,
-        Command::Wiki(ref command) => ytcli::cli::wiki::run(command, &session).await,
+        // Boxed so its state lives on the heap. The Wiki's dispatch is the
+        // largest future in the tree, and inline it made every command's future
+        // that large: Windows gives the main thread 1 MB of stack, and commands
+        // that never touch the Wiki overflowed it.
+        Command::Wiki(ref command) => Box::pin(ytcli::cli::wiki::run(command, &session)).await,
         Command::Cheatsheet(_) | Command::Completions { .. } => ExitCode::Success,
     }
 }
