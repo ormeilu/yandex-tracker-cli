@@ -63,7 +63,7 @@ meet is how the drift started.
   covers the whole Wiki API: pages, descendants, search, comments, files,
   dynamic tables, access, clones, and the writes to each. ADR 7 records why it
   belongs behind this binary. Checked against a real Wiki: the live suite makes
-  one of everything and deletes it, and `skills/ytcli/wiki-markup.md` is the
+  one of everything and deletes it, and `plugin/skills/ytcli/wiki-markup.md` is the
   source of a page whose rendering was checked in a browser. 2.0.1 puts the
   sign-in application into the Python wheels as well: 2.0.0 compiled it into
   the release binaries only, so `pip` and `uvx` users could not sign in
@@ -100,7 +100,7 @@ Labels split the work by area: `area:issues`, `area:entities`,
   name, because only one of the two can go in a script. `user find` filters the
   directory here — Tracker has no user search endpoint — and says how many
   people it read rather than presenting a capped answer as a complete one.
-- Milestone 0.6.0: `skills/ytcli/yql.md`, every query on it sent to a real Tracker
+- Milestone 0.6.0: `plugin/skills/ytcli/yql.md`, every query on it sent to a real Tracker
   before it was written down — which is how `StoryPoints` turned out not to be a
   filter name while `"Story Points"` is. `field get` says what a field accepts,
   naming the command that lists the values when they live elsewhere.
@@ -145,7 +145,7 @@ Labels split the work by area: `area:issues`, `area:entities`,
 - Help written in markdown and rendered with termimad for a terminal; the source
   goes to a pipe, where an agent reads it natively and escape codes would be
   noise.
-- The agent surface (ADR 6): `skills/ytcli/`, loaded as a plugin by Claude Code
+- The agent surface (ADR 6): `plugin/skills/ytcli/`, loaded as a plugin by Claude Code
   and Codex from one directory, and `--help` written as documentation rather
   than as clap's defaults. Both are checked against the binary by tests, since a
   stale example is acted on rather than noticed.

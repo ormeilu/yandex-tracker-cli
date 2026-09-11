@@ -17,7 +17,7 @@ use assert_cmd::Command;
 mod harness;
 
 fn skill_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("skills/ytcli")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("plugin/skills/ytcli")
 }
 
 fn markdown_files() -> Vec<PathBuf> {

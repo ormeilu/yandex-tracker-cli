@@ -1469,9 +1469,10 @@ async fn a_project_can_be_created_changed_and_deleted() {
 async fn every_query_the_skill_teaches_is_accepted() {
     let client = client();
     let queue = a_queue(&client).await;
-    let text =
-        std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("skills/ytcli/yql.md"))
-            .expect("yql.md");
+    let text = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("plugin/skills/ytcli/yql.md"),
+    )
+    .expect("yql.md");
 
     let queries: Vec<String> = text
         .lines()
