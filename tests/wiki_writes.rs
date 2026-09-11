@@ -249,6 +249,39 @@ async fn a_refused_write_names_wiki_write() {
         .stderr(predicate::str::contains("wiki:write"));
 }
 
+/// A 403 the Wiki explains — an editor may change a section but not add to
+/// it — is reported as that explanation and as a rights refusal, not as a
+/// token that lacks a permission it has.
+#[tokio::test]
+async fn a_refused_write_repeats_the_reason_the_wiki_gives() {
+    let harness = Harness::new().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/pages"))
+        .respond_with(ResponseTemplate::new(403).set_body_json(serde_json::json!({
+            "error_code": "FORBIDDEN",
+            "debug_message": "",
+            "message": "No rights to create a page in this section",
+            "details": null
+        })))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&[
+            "wiki",
+            "create",
+            "homepage/team/notes",
+            "--title",
+            "Notes",
+        ])
+        .assert()
+        .code(5)
+        .stderr(predicate::str::contains(
+            "the Wiki rejected the request (403 Forbidden): FORBIDDEN: No rights to create a page in this section",
+        ))
+        .stderr(predicate::str::contains("wiki:write").not());
+}
+
 /// Under `-f json` a write answers with an object, so a script takes the id
 /// without parsing the sentence a person gets.
 #[tokio::test]
