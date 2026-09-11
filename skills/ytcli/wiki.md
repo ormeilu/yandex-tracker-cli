@@ -86,4 +86,41 @@ ytcli wiki cells-set <uuid> --set 1:done=true
 - **Clones take time.** The command waits and prints what it made. `--no-wait`
   returns an operation, and `wiki operation` asks about it later.
 
+## Markup a page renders
+
+Checked against a real Wiki. Pages are Markdown with the Wiki's extensions;
+the visual editor rewrites what it saves (it escapes syntax it does not know
+and reformats tables), so re-read a page someone has edited before replacing
+it.
+
+- **Text:** `**bold**`, `_italic_`, `++underline++`, `~~strike~~`,
+  `##mono##`, `==highlight==`, `^sup^`, `~sub~`, `{red}(text)` (also green,
+  blue, gray, yellow, orange, violet), `:smile:`, `@login`.
+- **Blocks:** `{% note info "Title" %}…{% endnote %}` (info, tip, warning,
+  alert), `{% cut "Title" %}…{% endcut %}`, `{% list tabs %}` with a `- Tab`
+  item per tab and `{% endlist %}`, `---` for a rule.
+- **Checklists:** `[ ] item` and `[X] item` as separate paragraphs, or
+  `- [ ] item` list items.
+- **Contents:** `{% toc %}` on its own line.
+- **Anchors:** `# Heading {#id}`, or `#[text](id "hint")` inline; link with
+  `[text](#id)`.
+- **Tables:** Markdown tables, or `#| || a | b || |#` when a cell needs a
+  list, code or several paragraphs.
+- **Code and maths:** fenced code with a language, `$inline$`, `$$ block $$`.
+- **Diagrams:** a ```` ```mermaid ```` fence, PlantUML inside
+  `{% diagram %}…{% enddiagram %}`. Draw.io diagrams are made in the editor
+  and saved as `{% drawio data="data:image/svg+xml;base64,…" %}`.
+- **Embeds:** `/iframe/(src="…" width="600" height="300")` for allowed hosts
+  (Yandex Maps and YouTube work; yandex.ru refuses to be framed and shows a
+  blank box), `![alt](url =154x)` for a sized image,
+  `[name](/<slug>/.files/<name>)` for an attached file.
+- **Tracker:** an issue key or issue address on its own becomes a live card;
+  `{% tasks url="QUEUE" %}` lists a queue's issues (a filter address works
+  too, 50 at most).
+- **Grids:** `{% wgrid id="<uuid>" %}` shows a grid made with
+  `wiki grid-create`, which otherwise exists only as a page resource.
+
+Not rendered: footnotes (`[^1]`, `[[*]]`) and `[TOC]` come out as literal
+text.
+
 `ytcli cheatsheet wiki` has every flag.
