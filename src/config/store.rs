@@ -30,6 +30,7 @@ pub fn upsert(
     path: &Path,
     account: &str,
     description: Option<&str>,
+    access: Option<crate::config::Access>,
     profile: Option<(&str, &Profile)>,
     make_default: bool,
 ) -> Result<String, StoreError> {
@@ -45,8 +46,18 @@ pub fn upsert(
     let entry = accounts
         .entry(account)
         .or_insert_with(|| Item::Table(Table::new()));
-    if let (Some(table), Some(description)) = (entry.as_table_mut(), description) {
-        table["description"] = value(description);
+    if let Some(table) = entry.as_table_mut() {
+        if let Some(description) = description {
+            table["description"] = value(description);
+        }
+        // A new token replaces the old one's rights, so an unknown access
+        // clears what a previous sign-in recorded rather than keeping it.
+        match access {
+            Some(access) => table["access"] = value(access.name()),
+            None => {
+                table.remove("access");
+            }
+        }
     }
 
     if let Some((name, profile)) = profile {
@@ -438,6 +449,7 @@ mod tests {
             &path,
             "work",
             Some("main"),
+            None,
             Some(("work", &profile())),
             true,
         )
@@ -476,6 +488,7 @@ org_kind = "yandex360"
             &path,
             "work",
             Some("admin"),
+            None,
             Some(("work", &profile())),
             false,
         )
@@ -493,13 +506,14 @@ org_kind = "yandex360"
     fn updating_an_existing_profile_replaces_its_fields() {
         let dir = tempfile::tempdir().expect("temp dir");
         let path = dir.path().join("config.toml");
-        upsert(&path, "work", None, Some(("work", &profile())), true).expect("first");
+        upsert(&path, "work", None, None, Some(("work", &profile())), true).expect("first");
 
         let mut moved = profile();
         moved.org_id = "999".to_owned();
         moved.org_kind = OrgKind::Yandex360;
         moved.default_queue = None;
-        let written = upsert(&path, "work", None, Some(("work", &moved)), false).expect("second");
+        let written =
+            upsert(&path, "work", None, None, Some(("work", &moved)), false).expect("second");
 
         assert!(written.contains(r#"org_id = "999""#));
         assert!(written.contains(r#"org_kind = "yandex360""#));
@@ -515,10 +529,10 @@ org_kind = "yandex360"
         let path = dir.path().join("config.toml");
         let mut described = profile();
         described.description = Some("production — customer data".to_owned());
-        upsert(&path, "work", None, Some(("work", &described)), true).expect("first");
+        upsert(&path, "work", None, None, Some(("work", &described)), true).expect("first");
 
         let written =
-            upsert(&path, "work", None, Some(("work", &profile())), false).expect("second");
+            upsert(&path, "work", None, None, Some(("work", &profile())), false).expect("second");
 
         assert!(written.contains(r#"description = "production — customer data""#));
     }
@@ -712,10 +726,33 @@ limit = 5
         let path = dir.path().join("config.toml");
         std::fs::write(&path, "this is not [[[ toml").expect("write");
 
-        assert!(upsert(&path, "work", None, None, false).is_err());
+        assert!(upsert(&path, "work", None, None, None, false).is_err());
         assert_eq!(
             std::fs::read_to_string(&path).expect("still there"),
             "this is not [[[ toml"
         );
+    }
+
+    /// A sign-in records what the token may do; a pasted token after it takes
+    /// that record away rather than inheriting it.
+    #[test]
+    fn access_is_recorded_and_cleared_by_the_next_login() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("config.toml");
+
+        let written = upsert(
+            &path,
+            "work",
+            None,
+            Some(crate::config::Access::Read),
+            Some(("work", &profile())),
+            true,
+        )
+        .expect("first");
+        assert!(written.contains(r#"access = "read""#), "{written}");
+
+        let written =
+            upsert(&path, "work", None, None, Some(("work", &profile())), false).expect("second");
+        assert!(!written.contains("access"), "{written}");
     }
 }
