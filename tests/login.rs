@@ -327,6 +327,34 @@ async fn status_says_when_the_token_cannot_read_the_wiki() {
     }
 }
 
+/// The Wiki refuses an organisation it has never been opened in with a 403
+/// that has nothing to do with the token. Signing in again would not help, so
+/// `auth status` must not say it would.
+#[tokio::test]
+async fn status_says_when_the_wiki_was_never_set_up_in_the_organisation() {
+    let harness = Harness::new().await;
+    status_answers(&harness).await;
+    Mock::given(method("GET"))
+        .and(path("/v1/users/me"))
+        .respond_with(ResponseTemplate::new(403).set_body_json(serde_json::json!({
+            "debug_message": "Organization collab_id=None does not exist",
+            "error_code": "FORCED_SYNC_REQUIRED",
+            "level": "ERROR",
+            "message": ["You don't have permission to access the requested resource."]
+        })))
+        .mount(&harness.server)
+        .await;
+
+    let output = harness.run_raw(&["auth", "status"]).assert().success();
+    let stdout = String::from_utf8(output.get_output().stdout.clone()).expect("utf-8");
+
+    assert!(
+        stdout.contains("wiki: not set up in this organisation"),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("wiki:read"), "{stdout}");
+}
+
 /// A profile that cannot see projects should still report its queues rather
 /// than losing the whole line.
 #[tokio::test]

@@ -639,6 +639,10 @@ async fn reach(
             "no access — the token lacks wiki:read; sign in again with `ytcli auth login`",
             Palette::warn(),
         ),
+        Err(crate::api::error::ApiError::WikiNotEnabled) => paint.paint(
+            "not set up in this organisation — open https://wiki.yandex.ru once to start it",
+            Palette::warn(),
+        ),
         Err(_) => "-".to_owned(),
     };
     let _ = writeln!(out, "  {} {wiki}", paint.paint("wiki:", Palette::label()));

@@ -2619,6 +2619,8 @@ async fn classify(response: reqwest::Response, what: &str) -> Result<String, Api
     let message = response.text().await.unwrap_or_default();
     Err(match status.as_u16() {
         401 => ApiError::Unauthorized,
+        // Only the Wiki says this, and it means the organisation, not the token.
+        403 if message.contains("FORCED_SYNC_REQUIRED") => ApiError::WikiNotEnabled,
         403 => ApiError::Forbidden,
         404 => ApiError::NotFound(what.to_owned()),
         429 => ApiError::RateLimited,

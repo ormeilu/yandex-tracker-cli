@@ -142,3 +142,27 @@ async fn the_verbs_not_built_yet_say_so() {
         harness.run(verb).assert().code(64);
     }
 }
+
+/// An organisation the Wiki was never opened in is refused with a 403 that
+/// is not about the token, and the message must not send anyone to sign in.
+#[tokio::test]
+async fn a_wiki_never_set_up_in_the_organisation_says_so() {
+    let harness = Harness::new().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/pages"))
+        .respond_with(ResponseTemplate::new(403).set_body_json(serde_json::json!({
+            "debug_message": "Organization collab_id=None does not exist",
+            "error_code": "FORCED_SYNC_REQUIRED",
+            "level": "ERROR",
+            "message": ["You don't have permission to access the requested resource."]
+        })))
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&["wiki", "get", "users/ilubenets/runbook"])
+        .assert()
+        .code(5)
+        .stderr(predicate::str::contains("not set up in this organisation"))
+        .stderr(predicate::str::contains("wiki:read").not());
+}

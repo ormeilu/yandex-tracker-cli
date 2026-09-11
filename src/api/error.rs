@@ -22,6 +22,14 @@ pub enum ApiError {
          with `ytcli auth login` — or this account cannot see that page"
     )]
     WikiForbidden,
+    // The Wiki answers 403 with `FORCED_SYNC_REQUIRED` when it has never heard of
+    // the organisation: the Wiki was not opened there yet. No sign-in fixes
+    // that, so blaming the token would send people round in circles.
+    #[error(
+        "the Wiki is not set up in this organisation yet — open https://wiki.yandex.ru once, \
+         signed in to it, and try again"
+    )]
+    WikiNotEnabled,
     #[error("{0} not found")]
     NotFound(String),
     #[error("rate limited by Tracker (429)")]
@@ -41,7 +49,9 @@ impl ApiError {
         match self {
             Self::Unauthorized | Self::WikiForbidden => ExitCode::Auth,
             Self::NotFound(_) => ExitCode::NotFound,
-            Self::Forbidden | Self::RateLimited | Self::Rejected { .. } => ExitCode::ApiRejected,
+            Self::Forbidden | Self::WikiNotEnabled | Self::RateLimited | Self::Rejected { .. } => {
+                ExitCode::ApiRejected
+            }
             Self::Transport(_) | Self::Decode(_) => ExitCode::Failure,
         }
     }
