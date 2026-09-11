@@ -1,6 +1,6 @@
 {
   "name": "ytcli",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "description": "Yandex Tracker from the command line, sized for agents: read, search and change issues without spending a context window on it. Ships the skill; the ytcli binary is installed separately.",
   "author": {
     "name": "Ilya Lubenets",

@@ -263,6 +263,13 @@ The short version: `ytcli auth login` writes
 `.tracker.toml` committed to a repository pins the profile and queue for
 everybody working in it.
 
+Afterwards, `ytcli auth edit NAME` changes a profile without a second login —
+its name, the organisation it points at, the account behind it, and the note
+saying which organisation that is, which then rides along on the `→ profile=…`
+line every command prints. `ytcli auth remove NAME --yes` deletes a profile;
+`ytcli auth logout --account NAME` forgets a token. They are different things,
+and each says what it left behind.
+
 The long version — several organisations through one login, several logins into
 one organisation, display defaults, routing, `YTCLI_TOKEN` for CI — is in
 **[docs/configuration.md](docs/configuration.md)**.
