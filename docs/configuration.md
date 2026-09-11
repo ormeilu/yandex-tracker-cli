@@ -22,6 +22,7 @@ accounts (an admin identity and a read-only one, say). So:
 | holds | a token, in the keychain | organisation id, org kind, defaults — in the config file |
 | named by | `--account`, `auth logout` | `--profile`, `YTCLI_PROFILE`, `.tracker.toml`, `work/PROJ-1` |
 | created by | `auth login` | `auth login` (same run) |
+| changed by | `auth login` again (new token) | `auth edit NAME` |
 | deleted by | `auth logout --account NAME` | `auth remove NAME --yes` |
 
 Every command runs as exactly one profile, and prints which one on stderr; the

@@ -20,18 +20,26 @@ allow: ytcli issue get:*, ytcli issue find:*, ytcli issue list:*, ytcli issue co
        ytcli dict list:*, ytcli component list:*, ytcli link types,
        ytcli user list:*, ytcli user get:*, ytcli user find:*,
        ytcli worklog find:*,
-       ytcli portfolio contents:*,
+       ytcli project list, ytcli project get:*,
+       ytcli portfolio list, ytcli portfolio get:*, ytcli portfolio contents:*,
+       ytcli goal list, ytcli goal get:*,
+       ytcli attachment list:*, ytcli attachment show:*,
        ytcli wiki get:*, ytcli wiki list:*, ytcli wiki find:*, ytcli wiki comments:*,
        ytcli wiki attachments:*, ytcli wiki grids:*, ytcli wiki grid:*,
        ytcli wiki resources:*, ytcli wiki access:*, ytcli wiki operation:*,
-       ytcli auth status
+       ytcli auth status, ytcli auth list, ytcli cheatsheet
 ask:   ytcli issue create:*, ytcli issue update:*, ytcli issue comment:*,
        ytcli issue transition:*, ytcli issue move:*, ytcli issue worklog:*,
-       ytcli issue check:*, ytcli issue timer:*, ytcli issue link:*, ytcli queue create:*, ytcli project place:*,
+       ytcli issue check:*, ytcli issue timer:*, ytcli issue link:*, ytcli queue create:*,
+       ytcli project create:*, ytcli project update:*, ytcli project delete:*, ytcli project place:*,
+       ytcli portfolio create:*, ytcli portfolio update:*, ytcli portfolio delete:*, ytcli portfolio place:*,
+       ytcli goal create:*, ytcli goal update:*, ytcli goal delete:*,
        ytcli attachment upload:*, ytcli attachment delete:*,
        ytcli wiki create:*, ytcli wiki update:*, ytcli wiki append:*, ytcli wiki delete:*,
        ytcli wiki comment:*, ytcli wiki upload:*, ytcli wiki download:*, ytcli wiki grant:*,
-       … every other `wiki` verb — the full list is in skills/ytcli/setup.md
+       … every other `wiki` verb — the full list is in skills/ytcli/setup.md,
+       ytcli auth login:*, ytcli auth use:*, ytcli auth edit:*,
+       ytcli auth logout:*, ytcli auth remove:*
 ```
 
 The Wiki keeps the same rule: no read verb is the start of a write verb. The
@@ -44,7 +52,11 @@ Reads and writes never share a command prefix — `worklogs` and `worklog`,
 the write beside it.
 
 Configure it once and reading stops prompting, while anything that changes
-someone else's Tracker still asks.
+someone else's Tracker still asks. The `auth` writes are in the second list for a
+different reason: they change nobody's Tracker, only the user's own config file
+and keychain — and which organisation the next command reaches is not a decision
+an agent should take on its own. The installable copy of this list is in
+[`skills/ytcli/setup.md`](https://github.com/ormeilu/yandex-tracker-cli/blob/main/skills/ytcli/setup.md).
 
 Writes that fan out across a filter additionally require `--yes`. Single-issue
 writes do not: this is a tool for changing issues, and confirming every one of
@@ -55,12 +67,19 @@ them would be theatre. Every write accepts `--dry-run`.
 Each command prints one line to stderr before its output:
 
 ```
-→ profile=work org=1234567 (from config default_profile)
+→ profile=work org=1234567 (from config default_profile) — production, customer data
 ```
 
 stdout is the data channel and never carries it. An agent working across two
 organisations can therefore check what it just read against what it meant to
 read, rather than inferring it from the content.
+
+Everything after the dash is the profile's note, and it is there only when the
+profile has one: `org=1234567` identifies nothing to a reader who does not
+already know the number, and "which organisation is this about to be written to"
+is the question the line exists to answer. A profile with no note prints the
+same line without the suffix. `ytcli auth edit NAME --description TEXT` sets it —
+a write against the user's own config file, so ask before running it.
 
 ## The injection surface is the output, not the query
 
