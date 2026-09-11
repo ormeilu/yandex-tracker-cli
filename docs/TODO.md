@@ -74,6 +74,11 @@ meet is how the drift started.
   answers with `USER_NOT_FOUND` says what usually causes it. The plugin moved
   to `plugin/`, so a local install no longer copies the build directory, and a
   test keeps both plugin manifests at the crate's version.
+- 2.1.1 — a Wiki 403 that comes with a reason ("no rights to create a page in
+  this section": an editor who is not an author) is reported as that reason
+  and exits 5, instead of blaming the token for a `wiki:write` it has. A bare
+  403 keeps its guidance, worded to name both causes. Refused responses are
+  logged at debug level with their body, so `-vv` shows what the API said.
 - [`kind:question`](https://github.com/ormeilu/yandex-tracker-cli/labels/kind%3Aquestion)
   — open design questions, filed so they are not re-litigated from scratch.
 
