@@ -31,10 +31,13 @@ pub enum ApiError {
     )]
     WikiNotEnabled,
     // Reading and writing are separate permissions, and a token signed in for
-    // reading only is refused every write: naming the one it lacks is the fix.
+    // reading only is refused every write. A 403 that says why is reported as
+    // what it says (`WikiRejected`); this is the one that came with nothing,
+    // so both likely causes are named rather than the token blamed outright.
     #[error(
-        "the Wiki refused this write: the token needs the wiki:write permission — sign in \
-         again with `ytcli auth login` — or this account may not edit that page"
+        "the Wiki refused this write (403) without saying why: either the token lacks the \
+         wiki:write permission — sign in again with `ytcli auth login` — or this account \
+         may not edit or create pages there (`ytcli wiki access <page>` shows who may)"
     )]
     WikiWriteForbidden,
     #[error("{0} not found")]

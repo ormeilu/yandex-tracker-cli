@@ -2617,10 +2617,20 @@ async fn classify(response: reqwest::Response, what: &str) -> Result<String, Api
     }
 
     let message = response.text().await.unwrap_or_default();
+    // The typed error keeps only what a caller can act on; the body itself is
+    // still worth a look when a refusal makes no sense, hence a debug line.
+    tracing::debug!(%status, body = %message, "{what}: request refused");
     Err(match status.as_u16() {
         401 => ApiError::Unauthorized,
         // Only the Wiki says this, and it means the organisation, not the token.
         403 if message.contains("FORCED_SYNC_REQUIRED") => ApiError::WikiNotEnabled,
+        // A 403 the Wiki explains — "no rights to create a page in this
+        // section" — is an answer, not a permission puzzle: repeating it beats
+        // guessing that the token is the problem.
+        403 if wiki_explains(&message) => ApiError::Rejected {
+            status,
+            message: complaint(&message),
+        },
         403 => ApiError::Forbidden,
         404 => ApiError::NotFound(what.to_owned()),
         429 => ApiError::RateLimited,
@@ -2662,15 +2672,14 @@ fn complaint(body: &str) -> String {
                 );
             }
             // The Wiki's envelope is `{"error_code", "debug_message", "message"}`:
-            // the code is what a caller can match on, the debug message the only
-            // sentence that says what went wrong — `message` is often null.
+            // the code is what a caller can match on, and whichever of the two
+            // texts is filled says what went wrong — one is null or empty
+            // depending on the refusal.
             if said.is_empty()
                 && let Some(code) = value.get("error_code").and_then(Value::as_str)
             {
-                let detail = value
-                    .get("debug_message")
-                    .and_then(Value::as_str)
-                    .or_else(|| value.get("message").and_then(Value::as_str));
+                let detail =
+                    wiki_detail(&value, "debug_message").or_else(|| wiki_detail(&value, "message"));
                 said.push(
                     detail.map_or_else(|| code.to_owned(), |detail| format!("{code}: {detail}")),
                 );
@@ -2680,6 +2689,28 @@ fn complaint(body: &str) -> String {
         .unwrap_or_else(|| body.to_owned());
 
     messages.chars().take(400).collect()
+}
+
+/// One of the Wiki envelope's two texts, when it is actually filled in.
+fn wiki_detail<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
+    value
+        .get(key)
+        .and_then(Value::as_str)
+        .filter(|text| !text.trim().is_empty())
+}
+
+/// Whether a refusal is the Wiki's and comes with a sentence saying why.
+///
+/// A bare 403 is a rights puzzle the message has to help solve; one that
+/// arrives with a reason is not, and the reason is what to repeat.
+fn wiki_explains(body: &str) -> bool {
+    serde_json::from_str::<Value>(body)
+        .ok()
+        .is_some_and(|value| {
+            value.get("error_code").and_then(Value::as_str).is_some()
+                && (wiki_detail(&value, "debug_message").is_some()
+                    || wiki_detail(&value, "message").is_some())
+        })
 }
 
 /// Retry transport hiccups and server-side backpressure; never retry a request
@@ -2708,6 +2739,32 @@ mod tests {
             complaint(body),
             "NO_PARENT_PAGE: Immediate parent page does not exist"
         );
+    }
+
+    /// The Wiki fills `message` and leaves `debug_message` empty on a rights
+    /// refusal; an empty string is not a reason, so the sentence still comes
+    /// through.
+    #[test]
+    fn a_wiki_refusal_with_an_empty_debug_message_keeps_its_sentence() {
+        let body = r#"{"error_code": "FORBIDDEN", "debug_message": "", "message": "No rights to create a page in this section", "details": null}"#;
+        assert_eq!(
+            complaint(body),
+            "FORBIDDEN: No rights to create a page in this section"
+        );
+        assert!(wiki_explains(body));
+    }
+
+    /// A 403 with no sentence in it is still the rights puzzle it always was,
+    /// and Tracker's envelope is not the Wiki's.
+    #[test]
+    fn a_refusal_without_a_reason_is_not_an_explanation() {
+        assert!(!wiki_explains(""));
+        assert!(!wiki_explains(
+            r#"{"error_code": "FORBIDDEN", "debug_message": "", "message": null}"#
+        ));
+        assert!(!wiki_explains(
+            r#"{"errors":{},"errorMessages":["forbidden"]}"#
+        ));
     }
 
     /// The sentence a caller can act on, not the envelope it arrived in.
