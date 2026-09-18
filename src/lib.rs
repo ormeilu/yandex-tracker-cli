@@ -18,3 +18,4 @@ pub mod exit;
 pub mod oauth;
 pub mod render;
 pub mod secrets;
+pub mod update;
