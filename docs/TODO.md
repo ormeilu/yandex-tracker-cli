@@ -79,6 +79,18 @@ meet is how the drift started.
   and exits 5, instead of blaming the token for a `wiki:write` it has. A bare
   403 keeps its guidance, worded to name both causes. Refused responses are
   logged at debug level with their body, so `-vv` shows what the API said.
+- 2.2.0 — device sign-in issues a new code on every attempt: each request
+  carries a `device_id` of its own, without which Yandex answers a retry with
+  the pending code it already holds and the page rejects it as expired. The
+  poll gives up after five minutes where Yandex omits `expires_in`, rather than
+  waiting for a confirmation that can no longer arrive, and `--device` against
+  a build with no OAuth application fails before the wizard, the keychain or
+  any request instead of after them. The skill and the README lead with the
+  code sign-in, with `default` proposed as the account name. Once a day, at the
+  end of a command and only where both streams are terminals, a newer version
+  is named along with the way to get it — the registry and the advice follow
+  whatever installed the binary, so a `uv` install is asked about at pypi.org
+  and told to run `uv tool upgrade`. `YTCLI_NO_UPDATE_CHECK=1` turns it off.
 - [`kind:question`](https://github.com/ormeilu/yandex-tracker-cli/labels/kind%3Aquestion)
   — open design questions, filed so they are not re-litigated from scratch.
 
