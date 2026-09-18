@@ -209,6 +209,30 @@ makes them all the same identity. `ytcli auth status` marks every profile it
 read that way and warns once at the end — a shell that sources `.env` on
 entering a directory sets it without anyone deciding to.
 
+## The update notice
+
+Once a day, after a command has printed everything it had, `ytcli` asks the
+registry it was installed from whether a newer version exists and prints one
+line if there is:
+
+```
+ytcli 2.2.0 is out (this is 2.1.2) — uv tool upgrade yandex-tracker-cli
+```
+
+Which registry, and which advice, follows where the binary sits: a `uv` or
+`pipx` install is asked about on PyPI, everything else on crates.io. The two
+are published from the same tag but by different jobs, so asking the wrong one
+can offer a version that has no wheel yet.
+
+It costs nothing where it would not be read. **The check is skipped entirely
+unless both stdout and stderr are terminals**, which rules out every pipe,
+every script and every agent, and it is skipped in CI. The answer is kept in
+`update.json` beside the config for a day, the request gives up after two
+seconds, and anything that goes wrong — no network, a rate limit, an answer we
+cannot read — is silent.
+
+`YTCLI_NO_UPDATE_CHECK=1` turns it off for terminals that want none of it.
+
 ## Everything else
 
 - `YTCLI_CONFIG` points at another config file; `--config PATH` does it for one

@@ -69,7 +69,7 @@ async fn run(cli: Cli) -> ExitCode {
         Err(code) => return code,
     };
 
-    match cli.command {
+    let code = match cli.command {
         Command::Auth(ref command) => ytcli::cli::auth::run(command, &session).await,
         Command::Issue(ref command) => ytcli::cli::issue::run(command, &session).await,
         Command::Queue(ref command) => ytcli::cli::queue::run(command, &session).await,
@@ -89,7 +89,12 @@ async fn run(cli: Cli) -> ExitCode {
         Command::Attachment(ref command) => ytcli::cli::attachment::run(command, &session).await,
         Command::Wiki(ref command) => ytcli::cli::wiki::run(command, &session).await,
         Command::Cheatsheet(_) | Command::Completions { .. } => ExitCode::Success,
-    }
+    };
+
+    // After the command has printed everything it had: a newer version is worth
+    // a line at the end, never a delay at the start.
+    ytcli::update::notify(&session.config_file).await;
+    code
 }
 
 /// Load config and resolve the profile.

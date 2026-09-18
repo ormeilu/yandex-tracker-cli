@@ -280,6 +280,11 @@ line every command prints. `ytcli auth remove NAME --yes` deletes a profile;
 `ytcli auth logout --account NAME` forgets a token. They are different things,
 and each says what it left behind.
 
+Once a day, at the end of a command and only in a terminal, `ytcli` says if a
+newer version exists and how to get it — `uv tool upgrade`, `brew upgrade`,
+`cargo install`, whichever matches where the binary came from. A pipe, a script
+and an agent never see it, and `YTCLI_NO_UPDATE_CHECK=1` turns it off.
+
 The long version — several organisations through one login, several logins into
 one organisation, display defaults, routing, `YTCLI_TOKEN` for CI — is in
 **[docs/configuration.md](docs/configuration.md)**.
