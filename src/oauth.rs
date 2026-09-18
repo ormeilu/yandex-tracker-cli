@@ -26,6 +26,10 @@ pub const READ_ONLY_SCOPE: &str = "tracker:read wiki:read";
 
 /// Used when Yandex does not say how long to wait between polls.
 const DEFAULT_INTERVAL: u64 = 5;
+/// Used when Yandex does not say how long the code lives. Without a deadline of
+/// some kind the polling loop waits for a confirmation that can no longer
+/// arrive, silently, which is worse than giving up and saying so.
+const DEFAULT_EXPIRY: u64 = 300;
 /// Yandex's own addition to the interval when it answers `slow_down`.
 const SLOW_DOWN_STEP: u64 = 5;
 
@@ -186,8 +190,10 @@ impl App {
     /// Without a scope the token gets everything the application was registered
     /// with; with one, only that.
     pub async fn request_code(&self, scope: Option<&str>) -> Result<DeviceCode, OAuthError> {
+        let device_id = device_id();
         let mut fields = vec![
             ("client_id", self.client_id.as_str()),
+            ("device_id", device_id.as_str()),
             ("device_name", "ytcli"),
         ];
         if let Some(scope) = scope {
@@ -215,9 +221,8 @@ impl App {
     /// Poll until the code is confirmed, declined, or runs out.
     pub async fn await_grant(&self, code: &DeviceCode) -> Result<Grant, OAuthError> {
         let mut interval = code.interval.unwrap_or(DEFAULT_INTERVAL);
-        let deadline = code
-            .expires_in
-            .map(|seconds| std::time::Instant::now() + Duration::from_secs(seconds));
+        let deadline = std::time::Instant::now()
+            + Duration::from_secs(code.expires_in.unwrap_or(DEFAULT_EXPIRY));
 
         loop {
             match self.poll(code).await? {
@@ -226,7 +231,7 @@ impl App {
                 Poll::Pending => {}
             }
 
-            if deadline.is_some_and(|deadline| std::time::Instant::now() >= deadline) {
+            if std::time::Instant::now() >= deadline {
                 return Err(OAuthError::Expired);
             }
             tokio::time::sleep(Duration::from_secs(interval)).await;
@@ -324,6 +329,30 @@ fn failure(status: reqwest::StatusCode, body: &str) -> OAuthError {
     }
 }
 
+/// A device id unique to this sign-in attempt.
+///
+/// Yandex answers a repeated `POST /device/code` from the same client with the
+/// pending record it already holds, so without one a retry after a code has run
+/// out prints that same, now-rejected code again. What matters is that two
+/// attempts never collide, not that the id identifies the machine; Yandex takes
+/// up to 50 characters.
+fn device_id() -> String {
+    use std::fmt::Write as _;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    // The clock alone is not enough: its resolution on Windows is coarser than
+    // two calls in a row, so a counter carries the difference.
+    static ATTEMPT: AtomicU64 = AtomicU64::new(0);
+
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |since| since.as_nanos());
+    let attempt = ATTEMPT.fetch_add(1, Ordering::Relaxed);
+    let mut id = String::with_capacity(40);
+    let _ = write!(id, "ytcli-{:x}-{nanos:x}-{attempt:x}", std::process::id());
+    id
+}
+
 /// `application/x-www-form-urlencoded`, by hand: reqwest's encoder sits behind a
 /// feature, and five fields do not justify turning it on.
 fn form(fields: &[(&str, &str)]) -> String {
@@ -359,6 +388,20 @@ mod tests {
         assert_eq!(
             form(&[("scope", "tracker:read wiki:read")]),
             "scope=tracker%3Aread%20wiki%3Aread"
+        );
+    }
+
+    /// Two attempts must not share a device id, or Yandex hands the second one
+    /// the first one's pending code back.
+    #[test]
+    fn every_attempt_gets_its_own_device_id() {
+        let first = device_id();
+        assert_ne!(first, device_id());
+        assert!(first.len() >= 6 && first.len() <= 50, "{first}");
+        assert!(
+            first
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
         );
     }
 }

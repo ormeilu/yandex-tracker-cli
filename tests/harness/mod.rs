@@ -126,7 +126,11 @@ impl Harness {
             .env("YTCLI_TOKEN", "test-token")
             // A developer's own environment must not decide what a test sees.
             .env_remove("YTCLI_PROFILE")
-            .env_remove("YTCLI_CONFIG");
+            .env_remove("YTCLI_CONFIG")
+            // A developer signed in through an application of their own must
+            // not turn a test about the unconfigured build into a sign-in.
+            .env_remove("YTCLI_OAUTH_CLIENT_ID")
+            .env_remove("YTCLI_OAUTH_CLIENT_SECRET");
         command
     }
 }
