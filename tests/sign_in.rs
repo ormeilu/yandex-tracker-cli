@@ -46,6 +46,63 @@ fn sign_in(harness: &Harness) -> assert_cmd::Command {
     command
 }
 
+/// Without an application there is nothing to sign in through, and `--device`
+/// has to say so at once: this is the first command a new person runs, and a
+/// command that sits there is indistinguishable from a hung network call.
+#[tokio::test]
+async fn device_without_an_application_fails_before_anything_can_block() {
+    let harness = Harness::new().await;
+
+    harness
+        .run_raw(&[
+            "auth",
+            "login",
+            "--account",
+            "work",
+            "--org-id",
+            "12345",
+            "--device",
+        ])
+        .timeout(std::time::Duration::from_secs(10))
+        .assert()
+        .code(3)
+        .stderr(predicate::str::contains(
+            "this build has no OAuth application to sign in with",
+        ))
+        .stderr(predicate::str::contains(
+            "run `ytcli auth login` without --device and paste a token",
+        ));
+}
+
+/// Yandex answers a repeated `/device/code` for a client with the pending code
+/// it already holds, so a retry reprints one that has already expired. A device
+/// id of its own per attempt is what makes the second request a second code.
+#[tokio::test]
+async fn each_attempt_asks_with_its_own_device_id() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/device/code"))
+        .and(body_string_contains("device_id=ytcli-"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(code()))
+        .expect(2)
+        .mount(&server)
+        .await;
+
+    let app = ytcli::oauth::App::new(&server.uri(), "app-id".into(), "app-secret".into()).unwrap();
+    app.request_code(None).await.unwrap();
+    app.request_code(None).await.unwrap();
+
+    let sent: Vec<String> = server
+        .received_requests()
+        .await
+        .expect("requests recorded")
+        .iter()
+        .map(|request| String::from_utf8_lossy(&request.body).into_owned())
+        .collect();
+    assert_eq!(sent.len(), 2);
+    assert_ne!(sent[0], sent[1], "the same device id was sent twice");
+}
+
 /// The whole point: a code on screen, a wait while it is confirmed, and a token
 /// that is then verified like a pasted one — without anything being copied.
 #[tokio::test]

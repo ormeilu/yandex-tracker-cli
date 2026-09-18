@@ -105,12 +105,35 @@ setup.
 `ytcli auth login` is interactive: it offers a sign-in in the browser first,
 and pasting a token second, taken the way a password prompt takes one.
 
-**The one sign-in you may start is `--device`.** Ask the user which account
-name and organisation id to use, run
-`ytcli auth login --device --account NAME --org-id ID`, and show them the URL
-and code it prints. They confirm it in a browser; the command returns when
-they have, and the token goes to the keychain without passing through you.
-Add `--read-only` if they only want reading.
+**The one sign-in you may start is `--device`, and it is the one to offer
+first.** The [organisation id](https://tracker.yandex.ru/admin/orgs) is the only
+thing you really need from the user: the account name is a local label, so
+propose `default` — which is what the interactive wizard offers too — and only
+ask for one when they already keep several logins. Then run it and let it wait:
+
+```bash
+ytcli auth login --device --account NAME --org-id ID      # --read-only for reading alone
+```
+
+It prints a short code and a URL, waits, and returns by itself once the user
+has confirmed the code — in any browser, on any machine, which is why this works
+over SSH and from a sandbox. The token goes to the keychain without passing
+through you. Show them the code and the URL as they are; the code lives about
+five minutes, and a fresh run always issues a new one.
+
+**"Set this up for me" means install, then sign in, in one go.** Install the
+binary (their choice of installer), confirm `ytcli --version`, and go straight
+to the command above with the code in front of them. Do not pause after the
+install to ask whether they would like to sign in now, and do not start by
+explaining how to register an OAuth application: registering one is the
+fallback for builds and organisations that cannot use the code flow, and
+leading with it is what the code flow exists to spare people.
+
+`this build has no OAuth application to sign in with` is that fallback
+announcing itself: the build carries no application, so the code flow is not
+available at all. Say that, and that the remaining route is `ytcli auth login`
+**without** `--device`, run by them, pasting a token they fetched themselves —
+`ytcli auth login --help` prints the steps.
 
 **Never ask for a token in the conversation, and never paste one.** Outside a
 terminal, without `--device`, the command reads a token from stdin, which is

@@ -682,6 +682,19 @@ async fn login(args: &LoginArgs, session: &Session) -> ExitCode {
     let interactive = wizard::is_interactive();
     let mut err = anstream::stderr();
 
+    // `--device` asks for the one thing an unconfigured build cannot do, and it
+    // is the first command a new person runs. Said here, before a prompt, a
+    // keychain or a request, it cannot be mistaken for the command hanging.
+    if args.device && !oauth::App::is_configured() {
+        return report(
+            &format!(
+                "{}\nWithout one, run `ytcli auth login` without --device and paste a token.",
+                oauth::OAuthError::NotConfigured
+            ),
+            ExitCode::Auth,
+        );
+    }
+
     // Without a way to sign in, interactive login always asks for a pasted
     // token — there is no flag to pass one in, on purpose — so the procedure is
     // needed up front. With one, it is shown only if pasting is chosen.
