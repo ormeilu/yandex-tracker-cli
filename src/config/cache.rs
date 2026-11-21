@@ -203,7 +203,10 @@ mod tests {
         cache.record("work", &["LMS".to_owned()]);
 
         assert_eq!(cache.profiles_for("LMS", &["work".to_owned()]), ["work"]);
-        assert!(cache.profiles_for("OLD", &["work".to_owned()]).is_empty());
+        assert_eq!(
+            cache.profiles_for("OLD", &["work".to_owned()]),
+            Vec::<String>::new()
+        );
     }
 
     #[test]

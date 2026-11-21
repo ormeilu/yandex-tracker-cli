@@ -791,7 +791,7 @@ mod tests {
         });
 
         let parsed = link(&value).expect("link");
-        assert!(parsed.id.is_empty());
+        assert_eq!(parsed.id, "");
         assert_eq!(parsed.key, "PROJ-2");
     }
 
