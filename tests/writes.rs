@@ -43,6 +43,102 @@ async fn create_sends_the_queue_summary_and_returns_the_new_key() {
         .stdout(predicate::str::starts_with("PROJ-1  "));
 }
 
+/// Type, priority and an epic are part of the issue from the start: one POST,
+/// parsed the way `issue update` parses `--set`, and no second request.
+#[tokio::test]
+async fn create_carries_set_fields_in_the_same_request() {
+    let harness = Harness::new().await;
+    Mock::given(method("POST"))
+        .and(path("/v3/issues/"))
+        .and(body_json(serde_json::json!({
+            "queue": {"key": "PROJ"},
+            "summary": "Retry uploads on 5xx",
+            "type": "bug",
+            "priority": "normal",
+            "epic": "PROJ-1",
+            "storyPoints": 3,
+            "sprint": "3",
+        })))
+        .respond_with(ResponseTemplate::new(201).set_body_json(fixture("issue.json")))
+        .expect(1)
+        .mount(&harness.server)
+        .await;
+
+    harness
+        .run(&[
+            "issue",
+            "create",
+            "-q",
+            "PROJ",
+            "-s",
+            "Retry uploads on 5xx",
+            "--set",
+            "type=bug",
+            "--set",
+            "priority=normal",
+            "--set",
+            "epic=PROJ-1",
+            "--set",
+            "storyPoints=3",
+            "--set",
+            r#"sprint:="3""#,
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::starts_with("PROJ-1  "));
+
+    assert_eq!(
+        harness
+            .server
+            .received_requests()
+            .await
+            .expect("recorded")
+            .len(),
+        1
+    );
+}
+
+#[tokio::test]
+async fn create_refuses_a_malformed_set_before_anything_is_sent() {
+    let harness = Harness::new().await;
+
+    harness
+        .run(&["issue", "create", "-q", "PROJ", "-s", "t", "--set", "type"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("expected key=value"));
+
+    assert!(
+        harness
+            .server
+            .received_requests()
+            .await
+            .expect("recorded")
+            .is_empty()
+    );
+}
+
+/// The announcement names the queue; `--set queue=` would make it lie.
+#[tokio::test]
+async fn create_takes_the_queue_from_queue_only() {
+    let harness = Harness::new().await;
+
+    harness
+        .run(&[
+            "issue",
+            "create",
+            "-q",
+            "PROJ",
+            "-s",
+            "t",
+            "--set",
+            "queue=OTHER",
+        ])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("the queue is --queue"));
+}
+
 /// The whole point of a dry run: nothing reaches Tracker. The stub has no
 /// mounted route, so any request at all would fail the test.
 #[tokio::test]

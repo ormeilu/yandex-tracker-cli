@@ -46,8 +46,10 @@ request and go one at a time.
 ```bash
 ytcli issue create -q PROJ -s "Attachments are lost on move" -d "body text"
 ytcli issue create -q PROJ -s "title" --description-file ./body.md   # or -d -
+ytcli issue create -q PROJ -s "title" --set type=bug --set epic=PROJ-1   # one request
 ytcli issue update PROJ-1 --description-file ./body.md   # replaces it in full
 ytcli issue update PROJ-1 --set storyPoints=3 --assignee login
+ytcli issue update PROJ-1 --assignee me --set 'followers=["me","ivan"]'   # me = your login
 ytcli issue update PROJ-1 --set 'summary:="3"'    # JSON outright, no guessing
 ytcli issue update PROJ-1 PROJ-2 --set storyPoints=3 --yes   # one request, not two
 ytcli issue comment PROJ-1 "text"          # or `-` to read the body from stdin
@@ -142,7 +144,14 @@ types, workflows and defaults from a queue that already works.
 
 Values in `--set` are read as JSON when they parse as JSON, and as strings
 otherwise. `--set storyPoints=3` sends a number, `--set summary=3` would too —
-quote it as `--set 'summary="3"'` if you mean the string.
+quote it as `--set 'summary="3"'` if you mean the string. `issue create` takes
+`--set` too, so set type, priority and epic there rather than in a second
+`update`.
+
+`me` is your login wherever a person goes: `--assignee me`, and `--set` on any
+field whose type holds people (followers, qaEngineer, custom user fields), in a
+list too. Other fields keep `me` as text. It costs a lookup, which `--dry-run`
+also makes, so the dry run already shows the login.
 
 An update that would change nothing is refused rather than sent.
 

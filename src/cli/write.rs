@@ -129,6 +129,163 @@ pub fn parse_assignment(raw: &str) -> Result<(String, serde_json::Value), String
     Ok((key.to_owned(), parsed))
 }
 
+/// `me` on a write, replaced by the login it stands for.
+///
+/// A read hands `me` to YQL, where Tracker's own `me()` answers it. A write has
+/// nothing like that: a field that holds people takes a login, `me` is sent as
+/// one, and Tracker answers 422 saying no such user exists. So the login is
+/// asked for once, through `GET /v3/myself`, and only when something says `me`.
+///
+/// `--assignee` only ever names a person. A `--set` field is replaced only when
+/// the field registry says it holds people, because `summary=me` is a summary,
+/// and a field's name is no evidence of what it holds. A queue's local field is
+/// not in the registry, so a field the registry does not know is looked for
+/// among the local fields of the queues being written to. One found in neither
+/// is sent as written, and Tracker says what it makes of it.
+#[derive(Debug)]
+pub struct Me<'a> {
+    client: &'a crate::api::Client,
+    queues: Vec<String>,
+    login: Option<String>,
+}
+
+impl<'a> Me<'a> {
+    /// `queues` are where a local field could be defined: the queue an issue is
+    /// created in, or the queues of the issues being changed.
+    #[must_use]
+    pub fn new(client: &'a crate::api::Client, queues: Vec<String>) -> Self {
+        Self {
+            client,
+            queues,
+            login: None,
+        }
+    }
+
+    /// A value given where only a person can go, such as `--assignee`.
+    pub async fn person(&mut self, who: &str) -> Result<String, ExitCode> {
+        if is_me(who) {
+            self.login().await
+        } else {
+            Ok(who.to_owned())
+        }
+    }
+
+    /// A `--set` value, with `me` replaced if the field holds people.
+    pub async fn field(
+        &mut self,
+        key: &str,
+        mut value: serde_json::Value,
+    ) -> Result<serde_json::Value, ExitCode> {
+        if !mentions_me(&value) || !self.holds_people(key).await? {
+            return Ok(value);
+        }
+        let login = self.login().await?;
+        replace_me(&mut value, &login);
+        Ok(value)
+    }
+
+    async fn login(&mut self) -> Result<String, ExitCode> {
+        if let Some(login) = &self.login {
+            return Ok(login.clone());
+        }
+        let user = self.client.myself().await.map_err(|error| {
+            let code = error.exit_code();
+            crate::cli::report(&error, code)
+        })?;
+        // A token without a login still has a uid, and Tracker takes either.
+        let login = user
+            .login
+            .filter(|login| !login.is_empty())
+            .or_else(|| Some(user.id).filter(|id| !id.is_empty()))
+            .ok_or_else(|| {
+                crate::cli::report(
+                    &"this token has no login to put in place of `me`; name the login",
+                    ExitCode::Auth,
+                )
+            })?;
+        self.login = Some(login.clone());
+        Ok(login)
+    }
+
+    async fn holds_people(&self, key: &str) -> Result<bool, ExitCode> {
+        use crate::api::error::ApiError;
+
+        let unknown = |error: &ApiError| {
+            crate::cli::report(
+                &format!(
+                    "could not tell whether `{key}` holds people, so `me` cannot be resolved: {error}"
+                ),
+                error.exit_code(),
+            )
+        };
+
+        match self.client.field(key).await {
+            Ok(spec) => return Ok(spec.holds_people()),
+            Err(ApiError::NotFound(_)) => {}
+            Err(error) => return Err(unknown(&error)),
+        }
+
+        let short = key.rsplit("--").next().unwrap_or(key);
+        for queue in &self.queues {
+            match self.client.queue_local_fields(queue).await {
+                Ok(fields) => {
+                    if let Some(spec) = fields.iter().find(|spec| spec.key == short) {
+                        return Ok(spec.holds_people());
+                    }
+                }
+                Err(ApiError::NotFound(_)) => {}
+                Err(error) => return Err(unknown(&error)),
+            }
+        }
+        Ok(false)
+    }
+}
+
+/// `me`, in any case and with any padding: `ME` is what a shift key produces,
+/// and `me, ivan` is how people type a list.
+#[must_use]
+pub fn is_me(text: &str) -> bool {
+    text.trim().eq_ignore_ascii_case("me")
+}
+
+/// Whether a value says `me` anywhere a person could be named: the whole
+/// string, one entry of a comma-separated list, or a string inside an array or
+/// an object such as `{"add": ["me"]}`.
+#[must_use]
+pub fn mentions_me(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::String(text) => text.split(',').any(is_me),
+        serde_json::Value::Array(items) => items.iter().any(mentions_me),
+        serde_json::Value::Object(members) => members.values().any(mentions_me),
+        _ => false,
+    }
+}
+
+/// Put `login` wherever [`mentions_me`] finds `me`, and change nothing else:
+/// a comma-separated list stays a string, an array stays an array.
+fn replace_me(value: &mut serde_json::Value, login: &str) {
+    match value {
+        serde_json::Value::String(text) if text.split(',').any(is_me) => {
+            *text = text
+                .split(',')
+                .map(|entry| if is_me(entry) { login } else { entry })
+                .collect::<Vec<_>>()
+                .join(",");
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                replace_me(item, login);
+            }
+        }
+        serde_json::Value::Object(members) => {
+            for member in members.values_mut() {
+                replace_me(member, login);
+            }
+        }
+        _ => {}
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -204,5 +361,44 @@ mod tests {
     fn a_pair_without_an_equals_is_rejected() {
         assert!(parse_assignment("storyPoints").is_err());
         assert!(parse_assignment("=3").is_err());
+    }
+
+    fn replaced(value: serde_json::Value) -> serde_json::Value {
+        let mut value = value;
+        replace_me(&mut value, "ilubenets");
+        value
+    }
+
+    /// Every shape a list of people arrives in keeps its shape; only the `me`
+    /// inside it changes.
+    #[test]
+    fn me_is_replaced_in_every_shape_a_person_can_take() {
+        assert_eq!(replaced(serde_json::json!("me")), "ilubenets");
+        assert_eq!(replaced(serde_json::json!("ME")), "ilubenets");
+        assert_eq!(replaced(serde_json::json!("me,ivan")), "ilubenets,ivan");
+        assert_eq!(
+            replaced(serde_json::json!("ivan, me")),
+            "ivan,ilubenets",
+            "a padded entry is still `me`"
+        );
+        assert_eq!(
+            replaced(serde_json::json!(["me", "ivan"])),
+            serde_json::json!(["ilubenets", "ivan"])
+        );
+        assert_eq!(
+            replaced(serde_json::json!({"add": ["me"]})),
+            serde_json::json!({"add": ["ilubenets"]})
+        );
+    }
+
+    /// `meeting` and `name` contain the letters; they are not the word.
+    #[test]
+    fn only_the_whole_word_is_me() {
+        for text in ["meeting", "name", "me ivan", ""] {
+            assert!(!mentions_me(&serde_json::json!(text)), "{text:?}");
+            assert_eq!(replaced(serde_json::json!(text)), text);
+        }
+        assert!(!mentions_me(&serde_json::json!(3)));
+        assert!(mentions_me(&serde_json::json!({"remove": "me"})));
     }
 }
