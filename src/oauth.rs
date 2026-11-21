@@ -140,9 +140,15 @@ fn credentials() -> Option<(String, String)> {
         .ok()
         .filter(|id| !id.is_empty())
         .map(|id| (id, std::env::var(CLIENT_SECRET_ENV).unwrap_or_default()));
-    let built = option_env!("YTCLI_OAUTH_CLIENT_ID")
-        .zip(option_env!("YTCLI_OAUTH_CLIENT_SECRET"))
-        .map(|(id, secret)| (id.to_owned(), secret.to_owned()));
+    // A match rather than `zip`: in a build without the pair both sides are
+    // constant `None`, and newer clippy refuses a `zip` it can see through.
+    let built = match (
+        option_env!("YTCLI_OAUTH_CLIENT_ID"),
+        option_env!("YTCLI_OAUTH_CLIENT_SECRET"),
+    ) {
+        (Some(id), Some(secret)) => Some((id.to_owned(), secret.to_owned())),
+        _ => None,
+    };
 
     runtime
         .or(built)
