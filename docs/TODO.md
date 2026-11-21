@@ -99,6 +99,8 @@ meet is how the drift started.
   local fields) says the field holds people. A value keeps its shape, so a
   list or an `{"add": [...]}` has only its `me` replaced, and a dry run already
   shows the login. Nothing is looked up when nobody wrote `me`.
+- 2.3.1 — documentation only: the skill's entry point lists `issue create`
+  with `--set` and `--assignee me` among the common commands.
 - [`kind:question`](https://github.com/ormeilu/yandex-tracker-cli/labels/kind%3Aquestion)
   — open design questions, filed so they are not re-litigated from scratch.
 
