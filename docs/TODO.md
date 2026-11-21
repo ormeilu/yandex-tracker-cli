@@ -91,6 +91,14 @@ meet is how the drift started.
   is named along with the way to get it — the registry and the advice follow
   whatever installed the binary, so a `uv` install is asked about at pypi.org
   and told to run `uv tool upgrade`. `YTCLI_NO_UPDATE_CHECK=1` turns it off.
+- 2.3.0 — `issue create` takes `--set`, read as `issue update` reads it, so a
+  type, a priority or an epic goes out in the one POST. `me` on a write is the
+  login from `/v3/myself` instead of a login Tracker rejects with 422:
+  `--assignee me` on create, update and checklist lines, and `--set` on
+  create, update and transition wherever the field registry (or the queue's
+  local fields) says the field holds people. A value keeps its shape, so a
+  list or an `{"add": [...]}` has only its `me` replaced, and a dry run already
+  shows the login. Nothing is looked up when nobody wrote `me`.
 - [`kind:question`](https://github.com/ormeilu/yandex-tracker-cli/labels/kind%3Aquestion)
   — open design questions, filed so they are not re-litigated from scratch.
 
