@@ -300,10 +300,26 @@ Create an issue.
 ```
 ytcli issue create -q PROJ -s \"Attachments are lost on move\"
 ytcli issue create -q PROJ -s \"title\" -d \"body\" --assignee login --tags QA,P6
+ytcli issue create -q PROJ -s \"title\" --set type=bug --set priority=normal --set epic=PROJ-1
+ytcli issue create -q PROJ -s \"title\" --assignee me --set 'followers=[\"me\",\"ivan\"]'
 ytcli issue create -q PROJ -s \"title\" --description-file ./body.md
 ytcli issue create -q PROJ -s \"title\" -d -        # the body from stdin
 ytcli issue create -q PROJ -s \"title\" --dry-run
 ```
+
+`--set` takes any other field, custom ones included, and reads it the way
+`issue update` does: a value that parses as JSON is sent as JSON, and
+`key:=json` says JSON outright. The fields go out in the same request as the
+issue, so a type, a priority or an epic needs no second call.
+`ytcli queue fields PROJ` lists the keys. The queue itself is `--queue`.
+
+`me` is your login wherever a person goes: `--assignee me`, and `--set` on a
+field that holds people (`followers`, `qaEngineer`, a custom user field), in a
+list too. Which fields hold people is the field registry's answer, not a guess
+from the name, so `--set summary=me` stays a summary; a field the registry does
+not know is looked up among the queue's local fields. That costs a request for
+your login and one per such field, made by `--dry-run` as well, so the body it
+prints carries the login. Nothing is asked when nobody wrote `me`.
 
 A description is the field most likely to hold quotes, newlines and markdown, so
 it can come from a file or from stdin rather than from an argument. Both at once
@@ -326,6 +342,7 @@ Change fields of one or more issues.
 ```
 ytcli issue update PROJ-1 --assignee login
 ytcli issue update PROJ-1 --set storyPoints=3
+ytcli issue update PROJ-1 --assignee me --set 'followers={\"add\":[\"me\"]}'
 ytcli issue update PROJ-1 PROJ-2 --set storyPoints=3 --yes
 ytcli issue update PROJ-1 --set 'summary=\"3\"' --dry-run
 ytcli issue update PROJ-1 --description-file ./body.md
@@ -341,6 +358,15 @@ guess is that a summary which happens to look like a number becomes one, so
 `key:=json` says it outright: `--set 'summary:=\"3\"'` writes the string, and
 invalid JSON after `:=` is refused rather than quietly becoming text.
 `ytcli queue fields PROJ` lists the keys.
+
+`me` is your login wherever a person goes: `--assignee me`, and `--set` on a
+field that holds people (`followers`, `qaEngineer`, a custom user field), in a
+list or an `add` too. Which fields hold people is the field registry's answer,
+not a guess from the name, so `--set summary=me` stays a summary; a field the
+registry does not know is looked up among the queue's local fields. That costs a
+request for your login and one per such field, made by `--dry-run` as well, so
+the body it prints carries the login. Issues in two organisations are refused
+with `me`, since it names a different account in each.
 
 More than one issue needs `--yes`: one issue is the ordinary case, several is
 irreversible at scale.
@@ -546,6 +572,7 @@ Add a line to an issue's checklist.
 ```
 ytcli issue check add PROJ-1 \"migrate the audio tracks\"
 ytcli issue check add PROJ-1 \"review\" --assignee login --deadline 2026-09-01
+ytcli issue check add PROJ-1 \"review\" --assignee me   # your login, asked for once
 ```
 
 Prints the checklist as it stands afterwards, so the new id is visible without
@@ -655,7 +682,8 @@ without one Tracker refuses with the names of the fields it wanted, in the
 organisation's own language. `--resolution` is the one everybody needs;
 `--set key=value` covers the rest, and takes field keys the way `issue update`
 does — `ytcli dict list --kind resolutions` names the resolutions, and
-`ytcli queue fields PROJ` the rest.
+`ytcli queue fields PROJ` the rest. `me` in a field that holds people is your
+login, as it is there.
 
 More than one issue takes the same workflow step in one request, and needs
 `--yes` and `--to`: with a list of keys there is no unambiguous place left for a

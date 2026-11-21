@@ -2533,6 +2533,12 @@ pub struct FieldOptions {
 }
 
 impl FieldSpec {
+    /// Whether the field takes people: one person, or a list of them.
+    #[must_use]
+    pub fn holds_people(&self) -> bool {
+        self.field_type == "user" || self.items.as_deref() == Some("user")
+    }
+
     fn parse(value: &Value) -> Option<Self> {
         let id = value.get("id").and_then(Value::as_str)?;
         let schema = value.get("schema");

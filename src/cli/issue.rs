@@ -10,7 +10,7 @@ use std::io::Write as _;
 use clap::{Args, Subcommand};
 
 use crate::api::query::Filter;
-use crate::cli::write::{Gate, Intent, check, parse_assignment};
+use crate::cli::write::{Gate, Intent, Me, check, is_me, mentions_me, parse_assignment};
 use crate::cli::{Session, emit, report};
 use crate::exit::ExitCode;
 use crate::render::{self, Format, image, machine, text};
@@ -68,10 +68,15 @@ pub enum IssueCommand {
         /// Read the description from a file instead.
         #[arg(long, value_name = "PATH", conflicts_with = "description")]
         description_file: Option<String>,
+        /// Login, or `me`.
         #[arg(long)]
         assignee: Option<String>,
         #[arg(long, value_delimiter = ',')]
         tags: Vec<String>,
+        /// Set any other field, custom ones included: --set type=bug.
+        /// `me` in a field that holds people is your login.
+        #[arg(long = "set", value_name = "KEY=VALUE")]
+        set: Vec<String>,
     },
     /// Change fields of one or more issues.
     #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_UPDATE))]
@@ -87,9 +92,11 @@ pub enum IssueCommand {
         /// Read the new description from a file instead.
         #[arg(long, value_name = "PATH", conflicts_with = "description")]
         description_file: Option<String>,
+        /// Login, or `me`.
         #[arg(long)]
         assignee: Option<String>,
-        /// Set any field, including custom ones: --set storyPoints=3
+        /// Set any field, including custom ones: --set storyPoints=3.
+        /// `me` in a field that holds people is your login.
         #[arg(long = "set", value_name = "KEY=VALUE")]
         set: Vec<String>,
         /// Hand the change to Tracker and print its id without waiting for it
@@ -271,6 +278,7 @@ pub enum CheckCommand {
     Add {
         key: String,
         text: String,
+        /// Login, or `me`.
         #[arg(long)]
         assignee: Option<String>,
         /// Deadline, as `2026-09-01`.
@@ -363,14 +371,18 @@ pub async fn run(command: &IssueCommand, session: &Session) -> ExitCode {
             description_file,
             assignee,
             tags,
+            set,
         } => {
             create(
                 queue.as_deref(),
-                summary,
-                description.as_deref(),
-                description_file.as_deref(),
-                assignee.as_deref(),
-                tags,
+                &Changes {
+                    summary: Some(summary),
+                    description: description.as_deref(),
+                    description_file: description_file.as_deref(),
+                    assignee: assignee.as_deref(),
+                    tags,
+                    set,
+                },
                 session,
             )
             .await
@@ -391,6 +403,7 @@ pub async fn run(command: &IssueCommand, session: &Session) -> ExitCode {
                     description: description.as_deref(),
                     description_file: description_file.as_deref(),
                     assignee: assignee.as_deref(),
+                    tags: &[],
                     set,
                 },
                 *no_wait,
@@ -676,6 +689,14 @@ async fn check_write(command: &CheckCommand, session: &Session) -> ExitCode {
             let mut body = serde_json::Map::new();
             body.insert("text".to_owned(), serde_json::json!(line));
             if let Some(assignee) = assignee {
+                let queues = crate::config::cache::queue_of(&key)
+                    .map(ToOwned::to_owned)
+                    .into_iter()
+                    .collect();
+                let assignee = match Me::new(&client, queues).person(assignee).await {
+                    Ok(assignee) => assignee,
+                    Err(code) => return code,
+                };
                 body.insert("assignee".to_owned(), serde_json::json!(assignee));
             }
             if let Some(deadline) = deadline {
@@ -1615,15 +1636,7 @@ fn description_of(inline: Option<&str>, file: Option<&str>) -> Result<Option<Str
     }
 }
 
-async fn create(
-    queue: Option<&str>,
-    summary: &str,
-    description: Option<&str>,
-    description_file: Option<&str>,
-    assignee: Option<&str>,
-    tags: &[String],
-    session: &Session,
-) -> ExitCode {
+async fn create(queue: Option<&str>, changes: &Changes<'_>, session: &Session) -> ExitCode {
     let Some(queue) = queue.or_else(|| session.default_queue()) else {
         return report(
             &"no queue given: pass --queue or pin one in .tracker.toml",
@@ -1631,24 +1644,31 @@ async fn create(
         );
     };
 
-    let description = match description_of(description, description_file) {
-        Ok(description) => description,
+    // The queue is what the announcement names; a `--set queue=` that quietly
+    // sent the issue somewhere else would make that line wrong.
+    if changes
+        .set
+        .iter()
+        .any(|raw| raw.starts_with("queue=") || raw.starts_with("queue:="))
+    {
+        return report(
+            &"the queue is --queue, not --set queue=",
+            ExitCode::ConfirmationRequired,
+        );
+    }
+
+    let client = match session.client() {
+        Ok(client) => client,
         Err(code) => return code,
     };
 
-    let mut body = serde_json::json!({
-        "queue": { "key": queue },
-        "summary": summary,
-    });
-    if let Some(description) = &description {
-        body["description"] = serde_json::json!(description);
-    }
-    if let Some(assignee) = assignee {
-        body["assignee"] = serde_json::json!(assignee);
-    }
-    if !tags.is_empty() {
-        body["tags"] = serde_json::json!(tags);
-    }
+    let mut me = Me::new(&client, vec![queue.to_owned()]);
+    let mut body = match fields_of(changes, &mut me).await {
+        Ok(fields) => fields,
+        Err(code) => return code,
+    };
+    body.insert("queue".to_owned(), serde_json::json!({ "key": queue }));
+    let body = serde_json::Value::Object(body);
 
     let intent = Intent {
         action: &format!("create an issue in {queue}"),
@@ -1659,11 +1679,6 @@ async fn create(
     if let Gate::Stop(code) = check(&intent, session) {
         return code;
     }
-
-    let client = match session.client() {
-        Ok(client) => client,
-        Err(code) => return code,
-    };
 
     match client.create_issue(&body).await {
         Ok(issue) => {
@@ -1677,15 +1692,10 @@ async fn create(
     }
 }
 
-/// Apply the same change to every named issue.
+/// The fields an `issue create` or `issue update` was asked to write, in the
+/// words it was asked in.
 ///
-/// The body is built once, because the point of naming several issues is that
-/// they get the same change; a per-issue variation would be several commands.
-/// Targets are resolved before anything is sent, so a typo in the third key does
-/// not leave the first two changed and the caller guessing.
-/// What an `issue update` was asked to change, in the words it was asked in.
-///
-/// One struct rather than six arguments: they are one thought — the change
+/// One struct rather than seven arguments: they are one thought — the change
 /// itself, which is built once and applied to every key.
 #[derive(Debug)]
 struct Changes<'a> {
@@ -1693,46 +1703,128 @@ struct Changes<'a> {
     description: Option<&'a str>,
     description_file: Option<&'a str>,
     assignee: Option<&'a str>,
+    tags: &'a [String],
     set: &'a [String],
 }
 
+impl Changes<'_> {
+    /// Whether anything here says `me`, whatever field it is in.
+    fn mention_me(&self) -> bool {
+        self.assignee.is_some_and(is_me)
+            || self
+                .set
+                .iter()
+                .any(|raw| parse_assignment(raw).is_ok_and(|(_, value)| mentions_me(&value)))
+    }
+}
+
+/// The request body for `changes`, with `me` replaced by a login.
+///
+/// Every `--set` pair is parsed before anything is asked of Tracker: a
+/// malformed one is the caller's to fix and costs no request to find. `--set`
+/// goes in last and so wins where it overlaps a flag, because the flags are
+/// shortcuts for it and the explicit spelling is the one meant.
+async fn fields_of(
+    changes: &Changes<'_>,
+    me: &mut Me<'_>,
+) -> Result<serde_json::Map<String, serde_json::Value>, ExitCode> {
+    let assignments = assignments_of(changes.set)?;
+    let description = description_of(changes.description, changes.description_file)?;
+
+    let mut body = serde_json::Map::new();
+    if let Some(summary) = changes.summary {
+        body.insert("summary".to_owned(), serde_json::json!(summary));
+    }
+    if let Some(description) = description {
+        body.insert("description".to_owned(), serde_json::json!(description));
+    }
+    if let Some(assignee) = changes.assignee {
+        let assignee = me.person(assignee).await?;
+        body.insert("assignee".to_owned(), serde_json::json!(assignee));
+    }
+    if !changes.tags.is_empty() {
+        body.insert("tags".to_owned(), serde_json::json!(changes.tags));
+    }
+    insert_assignments(assignments, me, &mut body).await?;
+    Ok(body)
+}
+
+/// Every `--set` pair, parsed, or the first one that does not parse.
+fn assignments_of(set: &[String]) -> Result<Vec<(String, serde_json::Value)>, ExitCode> {
+    set.iter()
+        .map(|raw| {
+            parse_assignment(raw).map_err(|error| report(&error, ExitCode::ConfirmationRequired))
+        })
+        .collect()
+}
+
+/// Add parsed `--set` pairs to a body, `me` replaced where the field holds
+/// people.
+async fn insert_assignments(
+    assignments: Vec<(String, serde_json::Value)>,
+    me: &mut Me<'_>,
+    body: &mut serde_json::Map<String, serde_json::Value>,
+) -> Result<(), ExitCode> {
+    for (field, value) in assignments {
+        let value = me.field(&field, value).await?;
+        body.insert(field, value);
+    }
+    Ok(())
+}
+
+/// The queues of resolved keys, each once: where a local field `me` might be
+/// written to is defined.
+fn queues_of(resolved: &[(crate::api::Client, String)]) -> Vec<String> {
+    let mut queues: Vec<String> = Vec::new();
+    for (_, key) in resolved {
+        if let Some(queue) = crate::config::cache::queue_of(key)
+            && !queues.iter().any(|known| known == queue)
+        {
+            queues.push(queue.to_owned());
+        }
+    }
+    queues
+}
+
+/// `me` is one login per account, and keys in two organisations are written
+/// through two accounts. Which of them was meant is not something to guess.
+fn me_in_two_organisations() -> ExitCode {
+    report(
+        &"these issues are in two organisations, where `me` is not the same person; \
+          name the login instead",
+        ExitCode::ConfirmationRequired,
+    )
+}
+
+/// Apply the same change to every named issue.
+///
+/// The body is built once, because the point of naming several issues is that
+/// they get the same change; a per-issue variation would be several commands.
+/// Targets are resolved before anything is sent, so a typo in the third key does
+/// not leave the first two changed and the caller guessing.
 async fn update(
     targets: &[String],
     changes: &Changes<'_>,
     no_wait: bool,
     session: &Session,
 ) -> ExitCode {
-    let description = match description_of(changes.description, changes.description_file) {
-        Ok(description) => description,
+    let (resolved, one_org) = match resolve_all(targets, session).await {
+        Ok(pair) => pair,
         Err(code) => return code,
     };
+    let Some((first, _)) = resolved.first() else {
+        return ExitCode::Success;
+    };
 
-    let mut resolved = Vec::with_capacity(targets.len());
-    for target in targets {
-        match session.client_for(target).await {
-            Ok(pair) => resolved.push(pair),
-            Err(code) => return code,
-        }
+    if !one_org && changes.mention_me() {
+        return me_in_two_organisations();
     }
 
-    let mut body = serde_json::Map::new();
-    if let Some(summary) = changes.summary {
-        body.insert("summary".to_owned(), serde_json::json!(summary));
-    }
-    if let Some(description) = &description {
-        body.insert("description".to_owned(), serde_json::json!(description));
-    }
-    if let Some(assignee) = changes.assignee {
-        body.insert("assignee".to_owned(), serde_json::json!(assignee));
-    }
-    for assignment in changes.set {
-        match parse_assignment(assignment) {
-            Ok((field, value)) => {
-                body.insert(field, value);
-            }
-            Err(error) => return report(&error, ExitCode::ConfirmationRequired),
-        }
-    }
+    let mut me = Me::new(first, queues_of(&resolved));
+    let body = match fields_of(changes, &mut me).await {
+        Ok(fields) => fields,
+        Err(code) => return code,
+    };
 
     if body.is_empty() {
         return report(
@@ -1747,11 +1839,6 @@ async fn update(
     // A bulk change is one request to one organisation. Keys resolve per
     // profile, so a list can straddle two of them, and that list has to go the
     // slow way round.
-    let one_org = resolved.first().is_some_and(|(first, _)| {
-        resolved
-            .iter()
-            .all(|(client, _)| client.org() == first.org())
-    });
     let bulk = keys.len() > 1 && one_org;
 
     // What --dry-run prints has to be what would actually be sent, and the two
@@ -2039,24 +2126,31 @@ async fn transition_cmd(
     // A transition can require fields, and a workflow that closes an issue
     // almost always requires a resolution. Without these the command could not
     // reach half the statuses in an ordinary queue.
-    let mut fields = serde_json::Map::new();
-    if let Some(resolution) = resolution {
-        fields.insert("resolution".to_owned(), serde_json::json!(resolution));
-    }
-    for assignment in set {
-        match parse_assignment(assignment) {
-            Ok((field, value)) => {
-                fields.insert(field, value);
-            }
-            Err(error) => return report(&error, ExitCode::ConfirmationRequired),
-        }
-    }
-    let body = serde_json::Value::Object(fields);
+    let assignments = match assignments_of(set) {
+        Ok(assignments) => assignments,
+        Err(code) => return code,
+    };
 
     let (resolved, one_org) = match resolve_all(targets, session).await {
         Ok(pair) => pair,
         Err(code) => return code,
     };
+    let Some((first, _)) = resolved.first() else {
+        return ExitCode::Success;
+    };
+    if !one_org && assignments.iter().any(|(_, value)| mentions_me(value)) {
+        return me_in_two_organisations();
+    }
+
+    let mut fields = serde_json::Map::new();
+    if let Some(resolution) = resolution {
+        fields.insert("resolution".to_owned(), serde_json::json!(resolution));
+    }
+    let mut me = Me::new(first, queues_of(&resolved));
+    if let Err(code) = insert_assignments(assignments, &mut me, &mut fields).await {
+        return code;
+    }
+    let body = serde_json::Value::Object(fields);
     let keys: Vec<String> = resolved.iter().map(|(_, key)| key.clone()).collect();
     let bulk = keys.len() > 1 && one_org;
 

@@ -257,8 +257,8 @@ async fn a_real_issue_has_the_fields_every_command_depends_on() {
 
     // And the parser got them out again, which is the half a key-set check
     // cannot see.
-    assert!(!issue.key.is_empty());
-    assert!(!issue.summary.is_empty());
+    assert_ne!(issue.key, "");
+    assert_ne!(issue.summary, "");
     assert!(issue.status.is_some(), "status did not parse");
     assert!(issue.queue.is_some(), "queue did not parse");
     assert!(
