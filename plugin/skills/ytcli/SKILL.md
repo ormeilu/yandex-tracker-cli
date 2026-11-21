@@ -55,11 +55,15 @@ ytcli issue get PROJ-1 --fields status,assignee   # one line
 ytcli issue find -q PROJ -a me -s open         # a page of rows plus a tally
 ytcli issue comments PROJ-1
 ytcli issue comment PROJ-1 "text"
+ytcli issue create -q PROJ -s "title" --set type=bug --assignee me   # one request
 ytcli issue update PROJ-1 --set storyPoints=3 --assignee login
 ytcli issue transition PROJ-1                  # no id: lists what is available
 ytcli dict list                                # the values a write may use
 ytcli user find ivan                           # the login to assign work to
 ```
+
+`me` in a write is your login: `--assignee me`, and `--set` on any field that
+holds people (followers, custom user fields). Searches keep their own `-a me`.
 
 Every command prints one line to stderr first — `→ profile=… org=…` — saying
 which profile and organisation answered; stdout never carries it. A profile's
