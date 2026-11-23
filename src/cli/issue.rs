@@ -9,6 +9,7 @@ use std::io::Write as _;
 
 use clap::{Args, Subcommand};
 
+use crate::api::models::{Issue, LinkKind};
 use crate::api::query::Filter;
 use crate::cli::write::{Gate, Intent, Me, check, is_me, mentions_me, parse_assignment};
 use crate::cli::{Session, emit, report};
@@ -17,12 +18,13 @@ use crate::render::{self, Format, image, machine, text};
 
 #[derive(Debug, Subcommand)]
 pub enum IssueCommand {
-    /// Show one issue: summary, fields, links, first lines of the description.
+    /// Show one or more issues: summary, fields, links and description.
     #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_GET))]
     Get {
-        /// Issue key, e.g. PROJ-42. Prefix it with a profile — `work/PROJ-42` —
+        /// Issue keys, e.g. PROJ-42. Prefix a key with a profile — `work/PROJ-42` —
         /// when two profiles can both see a queue with that key.
-        key: String,
+        #[arg(required = true, value_name = "KEY")]
+        keys: Vec<String>,
         /// Comma-separated field list; accepts custom field keys.
         #[arg(long, value_delimiter = ',')]
         fields: Vec<String>,
@@ -327,12 +329,18 @@ pub struct FindArgs {
     pub status: Option<String>,
     #[arg(long, value_delimiter = ',')]
     pub tags: Vec<String>,
+    /// Only sub-issues of this parent issue key.
+    #[arg(long)]
+    pub parent: Option<String>,
+    /// Only issues in this epic.
+    #[arg(long)]
+    pub epic: Option<String>,
     /// Raw Yandex Query Language filter. Read-only, like every other search.
     ///
     /// Conflicts with the flag filters on purpose: combining them would have to
     /// either silently drop half of what was asked for or invent an AND the
     /// caller did not write.
-    #[arg(long, conflicts_with_all = ["queue", "assignee", "status", "tags"])]
+    #[arg(long, conflicts_with_all = ["queue", "assignee", "status", "tags", "parent", "epic"])]
     pub yql: Option<String>,
     /// Rows per page.
     #[arg(long)]
@@ -350,7 +358,7 @@ pub struct FindArgs {
 
 pub async fn run(command: &IssueCommand, session: &Session) -> ExitCode {
     match command {
-        IssueCommand::Get { key, fields } => get(key, fields, session).await,
+        IssueCommand::Get { keys, fields } => get(keys, fields, session).await,
         IssueCommand::Find(args) => find(args, session).await,
         IssueCommand::Count(args) => count(args, session).await,
         IssueCommand::Links { key } => links(key, session).await,
@@ -838,6 +846,25 @@ async fn link_write(command: &LinkCommand, session: &Session) -> ExitCode {
                     emit(&format!("{key} {relation} {other}\n"));
                     ExitCode::Success
                 }
+                Err(crate::api::error::ApiError::Rejected {
+                    status:
+                        reqwest::StatusCode::CONFLICT | reqwest::StatusCode::UNPROCESSABLE_ENTITY,
+                    ..
+                }) if client.issue_links(&key).await.is_ok_and(|links| {
+                    links.iter().any(|link| {
+                        link.key.eq_ignore_ascii_case(other)
+                            && ((link.kind == LinkKind::Relates
+                                && relation.eq_ignore_ascii_case("relates"))
+                                || link
+                                    .relation
+                                    .as_deref()
+                                    .is_some_and(|actual| actual.eq_ignore_ascii_case(relation)))
+                    })
+                }) =>
+                {
+                    emit(&format!("already linked: {key} {relation} {other}\n"));
+                    ExitCode::Success
+                }
                 Err(error) => {
                     let code = error.exit_code();
                     report(&error, code)
@@ -910,31 +937,79 @@ fn now_for_tracker() -> String {
         .to_string()
 }
 
+async fn get(targets: &[String], fields: &[String], session: &Session) -> ExitCode {
+    if let [target] = targets {
+        return get_one(target, fields, true, session).await;
+    }
+
+    let format = session.render.format;
+    let mut exit = ExitCode::Success;
+    let mut shown = 0;
+    let mut rows = Vec::new();
+    for target in targets {
+        let code = if format == Format::Text {
+            let code = get_one(target, fields, false, session).await;
+            if code != ExitCode::Success {
+                emit(&format!("{target}  -\n"));
+            }
+            code
+        } else {
+            match get_machine_row(target, format, session).await {
+                Ok(row) => {
+                    rows.push(row);
+                    ExitCode::Success
+                }
+                Err(code) => {
+                    rows.push(serde_json::Value::Null);
+                    code
+                }
+            }
+        };
+        if code == ExitCode::Success {
+            shown += 1;
+        } else if exit == ExitCode::Success {
+            exit = code;
+        }
+    }
+
+    if format == Format::Text {
+        emit(&format!("shown {shown} of {}\n", targets.len()));
+    } else {
+        match machine(&rows, format) {
+            Ok(text) => emit(&text),
+            Err(error) => return report(&error, ExitCode::Failure),
+        }
+    }
+    exit
+}
+
+async fn get_machine_row(
+    target: &str,
+    format: Format,
+    session: &Session,
+) -> Result<serde_json::Value, ExitCode> {
+    let (client, key) = session.client_for(target).await?;
+    let (issue, raw) = fetch_issue(&client, &key, format != Format::JsonRaw).await?;
+    if format == Format::JsonRaw {
+        Ok(raw)
+    } else {
+        serde_json::to_value(issue).map_err(|error| report(&error, ExitCode::Failure))
+    }
+}
+
 /// Fetch one issue and render it at whichever rung of the ladder was asked for.
-async fn get(target: &str, fields: &[String], session: &Session) -> ExitCode {
+async fn get_one(target: &str, fields: &[String], single: bool, session: &Session) -> ExitCode {
     let (client, key) = match session.client_for(target).await {
         Ok(pair) => pair,
         Err(code) => return code,
     };
     let key = key.as_str();
 
-    let (mut issue, raw) = match client.issue(key).await {
+    let with_links = single || fields.is_empty() || fields.iter().any(|field| field == "links");
+    let (issue, raw) = match fetch_issue(&client, key, with_links).await {
         Ok(pair) => pair,
-        Err(error) => {
-            let code = error.exit_code();
-            return report(&error, code);
-        }
+        Err(code) => return code,
     };
-
-    // Links live on their own endpoint. A failure to fetch them must not hide
-    // the issue itself: the caller asked for the issue, and a missing links
-    // section is a smaller loss than no output at all.
-    match client.issue_links(key).await {
-        Ok(links) => issue.links = links,
-        Err(error) => {
-            tracing::warn!(%error, "could not fetch links");
-        }
-    }
 
     // Pictures are fetched before the issue is rendered, because the ones the
     // description points at are drawn where it points at them.
@@ -963,6 +1038,25 @@ async fn get(target: &str, fields: &[String], session: &Session) -> ExitCode {
         }
         Err(error) => report(&error, ExitCode::Failure),
     }
+}
+
+async fn fetch_issue(
+    client: &crate::api::Client,
+    key: &str,
+    with_links: bool,
+) -> Result<(Issue, serde_json::Value), ExitCode> {
+    let (mut issue, raw) = client
+        .issue(key)
+        .await
+        .map_err(|error| report(&error, error.exit_code()))?;
+    if with_links {
+        // Failure on the links endpoint must not hide the issue itself.
+        match client.issue_links(key).await {
+            Ok(links) => issue.links = links,
+            Err(error) => tracing::warn!(%error, "could not fetch links"),
+        }
+    }
+    Ok((issue, raw))
 }
 
 /// How many unreferenced images are drawn after an issue before it stops and
@@ -1162,15 +1256,17 @@ fn query_for(args: &FindArgs, session: &Session) -> Result<String, ExitCode> {
         assignee: args.assignee.clone(),
         status: args.status.clone(),
         tags: args.tags.clone(),
+        parent: args.parent.clone(),
+        epic: args.epic.clone(),
     };
 
-    if filter.queue.is_none() {
+    if filter.queue.is_none() && filter.parent.is_none() && filter.epic.is_none() {
         filter.queue = session.default_queue().map(ToOwned::to_owned);
     }
 
     if filter.is_empty() {
         return Err(report(
-            &"no filter given: pass --queue, --assignee, --status, --tags or --yql, \
+            &"no filter given: pass --queue, --assignee, --status, --tags, --parent, --epic or --yql, \
               or pin a queue in .tracker.toml",
             ExitCode::ConfirmationRequired,
         ));

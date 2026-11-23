@@ -6,6 +6,7 @@
 //! the same gate as Tracker's: profile and organisation announced first,
 //! `--dry-run` honoured, page text from a file or stdin.
 
+use std::io::{IsTerminal as _, Write as _};
 use std::path::{Path, PathBuf};
 
 use clap::Subcommand;
@@ -24,6 +25,9 @@ pub enum WikiCommand {
     Get {
         /// The page's slug, or its address as copied from the browser.
         page: String,
+        /// Emit only the original markup for editing; redirect stdout to a file.
+        #[arg(long, conflicts_with_all = ["format", "full"])]
+        source: bool,
     },
     /// List the pages under one.
     #[command(long_about = crate::cli::help::md(crate::cli::help::WIKI_LIST))]
@@ -478,7 +482,7 @@ pub enum WikiCommand {
 )]
 pub async fn run(command: &WikiCommand, session: &Session) -> ExitCode {
     match command {
-        WikiCommand::Get { page } => get(page, session).await,
+        WikiCommand::Get { page, source } => get(page, *source, session).await,
         WikiCommand::List { page, cursor } => list(page, cursor.as_deref(), session).await,
         WikiCommand::Find { text, kind, page } => find(text, kind.as_deref(), *page, session).await,
         WikiCommand::Comments {
@@ -821,7 +825,13 @@ pub async fn run(command: &WikiCommand, session: &Session) -> ExitCode {
 }
 
 /// Show one page.
-async fn get(page: &str, session: &Session) -> ExitCode {
+async fn get(page: &str, source: bool, session: &Session) -> ExitCode {
+    if source && std::io::stdout().is_terminal() {
+        return report(
+            &"--source contains unfenced Wiki markup; redirect it to a file or pipe",
+            ExitCode::ConfirmationRequired,
+        );
+    }
     let slug = match named(page) {
         Ok(slug) => slug,
         Err(code) => return code,
@@ -832,6 +842,17 @@ async fn get(page: &str, session: &Session) -> ExitCode {
     };
 
     match client.wiki_page(&slug).await {
+        Ok(found) if source => match found.content {
+            // The caller asked for the original bytes, not terminal rendering.
+            Some(content) => match std::io::stdout().lock().write_all(content.as_bytes()) {
+                Ok(()) => ExitCode::Success,
+                Err(error) => report(&error, ExitCode::Failure),
+            },
+            None => report(
+                &format!("wiki page `{slug}` has no source markup"),
+                ExitCode::NotFound,
+            ),
+        },
         Ok(found) => finish(match session.render.format {
             Format::Text => Ok(render::page(&found, &session.render)),
             Format::JsonRaw => machine(&found, Format::Json),

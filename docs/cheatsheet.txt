@@ -54,6 +54,7 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
                                         required only when two profiles share the queue key,
                                         in which case the bare form is refused, not guessed
   ytcli issue get PROJ-1 --fields status,assignee,storyPoints
+  ytcli issue get PROJ-1 PROJ-2 --fields summary,priority   one row per key, in input order
   ytcli issue get 42                    a bare number means the default queue
   ytcli issue links PROJ-1              id first, then the type; the id is what
                                         `issue link delete` takes
@@ -63,6 +64,8 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   ytcli issue comments PROJ-1
   ytcli issue changelog PROJ-1 [--limit 200]   who changed what, one line per field
   ytcli issue find -q PROJ -a me -s open  `issue list` is the same command
+  ytcli issue find --parent PROJ-7        children (YQL: '"Parent Issue": "PROJ-7"')
+  ytcli issue find --epic PROJ-8          issues in an epic (YQL: 'Epic: "PROJ-8"')
   ytcli issue find --yql 'Queue: PROJ AND Status: Open'   read-only search language
   ytcli issue count -q PROJ -s open     one number, the cheapest question here
   ytcli issue create -q PROJ -s "title" [-d text] [--assignee login]
@@ -226,6 +229,7 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
                                         its text, fenced and cut like a description (--full).
                                         Takes the address as copied from the browser.
                                         Needs wiki:read on the token; `auth login` again asks for it
+  ytcli wiki get SLUG --source > page.md  only original markup, for editing; unfenced
   ytcli wiki list SLUG|URL [--cursor C]
                                         pages under one, any depth: slug and id. The Wiki gives no
                                         total: `shown N of more than N — next: --cursor C`
