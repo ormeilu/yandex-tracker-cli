@@ -12,6 +12,8 @@ pub struct Filter {
     pub assignee: Option<String>,
     pub status: Option<String>,
     pub tags: Vec<String>,
+    pub parent: Option<String>,
+    pub epic: Option<String>,
 }
 
 impl Filter {
@@ -21,6 +23,8 @@ impl Filter {
             && self.assignee.is_none()
             && self.status.is_none()
             && self.tags.is_empty()
+            && self.parent.is_none()
+            && self.epic.is_none()
     }
 
     /// Compile to a query string.
@@ -40,6 +44,12 @@ impl Filter {
         if !self.tags.is_empty() {
             let tags: Vec<String> = self.tags.iter().map(|tag| value(tag)).collect();
             clauses.push(format!("Tags: {}", tags.join(", ")));
+        }
+        if let Some(parent) = &self.parent {
+            clauses.push(format!("\"Parent Issue\": {}", value(parent)));
+        }
+        if let Some(epic) = &self.epic {
+            clauses.push(format!("Epic: {}", value(epic)));
         }
 
         clauses.join(" AND ")
@@ -75,6 +85,7 @@ mod tests {
             assignee: Some("ilubenets".to_owned()),
             status: Some("In Progress".to_owned()),
             tags: vec!["regression".to_owned()],
+            ..Filter::default()
         }
     }
 

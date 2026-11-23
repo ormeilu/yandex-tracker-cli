@@ -101,6 +101,8 @@ meet is how the drift started.
   shows the login. Nothing is looked up when nobody wrote `me`.
 - 2.3.1 — documentation only: the skill's entry point lists `issue create`
   with `--set` and `--assignee me` among the common commands.
+- 2.4.0 — read several issues at once, find children or epic members, add links
+  idempotently, and export Wiki source for edits.
 - [`kind:question`](https://github.com/ormeilu/yandex-tracker-cli/labels/kind%3Aquestion)
   — open design questions, filed so they are not re-litigated from scratch.
 

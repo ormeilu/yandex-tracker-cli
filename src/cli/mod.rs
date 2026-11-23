@@ -442,10 +442,14 @@ impl Session {
     /// right one, and "which profile was that" should never be a question the
     /// output leaves open. stderr because stdout is the data channel.
     pub fn announce(&self, resolved: &Resolved) {
-        static SAID: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-        if SAID.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        static SAID: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+        let mut said = SAID
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if said.contains(&resolved.name) {
             return;
         }
+        said.push(resolved.name.clone());
 
         // The note, when there is one, is the half of this line a person can
         // read: `org=12345` identifies nothing until you already know the

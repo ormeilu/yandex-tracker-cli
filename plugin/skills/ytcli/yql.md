@@ -35,6 +35,13 @@ ytcli issue find --yql 'Queue: TRACKER AND Priority: critical, blocker'
 `!` negates. `>`, `<`, `>=`, `<=` compare. `1..5` is a numeric range. Several
 values of one parameter, comma-separated, mean any of them.
 
+## Parent issues and epics
+
+Use `ytcli issue find --parent PROJ-7` for sub-issues or `--epic PROJ-8` for
+issues in an epic. In raw YQL these are `"Parent Issue": "PROJ-7"` and
+`Epic: "PROJ-8"`, per [Tracker's query reference](https://yandex.ru/support/tracker/en/user/query-filter#filter-parameters).
+`Parent` is not the YQL field name.
+
 ## Functions
 
 ```bash

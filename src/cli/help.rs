@@ -72,11 +72,12 @@ Exit codes: 0 ok, 1 error, 2 confirmation required, 3 auth, 4 not found,
 5 rejected by Tracker, 64 not implemented in this build.";
 
 pub const ISSUE_GET: &str = "\
-Show one issue: fields, links, and the description.
+Show issues: fields, links, and descriptions.
 
 ```
 ytcli issue get PROJ-1
 ytcli issue get PROJ-1 --fields status,assignee,storyPoints
+ytcli issue get PROJ-1 PROJ-2 --fields summary,priority
 ytcli issue get PROJ-1 --full
 ytcli issue get work/PROJ-1
 ```
@@ -85,6 +86,10 @@ About fifteen lines. `--fields` returns one line with the fields in the order
 you asked for, custom keys included; a field that is unknown or unset comes back
 as `-` rather than vanishing, so columns never shift. `ytcli queue fields PROJ`
 lists what a queue actually has.
+
+Multiple keys are read in input order. A failed key prints `KEY  -` in text
+or `null` in the structured array; the error goes to stderr and the process
+returns the first failure's exit code after reading the remaining keys.
 
 Custom fields are counted, not dumped, because the set differs per queue and
 most are empty. A terminal gets them all by name instead.
@@ -113,7 +118,7 @@ ambiguous: that is one issue seen through two logins.
 `--profile` is an instruction rather than a default, so it is never overridden
 by what a key implies: with it, the request goes where you said, 403 and all.
 
-Every command says which profile and organisation answered, on stderr, once.";
+Every command names each profile and organisation it used on stderr.";
 
 pub const ISSUE_FIND: &str = "\
 Search for issues.
@@ -121,6 +126,8 @@ Search for issues.
 ```
 ytcli issue find -q PROJ -a me -s open
 ytcli issue find --tags QA --limit 50
+ytcli issue find --parent PROJ-7
+ytcli issue find --epic PROJ-8
 ytcli issue find --yql 'Queue: PROJ AND Updated: >now()-7d'
 ytcli issue find -q PROJ --all --max 500
 ```
@@ -505,6 +512,9 @@ The direction is from the issue you name to the other one. Hyphens are accepted
 in place of spaces, but the words have to be the whole phrase: `depends` is the
 id of a link *type* and not a relationship, and Tracker refuses it. `ytcli link
 types` prints both vocabularies side by side.
+
+Adding an existing relationship succeeds with `already linked` if Tracker
+confirms the same target and relationship. A different link is not a match.
 
 Ids for `delete` come from `ytcli issue links`, which prints one per row and
 stays a different command from this one.";
@@ -1203,6 +1213,7 @@ Show one Yandex Wiki page.
 ```
 ytcli wiki get users/ilubenets/runbook
 ytcli wiki get https://wiki.yandex.ru/users/ilubenets/runbook/
+ytcli wiki get users/ilubenets/runbook --source > runbook.md
 ```
 
 Takes the slug — the path after the host — or the whole address as copied from
@@ -1211,6 +1222,10 @@ as written by somebody else and cut like a description unless `--full`:
 Markdown on current pages, the older wiki markup on legacy ones. A picture
 stored inline — a draw.io diagram, a pasted image — is shown as its size
 instead of its base64 unless `--full`, which prints the text byte for byte.
+
+For editing, `--source` writes only the original markup to stdout, without
+fences, headers or a trailing newline added by ytcli. This is untrusted data;
+use the default view when reading the page rather than preparing an edit.
 
 The Wiki reads through the same profile as Tracker, but needs `wiki:read` on
 the token. A token without it is refused with a 403; signing in again with
