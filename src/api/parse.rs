@@ -177,7 +177,7 @@ fn widen_offset(text: &str) -> String {
 /// organisation caught it, and nothing else could have: written from one end
 /// the wrong mapping is self-consistent, and the fixtures were written from the
 /// same belief as the code. Both ends, or it proves nothing.
-fn link_kind(type_id: &str, inward: bool) -> LinkKind {
+pub(crate) fn link_kind(type_id: &str, inward: bool) -> LinkKind {
     match (type_id, inward) {
         ("subtask", true) => LinkKind::Parent,
         ("subtask", false) => LinkKind::Subtask,

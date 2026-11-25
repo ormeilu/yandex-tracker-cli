@@ -126,6 +126,7 @@ Search for issues.
 ```
 ytcli issue find -q PROJ -a me -s open
 ytcli issue find --tags QA --limit 50
+ytcli issue find -q PROJ --text MTU --text ICMP --type bug
 ytcli issue find --parent PROJ-7
 ytcli issue find --epic PROJ-8
 ytcli issue find --yql 'Queue: PROJ AND Updated: >now()-7d'
@@ -135,6 +136,9 @@ ytcli issue find -q PROJ --all --max 500
 `ytcli issue list` is the same command under the name every other group uses.
 
 Run `count` first if you only need to know whether anything matches.
+
+Use `--text` to look for duplicates before creating an issue. Tracker searches
+summary, description and comments; repeat `--text` to match any of the terms.
 
 `--yql` is the full Yandex Query Language filter and conflicts with the flag
 filters on purpose: combining them would either drop half of what was asked for
@@ -180,7 +184,9 @@ ytcli issue links PROJ-1
 rest. The type comes from the relation's identifier, not from its label, so it
 does not change with the language your organisation uses.
 
-`issue get` already prints these. Use this when you want only them.";
+`issue get` already prints these. Use this when you want only them.
+Use `ytcli issue links PROJ-1 --relationships` for the directional phrases
+accepted by `issue link add`; `-` means no known write phrase.";
 
 pub const ISSUE_REMOTELINKS: &str = "\
 Show the links from an issue to things outside Tracker.
@@ -620,12 +626,14 @@ Link two issues.
 
 ```
 ytcli issue link add PROJ-1 relates PROJ-7
-ytcli issue link add PROJ-1 depends PROJ-3
+ytcli issue link add PROJ-1 subtask-of PROJ-3
+ytcli issue link add PROJ-3 parent-of PROJ-1
 ```
 
-Relationships: relates, depends, is-dependent-by, subtask, parent, duplicates,
-is-duplicated-by, epic, has-epic. The direction runs from the issue you name to
-the other one.";
+The first issue is the subject: `subtask-of` makes it the child and `parent-of`
+makes it the parent. For other relationships, use the phrase from
+`ytcli issue links KEY --relationships` (quote phrases that contain spaces),
+or see `ytcli link types`. Bare type ids such as `depends` are not phrases.";
 
 pub const LINK_DELETE: &str = "\
 Remove a link between two issues.

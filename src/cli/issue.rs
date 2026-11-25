@@ -42,7 +42,12 @@ pub enum IssueCommand {
     Count(FindArgs),
     /// Show the links of an issue.
     #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_LINKS))]
-    Links { key: String },
+    Links {
+        key: String,
+        /// Show the directional phrases accepted by `issue link add` (text only).
+        #[arg(long)]
+        relationships: bool,
+    },
     /// Show the links from an issue to things outside Tracker.
     #[command(long_about = crate::cli::help::md(crate::cli::help::ISSUE_REMOTELINKS))]
     Remotelinks { key: String },
@@ -335,12 +340,18 @@ pub struct FindArgs {
     /// Only issues in this epic.
     #[arg(long)]
     pub epic: Option<String>,
+    /// Only issues of this type, e.g. `bug`.
+    #[arg(long = "type")]
+    pub issue_type: Option<String>,
+    /// Search summary, description and comments; repeat for alternative terms.
+    #[arg(long)]
+    pub text: Vec<String>,
     /// Raw Yandex Query Language filter. Read-only, like every other search.
     ///
     /// Conflicts with the flag filters on purpose: combining them would have to
     /// either silently drop half of what was asked for or invent an AND the
     /// caller did not write.
-    #[arg(long, conflicts_with_all = ["queue", "assignee", "status", "tags", "parent", "epic"])]
+    #[arg(long, conflicts_with_all = ["queue", "assignee", "status", "tags", "parent", "epic", "issue_type", "text"])]
     pub yql: Option<String>,
     /// Rows per page.
     #[arg(long)]
@@ -361,7 +372,7 @@ pub async fn run(command: &IssueCommand, session: &Session) -> ExitCode {
         IssueCommand::Get { keys, fields } => get(keys, fields, session).await,
         IssueCommand::Find(args) => find(args, session).await,
         IssueCommand::Count(args) => count(args, session).await,
-        IssueCommand::Links { key } => links(key, session).await,
+        IssueCommand::Links { key, relationships } => links(key, *relationships, session).await,
         IssueCommand::Remotelinks { key } => remote_links(key, session).await,
         IssueCommand::Comments { key } => comments(key, session).await,
         IssueCommand::Changelog { key, limit } => changelog(key, *limit, session).await,
@@ -818,7 +829,8 @@ async fn link_write(command: &LinkCommand, session: &Session) -> ExitCode {
                 return report(
                     &format!(
                         "`{relation}` is the id of a link type, not a relationship: write `{correct}`. \
-                         `ytcli link types` lists both."
+                         Use `ytcli issue links KEY --relationships` to copy the correct direction, \
+                         or see `ytcli link types`."
                     ),
                     ExitCode::ConfirmationRequired,
                 );
@@ -829,6 +841,11 @@ async fn link_write(command: &LinkCommand, session: &Session) -> ExitCode {
                 Err(code) => return code,
             };
 
+            let relation = match relation.as_str() {
+                "subtask-of" => "is subtask for",
+                "parent-of" => "is parent task for",
+                other => other,
+            };
             let body = serde_json::json!({ "relationship": relation, "issue": other });
             let targets = [key.clone()];
             let intent = Intent {
@@ -1250,6 +1267,12 @@ fn query_for(args: &FindArgs, session: &Session) -> Result<String, ExitCode> {
     if let Some(yql) = &args.yql {
         return Ok(yql.clone());
     }
+    if args.text.iter().any(|term| term.trim().is_empty()) {
+        return Err(report(
+            &"--text cannot be empty",
+            ExitCode::ConfirmationRequired,
+        ));
+    }
 
     let mut filter = Filter {
         queue: args.queue.clone(),
@@ -1258,6 +1281,8 @@ fn query_for(args: &FindArgs, session: &Session) -> Result<String, ExitCode> {
         tags: args.tags.clone(),
         parent: args.parent.clone(),
         epic: args.epic.clone(),
+        issue_type: args.issue_type.clone(),
+        text: args.text.clone(),
     };
 
     if filter.queue.is_none() && filter.parent.is_none() && filter.epic.is_none() {
@@ -1266,7 +1291,7 @@ fn query_for(args: &FindArgs, session: &Session) -> Result<String, ExitCode> {
 
     if filter.is_empty() {
         return Err(report(
-            &"no filter given: pass --queue, --assignee, --status, --tags, --parent, --epic or --yql, \
+            &"no filter given: pass --queue, --assignee, --status, --tags, --parent, --epic, --type, --text or --yql, \
               or pin a queue in .tracker.toml",
             ExitCode::ConfirmationRequired,
         ));
@@ -1409,7 +1434,13 @@ async fn count(args: &FindArgs, session: &Session) -> ExitCode {
     }
 }
 
-async fn links(target: &str, session: &Session) -> ExitCode {
+async fn links(target: &str, relationships: bool, session: &Session) -> ExitCode {
+    if relationships && session.render.format != Format::Text {
+        return report(
+            &"--relationships requires text output",
+            ExitCode::ConfirmationRequired,
+        );
+    }
     let (client, key) = match session.client_for(target).await {
         Ok(pair) => pair,
         Err(code) => return code,
@@ -1419,7 +1450,7 @@ async fn links(target: &str, session: &Session) -> ExitCode {
     match client.issue_links(key).await {
         Ok(links) => {
             let rendered = match session.render.format {
-                Format::Text => Ok(text::links(key, &links)),
+                Format::Text => Ok(text::links(key, &links, relationships)),
                 Format::JsonRaw => machine(&links, Format::Json),
                 other => machine(&links, other),
             };

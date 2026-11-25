@@ -63,6 +63,8 @@ ytcli issue timer start PROJ-1             # stop|cancel; only stop writes
 ytcli issue worklog edit PROJ-1 ID -d 2h   # pass whichever of -d/-m is wrong
 ytcli issue check add PROJ-1 "write the migration"   # tick|untick|delete by id
 ytcli issue link add PROJ-1 relates PROJ-7
+ytcli issue link add PROJ-7 subtask-of PROJ-1     # first key is the child
+ytcli issue links PROJ-7 --relationships         # phrases to reuse in link add
 ytcli issue link add PROJ-1 "depends on" PROJ-3    # not `depends`: see below
 ytcli attachment upload PROJ-1 ./file.png
 ytcli attachment delete PROJ-1 301 --yes   # by id or filename; no undo at all

@@ -83,6 +83,24 @@ pub enum LinkKind {
 }
 
 impl LinkKind {
+    /// Canonical Tracker write phrase for the direction decoded from a link.
+    #[must_use]
+    pub(crate) fn write_relationship(self) -> Option<&'static str> {
+        Some(match self {
+            Self::Relates => "relates",
+            Self::Depends => "depends on",
+            Self::IsDependentBy => "is dependent by",
+            Self::Subtask => "is parent task for",
+            Self::Parent => "is subtask for",
+            Self::IsDuplicatedBy => "is duplicated by",
+            Self::Duplicates => "duplicates",
+            // Keep the existing link-type dictionary direction for epics.
+            Self::Epic => "has epic",
+            Self::HasEpic => "is epic of",
+            Self::Blocks | Self::IsBlockedBy | Self::Other => return None,
+        })
+    }
+
     /// Short label used in compact output.
     #[must_use]
     pub fn label(self) -> &'static str {

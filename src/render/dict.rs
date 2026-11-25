@@ -111,7 +111,10 @@ pub fn link_types(types: &[LinkType], ctx: &Context) -> String {
                 continue;
             }
             rows.push(vec![
-                relationship(&kind.id, outward).unwrap_or("-").to_owned(),
+                crate::api::parse::link_kind(&kind.id, !outward)
+                    .write_relationship()
+                    .unwrap_or("-")
+                    .to_owned(),
                 label.clone().unwrap_or_else(|| "-".to_owned()),
                 kind.id.clone(),
             ]);
@@ -121,26 +124,4 @@ pub fn link_types(types: &[LinkType], ctx: &Context) -> String {
     let mut out = render(&columns, &rows, ctx);
     out.push_str(&tally(rows.len(), Some(rows.len() as u64), None, ctx));
     out
-}
-
-/// What `issue link add` takes for one end of one type.
-///
-/// Verified by writing each link into a real Tracker and reading it back: the
-/// pairing is not derivable from the labels, and getting it from the wording
-/// alone is how the direction of `depends` came to be inverted here for months.
-/// The `epic` pair is the one that could not be checked — Tracker refuses the
-/// link unless the issue really is an epic — and is taken from its labels.
-fn relationship(type_id: &str, outward: bool) -> Option<&'static str> {
-    Some(match (type_id, outward) {
-        ("relates", _) => "relates",
-        ("depends", true) => "depends on",
-        ("depends", false) => "is dependent by",
-        ("subtask", true) => "is parent task for",
-        ("subtask", false) => "is subtask for",
-        ("duplicates", true) => "is duplicated by",
-        ("duplicates", false) => "duplicates",
-        ("epic", true) => "has epic",
-        ("epic", false) => "is epic of",
-        _ => return None,
-    })
 }

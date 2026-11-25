@@ -64,6 +64,8 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   ytcli issue comments PROJ-1
   ytcli issue changelog PROJ-1 [--limit 200]   who changed what, one line per field
   ytcli issue find -q PROJ -a me -s open  `issue list` is the same command
+  ytcli issue find -q PROJ --text MTU --text ICMP   duplicate check before `issue create`;
+                                        matches either term in summary, description or comments
   ytcli issue find --parent PROJ-7        children (YQL: '"Parent Issue": "PROJ-7"')
   ytcli issue find --epic PROJ-8          issues in an epic (YQL: 'Epic: "PROJ-8"')
   ytcli issue find --yql 'Queue: PROJ AND Status: Open'   read-only search language
@@ -120,6 +122,8 @@ ytcli — Yandex Tracker from the command line. Compact output by default.
   ytcli issue worklog add PROJ-1 1h30m -m "text"     also: worklog delete KEY ID
   ytcli issue check add PROJ-1 "text"   also: check tick|untick|delete KEY ID
   ytcli issue link add PROJ-1 relates PROJ-7         also: link delete KEY LINKID
+  ytcli issue link add PROJ-7 subtask-of PROJ-1     PROJ-7 is the child
+  ytcli issue links PROJ-7 --relationships          copy the directional phrase into `link add`
   Reads and writes never share a prefix: worklogs/worklog, checklist/check,
   links/link. That is what makes `ytcli issue worklogs:*` safe to allowlist.
   Lists print "shown N of M" and, when more exist, "next: --page K". Never assume a page is all.
