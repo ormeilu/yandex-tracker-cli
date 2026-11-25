@@ -103,6 +103,8 @@ meet is how the drift started.
   with `--set` and `--assignee me` among the common commands.
 - 2.4.0 — read several issues at once, find children or epic members, add links
   idempotently, and export Wiki source for edits.
+- 2.5.0 — search issue text before filing duplicates, and copy directional
+  link relationships or use the `subtask-of` and `parent-of` shortcuts.
 - [`kind:question`](https://github.com/ormeilu/yandex-tracker-cli/labels/kind%3Aquestion)
   — open design questions, filed so they are not re-litigated from scratch.
 

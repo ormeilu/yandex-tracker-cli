@@ -35,6 +35,13 @@ ytcli issue find --yql 'Queue: TRACKER AND Priority: critical, blocker'
 `!` negates. `>`, `<`, `>=`, `<=` compare. `1..5` is a numeric range. Several
 values of one parameter, comma-separated, mean any of them.
 
+## Text search
+
+Before creating an issue, try `ytcli issue find -q PROJ --text MTU --text ICMP`.
+Each `--text` is searched in the summary, description and comments; repeat the
+flag for alternatives. Combine with filters such as `--type bug`, not `--yql`.
+For exact matching or a single field, use [Tracker's text query syntax](https://yandex.ru/support/tracker/en/user/query-filter#query-text).
+
 ## Parent issues and epics
 
 Use `ytcli issue find --parent PROJ-7` for sub-issues or `--epic PROJ-8` for

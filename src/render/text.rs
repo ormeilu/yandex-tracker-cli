@@ -86,18 +86,22 @@ pub fn issue(issue: &Issue, ctx: &Context) -> String {
 /// Same one-line-per-link shape as the compact view, so a caller that has seen
 /// one has seen both.
 #[must_use]
-pub fn links(key: &str, links: &[Link]) -> String {
+pub fn links(key: &str, links: &[Link], relationships: bool) -> String {
     let mut out = String::with_capacity(links.len() * 40 + 32);
 
     for link in links {
         // The id leads, as it does in every other listing whose rows can be
         // deleted: `issue link delete` takes it, and this is where the help
         // says to find it.
+        let relation = if relationships {
+            link.kind.write_relationship().unwrap_or("-").to_owned()
+        } else {
+            relation_of(link)
+        };
         let _ = writeln!(
             out,
-            "{}  {} {}{}{}",
+            "{}  {relation} {}{}{}",
             link.id,
-            relation_of(link),
             link.key,
             link.status
                 .as_ref()

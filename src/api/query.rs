@@ -14,6 +14,8 @@ pub struct Filter {
     pub tags: Vec<String>,
     pub parent: Option<String>,
     pub epic: Option<String>,
+    pub issue_type: Option<String>,
+    pub text: Vec<String>,
 }
 
 impl Filter {
@@ -25,6 +27,8 @@ impl Filter {
             && self.tags.is_empty()
             && self.parent.is_none()
             && self.epic.is_none()
+            && self.issue_type.is_none()
+            && self.text.is_empty()
     }
 
     /// Compile to a query string.
@@ -50,6 +54,20 @@ impl Filter {
         }
         if let Some(epic) = &self.epic {
             clauses.push(format!("Epic: {}", value(epic)));
+        }
+        if let Some(issue_type) = &self.issue_type {
+            clauses.push(format!("Type: {}", value(issue_type)));
+        }
+        if !self.text.is_empty() {
+            let matches: Vec<_> = self
+                .text
+                .iter()
+                .flat_map(|term| {
+                    let term = value(term);
+                    ["Summary", "Description", "Comment"].map(|field| format!("{field}: {term}"))
+                })
+                .collect();
+            clauses.push(format!("({})", matches.join(" OR ")));
         }
 
         clauses.join(" AND ")
